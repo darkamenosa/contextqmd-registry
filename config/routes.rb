@@ -76,5 +76,21 @@ Rails.application.routes.draw do
   # Error pages
   get "errors/:status", to: "errors#show", as: :error
 
+  # API v1 (token-authenticated, JSON-only)
+  namespace :api do
+    namespace :v1 do
+      get "health", to: "health#show"
+      get "capabilities", to: "capabilities#show"
+      resources :libraries, only: [ :index ], param: :slug
+      get "libraries/:namespace/:name", to: "libraries#show", as: :library_detail
+      get "libraries/:namespace/:name/versions", to: "versions#index"
+      get "libraries/:namespace/:name/versions/:version/manifest", to: "manifests#show"
+      get "libraries/:namespace/:name/versions/:version/page-index", to: "page_index#index"
+      get "libraries/:namespace/:name/versions/:version/pages/:page_uid", to: "page_index#show"
+      get "libraries/:namespace/:name/versions/:version/bundles/:profile", to: "bundles#show"
+      post "resolve", to: "resolve#create"
+    end
+  end
+
   get "up" => "rails/health#show", as: :rails_health_check
 end
