@@ -3,6 +3,7 @@
 class LibrariesController < InertiaController
   allow_unauthenticated_access
   disallow_account_scope
+  before_action :authenticate_identity!, only: [ :new, :create ]
 
   def index
     libraries = if params[:query].present?
@@ -28,6 +29,23 @@ class LibrariesController < InertiaController
     }
   rescue ActiveRecord::RecordNotFound
     redirect_to libraries_path, alert: "Library not found"
+  end
+
+  def new
+    render inertia: "libraries/new"
+  end
+
+  def create
+    library = Library.new(library_params)
+    # For now, assign a default account (first account of the identity)
+    library.account = Current.identity.users.first&.account || Account.first
+
+    if library.save
+      redirect_to detail_libraries_path(namespace: library.namespace, name: library.name),
+                  notice: "Library submitted successfully!"
+    else
+      redirect_to new_library_path, alert: library.errors.full_messages.join(", ")
+    end
   end
 
   private
@@ -58,5 +76,9 @@ class LibrariesController < InertiaController
         generated_at: version.generated_at&.iso8601,
         page_count: version.pages.count
       }
+    end
+
+    def library_params
+      params.expect(library: [ :namespace, :name, :display_name, :homepage_url, :default_version, aliases: [] ])
     end
 end

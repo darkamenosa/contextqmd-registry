@@ -63,8 +63,8 @@ Rails.application.routes.draw do
     get "(*path)", to: redirect { |params, req| "#{req.protocol}localhost:#{req.port}/#{params[:path]}" }
   end
 
-  # Library browsing (public)
-  resources :libraries, only: [ :index ], param: :slug do
+  # Library browsing (public) + submission (authenticated)
+  resources :libraries, only: [ :index, :new, :create ], param: :slug do
     collection do
       get ":namespace/:name", action: :show, as: :detail, constraints: { namespace: /[a-z0-9-]+/, name: /[a-z0-9-]+/ }
     end

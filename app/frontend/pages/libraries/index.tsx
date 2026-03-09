@@ -1,6 +1,6 @@
 import { type FormEvent, useState } from "react"
 import { Link, router } from "@inertiajs/react"
-import { ExternalLink, Library, Search } from "lucide-react"
+import { ExternalLink, Library, Plus, Search } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -60,7 +60,7 @@ export default function LibrariesIndex({ libraries, query }: Props) {
           </p>
         </div>
 
-        {/* Search */}
+        {/* Search + Submit */}
         <form
           onSubmit={handleSearch}
           className="mx-auto mt-10 flex max-w-xl gap-2"
@@ -76,6 +76,14 @@ export default function LibrariesIndex({ libraries, query }: Props) {
             />
           </div>
           <Button type="submit">Search</Button>
+          <Button
+            variant="outline"
+            nativeButton={false}
+            render={<Link href="/libraries/new" />}
+          >
+            <Plus className="size-4" />
+            Submit
+          </Button>
         </form>
       </section>
 
