@@ -1,6 +1,13 @@
 import { type FormEvent, useState } from "react"
 import { Link, router } from "@inertiajs/react"
-import { BookOpen, ExternalLink, Library, Plus, Search } from "lucide-react"
+import {
+  BookOpen,
+  ExternalLink,
+  FileText,
+  Library,
+  Plus,
+  Search,
+} from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -17,6 +24,8 @@ interface LibraryItem {
   defaultVersion: string | null
   licenseStatus: string | null
   versionCount: number
+  pageCount: number
+  sourceType: string | null
 }
 
 interface Props {
@@ -35,6 +44,26 @@ function LicenseBadge({ status }: { status: string | null }) {
         : "destructive"
 
   return <Badge variant={variant}>{status}</Badge>
+}
+
+const SOURCE_TYPE_LABELS: Record<string, string> = {
+  github: "GitHub",
+  github_markdown: "GitHub",
+  gitlab: "GitLab",
+  website: "Website",
+  openapi: "OpenAPI",
+  llms_txt: "llms.txt",
+  llms_full_txt: "llms.txt",
+}
+
+function SourceTypeBadge({ sourceType }: { sourceType: string | null }) {
+  if (!sourceType) return null
+  const label = SOURCE_TYPE_LABELS[sourceType] ?? sourceType
+  return (
+    <Badge variant="outline" className="text-xs">
+      {label}
+    </Badge>
+  )
 }
 
 export default function LibrariesIndex({ libraries, query }: Props) {
@@ -147,6 +176,7 @@ export default function LibrariesIndex({ libraries, query }: Props) {
                             v{lib.defaultVersion}
                           </Badge>
                         )}
+                        <SourceTypeBadge sourceType={lib.sourceType} />
                         {lib.aliases.map((alias) => (
                           <Badge key={alias} variant="outline" className="text-xs">
                             {alias}
@@ -158,6 +188,12 @@ export default function LibrariesIndex({ libraries, query }: Props) {
                           <span className="flex items-center gap-1">
                             <BookOpen className="size-3" />
                             {lib.versionCount} version{lib.versionCount !== 1 ? "s" : ""}
+                          </span>
+                        )}
+                        {lib.pageCount > 0 && (
+                          <span className="flex items-center gap-1">
+                            <FileText className="size-3" />
+                            {lib.pageCount} page{lib.pageCount !== 1 ? "s" : ""}
                           </span>
                         )}
                         {lib.homepageUrl && (
