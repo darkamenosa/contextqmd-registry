@@ -14,8 +14,8 @@ import {
 const navLinks = [
   { href: "/", label: "Home" },
   { href: "/libraries", label: "Libraries" },
+  { href: "/crawl", label: "Crawl Queue" },
   { href: "/about", label: "About" },
-  { href: "/contact", label: "Contact" },
 ]
 
 export function SiteHeader() {

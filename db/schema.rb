@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_09_070513) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_09_092752) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -56,6 +56,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_09_070513) do
     t.string "url"
     t.bigint "version_id", null: false
     t.index ["version_id"], name: "index_bundles_on_version_id"
+  end
+
+  create_table "crawl_requests", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.text "error_message"
+    t.bigint "identity_id", null: false
+    t.bigint "library_id"
+    t.jsonb "metadata", default: {}
+    t.string "source_type", default: "website", null: false
+    t.string "status", default: "pending", null: false
+    t.datetime "updated_at", null: false
+    t.string "url", null: false
+    t.index ["identity_id"], name: "index_crawl_requests_on_identity_id"
+    t.index ["library_id"], name: "index_crawl_requests_on_library_id"
+    t.index ["status"], name: "index_crawl_requests_on_status"
   end
 
   create_table "fetch_recipes", force: :cascade do |t|
@@ -179,6 +194,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_09_070513) do
   add_foreign_key "account_cancellations", "accounts", on_delete: :cascade
   add_foreign_key "account_cancellations", "users", column: "initiated_by_id", on_delete: :nullify
   add_foreign_key "bundles", "versions"
+  add_foreign_key "crawl_requests", "identities"
+  add_foreign_key "crawl_requests", "libraries"
   add_foreign_key "fetch_recipes", "versions"
   add_foreign_key "libraries", "accounts"
   add_foreign_key "pages", "versions"

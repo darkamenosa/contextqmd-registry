@@ -10,6 +10,7 @@ class Identity < ApplicationRecord
   has_many :users, dependent: :nullify
   has_many :accounts, through: :users
   has_many :access_tokens, dependent: :destroy
+  has_many :crawl_requests, dependent: :destroy
   before_destroy :prepare_account_cleanup, prepend: true
   after_destroy_commit :destroy_orphaned_accounts
 

@@ -197,7 +197,7 @@ install_docs({ library: "${slug}" })`
         </div>
 
         {/* Quick stats */}
-        <div className="mt-8 grid grid-cols-3 gap-4">
+        <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Card>
             <CardContent className="pt-6">
               <div className="text-2xl font-bold">{versions.length}</div>

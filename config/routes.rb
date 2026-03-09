@@ -70,6 +70,9 @@ Rails.application.routes.draw do
     end
   end
 
+  # Crawl requests (authenticated)
+  resources :crawl_requests, only: [ :index, :new, :create ], path: "crawl"
+
   # Public pages
   root "pages#home"
   get "about", to: "pages#about"
