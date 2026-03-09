@@ -46,11 +46,17 @@ group :development, :test do
 
   # Omakase Ruby styling [https://github.com/rails/rubocop-rails-omakase/]
   gem "rubocop-rails-omakase", require: false
+
+  # Load environment variables from .env file [https://github.com/bkeepers/dotenv]
+  gem "dotenv-rails"
 end
 
 group :development do
   # Use console on exceptions pages [https://github.com/rails/web-console]
   gem "web-console"
+
+  # Preview emails in browser instead of sending [https://github.com/ryanb/letter_opener]
+  gem "letter_opener"
 end
 
 group :test do
@@ -62,3 +68,17 @@ end
 gem "inertia_rails", "~> 3.17"
 
 gem "vite_rails", "~> 3.0"
+
+gem "js-routes", "~> 2.3"
+
+gem "mission_control-jobs", "~> 1.1"
+
+gem "pagy", "~> 43.2"
+
+gem "devise", "~> 5.0"
+
+gem "omniauth-google-oauth2", "~> 1.2"
+
+gem "omniauth-rails_csrf_protection", "~> 2.0"
+
+gem "pg_search", "~> 2.3"

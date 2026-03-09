@@ -1,0 +1,3 @@
+CREATE DATABASE contextqmd_registry_production_cache;
+CREATE DATABASE contextqmd_registry_production_queue;
+CREATE DATABASE contextqmd_registry_production_cable;

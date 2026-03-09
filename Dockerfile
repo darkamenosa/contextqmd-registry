@@ -20,6 +20,28 @@ RUN apt-get update -qq && \
     ln -s /usr/lib/$(uname -m)-linux-gnu/libjemalloc.so.2 /usr/local/lib/libjemalloc.so && \
     rm -rf /var/lib/apt/lists /var/cache/apt/archives
 
+# Install JavaScript runtime (prebuilt Node per-arch)
+ARG NODE_VERSION=25.0.0
+ARG TARGETARCH
+ENV PATH=/usr/local/node/bin:$PATH
+RUN apt-get update -qq && \
+    apt-get install --no-install-recommends -y xz-utils && \
+    case "${TARGETARCH}" in \
+      amd64) NODEARCH=x64 ;; \
+      arm64) NODEARCH=arm64 ;; \
+      *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac && \
+    mkdir -p /usr/local/node && \
+    curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODEARCH}.tar.xz" | \
+      tar -xJ -C /usr/local/node --strip-components=1 && \
+    /usr/local/node/bin/node -v && \
+    /usr/local/node/bin/npm -v && \
+    apt-get purge -y --auto-remove xz-utils && \
+    rm -rf /var/lib/apt/lists /var/cache/apt/archives
+
+# Ensure the Bundler version matches Gemfile.lock to avoid per-build upgrades.
+RUN gem install bundler -v 4.0.6 -N
+
 # Set production environment variables and enable jemalloc for reduced memory usage and latency.
 ENV RAILS_ENV="production" \
     BUNDLE_DEPLOYMENT="1" \

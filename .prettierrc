@@ -1,0 +1,31 @@
+{
+  "endOfLine": "lf",
+  "semi": false,
+  "singleQuote": false,
+  "tabWidth": 2,
+  "trailingComma": "es5",
+  "printWidth": 80,
+  "importOrder": [
+    "^(react/(.*)$)|^(react$)",
+    "^(react-dom/(.*)$)|^(react-dom$)",
+    "^(@inertiajs/(.*)$)",
+    "<THIRD_PARTY_MODULES>",
+    "",
+    "^@/types/(.*)$",
+    "^@/lib/(.*)$",
+    "^@/hooks/(.*)$",
+    "^@/components/ui/(.*)$",
+    "^@/components/(.*)$",
+    "^@/layouts/(.*)$",
+    "^@/routes/(.*)$",
+    "",
+    "^[./]"
+  ],
+  "importOrderParserPlugins": ["typescript", "jsx", "decorators-legacy"],
+  "plugins": [
+    "@ianvs/prettier-plugin-sort-imports",
+    "prettier-plugin-tailwindcss"
+  ],
+  "tailwindStylesheet": "./app/frontend/entrypoints/application.css",
+  "tailwindFunctions": ["cn", "cva"]
+}
