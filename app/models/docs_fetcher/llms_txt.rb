@@ -42,7 +42,7 @@ module DocsFetcher
       def http_get(uri, redirect_limit: 5)
         raise "Too many redirects" if redirect_limit <= 0
 
-        proxy = proxy_uri
+        proxy = ProxyPool.next_proxy
         http = Net::HTTP.new(uri.hostname, uri.port,
           proxy&.host, proxy&.port, proxy&.user, proxy&.password)
         http.use_ssl = uri.scheme == "https"
@@ -52,23 +52,13 @@ module DocsFetcher
         response = http.request(Net::HTTP::Get.new(uri))
 
         if response.is_a?(Net::HTTPRedirection) && response["location"]
-          return http_get(URI.parse(response["location"]), redirect_limit: redirect_limit - 1)
+          return http_get(URI.join(uri, response["location"]), redirect_limit: redirect_limit - 1)
         end
 
         return nil unless response.is_a?(Net::HTTPSuccess)
 
         body = response.body.force_encoding("UTF-8")
         body.bytesize > MAX_SIZE ? body.byteslice(0, MAX_SIZE) : body
-      end
-
-      def proxy_uri
-        proxy_url = ENV["CRAWL_PROXY_URL"]
-        return nil if proxy_url.blank?
-
-        URI.parse(proxy_url)
-      rescue URI::InvalidURIError
-        Rails.logger.warn("Invalid CRAWL_PROXY_URL: #{proxy_url}")
-        nil
       end
 
       # --- Metadata extraction ---

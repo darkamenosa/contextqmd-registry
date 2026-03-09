@@ -46,7 +46,7 @@ class DocsFetcher::GithubTest < ActiveSupport::TestCase
 
   test "root README.md gets high score" do
     score = @fetcher.send(:score_file, "README.md", 5000)
-    assert score >= 180, "Root README.md should score >= 180, got #{score}"
+    assert score >= 100, "Root README.md should score >= 100, got #{score}"
   end
 
   test "docs directory files score higher than random files" do
@@ -205,8 +205,10 @@ class DocsFetcher::GithubTest < ActiveSupport::TestCase
     ranked = @fetcher.send(:score_and_rank, candidates)
     paths = ranked.map { |r| r["path"] }
 
-    # README.md should be first (highest score), docs/ second
-    assert_equal "README.md", paths.first
-    assert_equal "docs/getting-started.md", paths.second
+    # docs/getting-started.md should be first (high-value dir + getting-started bonus),
+    # README.md second, lib/ last
+    assert_equal "docs/getting-started.md", paths.first
+    assert_equal "README.md", paths.second
+    assert_equal "lib/internal.md", paths.last
   end
 end

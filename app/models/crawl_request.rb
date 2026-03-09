@@ -39,6 +39,10 @@ class CrawlRequest < ApplicationRecord
     status == "processing"
   end
 
+  def completed?
+    status == "completed"
+  end
+
   private
 
     def enqueue_processing

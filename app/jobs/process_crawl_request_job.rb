@@ -3,19 +3,24 @@
 class ProcessCrawlRequestJob < ApplicationJob
   queue_as :default
 
-  retry_on StandardError, wait: :polynomially_longer, attempts: 3
+  # Mark as failed only after all retries are exhausted.
+  # The block runs when retry_on gives up (after 3 attempts).
+  retry_on StandardError, wait: :polynomially_longer, attempts: 3 do |job, error|
+    crawl_request = job.arguments.first
+    crawl_request&.fail!(error.message) unless crawl_request&.completed?
+  end
 
   def perform(crawl_request)
-    return unless crawl_request.pending?
+    return unless crawl_request.pending? || crawl_request.processing?
 
-    crawl_request.start_processing!
+    crawl_request.start_processing! if crawl_request.pending?
 
     fetcher = DocsFetcher.for(crawl_request.source_type)
     result = fetcher.fetch(crawl_request.url)
 
     library = find_or_create_library(result, crawl_request)
     version = create_version(library, result)
-    create_pages(version, result.pages)
+    create_pages(version, result.pages, source_type: crawl_request.source_type)
     record_fetch_recipe(version, crawl_request)
     update_manifest_checksum!(version)
 
@@ -32,12 +37,22 @@ class ProcessCrawlRequestJob < ApplicationJob
     def find_or_create_library(result, crawl_request)
       system_account = Account.find_or_create_by!(name: "ContextQMD System") { |a| a.personal = false }
 
-      Library.find_or_create_by!(namespace: result.namespace, name: result.name) do |lib|
+      library = Library.find_or_create_by!(namespace: result.namespace, name: result.name) do |lib|
         lib.account = system_account
         lib.display_name = result.display_name
         lib.homepage_url = result.homepage_url
         lib.aliases = result.aliases
       end
+
+      # Always update metadata on re-crawl (find_or_create_by! block only runs for new records)
+      merged_aliases = ((library.aliases || []) + (result.aliases || [])).uniq
+      library.update!(
+        display_name: result.display_name.presence || library.display_name,
+        aliases: merged_aliases,
+        homepage_url: result.homepage_url.presence || library.homepage_url
+      )
+
+      library
     end
 
     def create_version(library, result)
@@ -49,7 +64,7 @@ class ProcessCrawlRequestJob < ApplicationJob
       version
     end
 
-    def create_pages(version, pages)
+    def create_pages(version, pages, source_type: nil)
       pages.each do |page_data|
         content = page_data[:content].to_s
         checksum = Digest::SHA256.hexdigest(content)
@@ -62,6 +77,7 @@ class ProcessCrawlRequestJob < ApplicationJob
           description: content,
           bytes: content.bytesize,
           checksum: checksum,
+          source_ref: source_type,
           headings: page_data[:headings] || []
         )
         page.save!

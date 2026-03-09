@@ -119,9 +119,17 @@ module DocsFetcher
 
       def skip_path?(path)
         parts = path.split("/")
+        dir_path = parts[0...-1].join("/")
 
-        # Skip files in excluded directories
-        return true if parts.any? { |p| SKIP_DIRS.include?(p) }
+        # Skip files in excluded directories (single-segment entries match any path component,
+        # multi-segment entries match path prefixes)
+        return true if SKIP_DIRS.any? { |d|
+          if d.include?("/")
+            dir_path.start_with?(d) || dir_path.include?("/#{d}")
+          else
+            parts.any? { |p| p == d }
+          end
+        }
 
         # Skip blacklisted filenames (case-insensitive)
         filename = parts.last
@@ -149,10 +157,14 @@ module DocsFetcher
         filename = parts.last
         dir_path = parts[0...-1].join("/").downcase
 
-        # Root-level documentation files
+        # Root-level documentation files (use elsif to avoid double-counting README.md
+        # which appears in ROOT_DOC_FILES)
         if parts.length == 1
-          score += 100 if ROOT_DOC_FILES.any? { |f| filename.casecmp(f).zero? }
-          score += 80 if filename.casecmp("README.md").zero?
+          if ROOT_DOC_FILES.any? { |f| filename.casecmp(f).zero? }
+            score += 100
+          elsif filename.casecmp("README.md").zero?
+            score += 80
+          end
         end
 
         # Files in high-value documentation directories
@@ -308,10 +320,7 @@ module DocsFetcher
         token = Rails.application.credentials.dig(:github, :token)
         request["Authorization"] = "token #{token}" if token
 
-        response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true,
-          open_timeout: 10, read_timeout: 30) do |http|
-          http.request(request)
-        end
+        response = http_start(uri, read_timeout: 30) { |http| http.request(request) }
 
         raise "GitHub API error #{response.code}: #{response.body.first(200)}" unless response.is_a?(Net::HTTPSuccess)
         JSON.parse(response.body)
@@ -322,13 +331,20 @@ module DocsFetcher
         request = Net::HTTP::Get.new(uri)
         request["User-Agent"] = "ContextQMD-Registry/1.0"
 
-        response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true,
-          open_timeout: 10, read_timeout: 15) do |http|
-          http.request(request)
-        end
+        response = http_start(uri) { |http| http.request(request) }
 
         return nil unless response.is_a?(Net::HTTPSuccess)
         response.body.force_encoding("UTF-8")
+      end
+
+      def http_start(uri, read_timeout: 15)
+        proxy = ProxyPool.next_proxy
+        http = Net::HTTP.new(uri.hostname, uri.port,
+          proxy&.host, proxy&.port, proxy&.user, proxy&.password)
+        http.use_ssl = true
+        http.open_timeout = 10
+        http.read_timeout = read_timeout
+        yield http
       end
   end
 end
