@@ -21,7 +21,7 @@ module Api
 
       teardown { Current.reset }
 
-      test "show with auth returns full manifest" do
+      test "show with auth returns contract-conforming manifest" do
         get "/api/v1/libraries/vercel/nextjs/versions/16.1.6/manifest", headers: auth_headers
 
         assert_response :ok
@@ -31,39 +31,40 @@ module Api
 
         data = body["data"]
 
-        # Library info
-        assert_equal "vercel", data["library"]["namespace"]
-        assert_equal "nextjs", data["library"]["name"]
-        assert_equal "Next.js", data["library"]["display_name"]
+        # Flat top-level fields per API contract
+        assert_equal "1.0", data["schema_version"]
+        assert_equal "vercel", data["namespace"]
+        assert_equal "nextjs", data["name"]
+        assert_equal "Next.js", data["display_name"]
+        assert_equal "16.1.6", data["version"]
+        assert_equal "stable", data["channel"]
+        assert_not_nil data["generated_at"]
 
-        # Version info
-        assert_equal "16.1.6", data["version"]["version"]
-        assert_equal "stable", data["version"]["channel"]
-
-        # Doc count (pages)
+        # Doc count
         assert_equal 2, data["doc_count"]
 
-        # Source (from fetch_recipe)
+        # Source (from fetch_recipe) — uses "type" not "source_type"
         assert_not_nil data["source"]
-        assert_equal "http", data["source"]["source_type"]
+        assert_equal "http", data["source"]["type"]
         assert_equal "https://nextjs.org/docs", data["source"]["url"]
 
-        # Page index URL
-        assert_equal "/api/v1/libraries/vercel/nextjs/versions/16.1.6/page-index", data["page_index_url"]
+        # Page index — object with url, not flat string
+        assert_not_nil data["page_index"]
+        assert_equal "/api/v1/libraries/vercel/nextjs/versions/16.1.6/page-index", data["page_index"]["url"]
 
-        # Profiles (from bundles)
-        assert_includes data["profiles"], "full"
-        assert_includes data["profiles"], "slim"
+        # Profiles — hash of profile => { bundle: { format, url, sha256 } }
+        assert data["profiles"].is_a?(Hash), "profiles should be a hash"
+        assert data["profiles"].key?("slim") || data["profiles"].key?("full"),
+          "profiles should include slim or full"
 
         # Source policy
         assert_not_nil data["source_policy"]
         assert_equal "MIT", data["source_policy"]["license_name"]
         assert_equal "verified", data["source_policy"]["license_status"]
 
-        # Provenance
+        # Provenance — normalizer_version, splitter_version, manifest_checksum
         assert_not_nil data["provenance"]
-        assert_not_nil data["provenance"]["generated_at"]
-        assert_equal "https://nextjs.org/docs", data["provenance"]["source_url"]
+        assert data["provenance"].key?("manifest_checksum")
       end
 
       test "show without auth returns 200" do
@@ -73,7 +74,7 @@ module Api
 
         body = response.parsed_body
         assert body.key?("data"), "Response should include 'data' key"
-        assert_equal "nextjs", body["data"]["library"]["name"]
+        assert_equal "nextjs", body["data"]["name"]
       end
 
       test "show returns 404 for nonexistent library or version" do

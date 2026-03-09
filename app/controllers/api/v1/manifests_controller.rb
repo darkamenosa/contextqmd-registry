@@ -17,49 +17,51 @@ module Api
       private
 
         def manifest_json
-          {
-            library: library_json,
-            version: version_json,
-            doc_count: @version.pages.count,
-            source: source_json,
-            page_index_url: page_index_url,
-            profiles: @version.bundles.ordered.map { |b| b.profile },
-            source_policy: source_policy_json,
-            provenance: provenance_json
-          }
-        end
+          recipe = @version.fetch_recipe
 
-        def library_json
           {
+            schema_version: "1.0",
             namespace: @library.namespace,
             name: @library.name,
-            display_name: @library.display_name
-          }
-        end
-
-        def version_json
-          {
+            display_name: @library.display_name,
             version: @version.version,
             channel: @version.channel,
             generated_at: @version.generated_at&.iso8601,
-            manifest_checksum: @version.manifest_checksum
+            doc_count: @version.pages.count,
+            source: source_json(recipe),
+            page_index: {
+              url: "/api/v1/libraries/#{@library.namespace}/#{@library.name}/versions/#{@version.version}/page-index",
+              sha256: nil
+            },
+            profiles: profiles_json,
+            source_policy: source_policy_json,
+            provenance: provenance_json(recipe)
           }
         end
 
-        def source_json
-          recipe = @version.fetch_recipe
+        def source_json(recipe)
           return nil unless recipe
 
           {
-            source_type: recipe.source_type,
+            type: recipe.source_type,
             url: recipe.url,
-            normalizer_version: recipe.normalizer_version,
-            splitter_version: recipe.splitter_version
+            etag: @version.source_etag
           }
         end
 
-        def page_index_url
-          "/api/v1/libraries/#{@library.namespace}/#{@library.name}/versions/#{@version.version}/page-index"
+        def profiles_json
+          bundles = @version.bundles.ordered
+          return {} if bundles.empty?
+
+          bundles.each_with_object({}) do |bundle, hash|
+            hash[bundle.profile] = {
+              bundle: {
+                format: bundle.format,
+                url: bundle.url || "/api/v1/libraries/#{@library.namespace}/#{@library.name}/versions/#{@version.version}/bundles/#{bundle.profile}",
+                sha256: bundle.sha256
+              }
+            }
+          end
         end
 
         def source_policy_json
@@ -69,17 +71,17 @@ module Api
           {
             license_name: policy.license_name,
             license_status: policy.license_status,
-            license_url: policy.license_url,
             mirror_allowed: policy.mirror_allowed,
             origin_fetch_allowed: policy.origin_fetch_allowed,
             attribution_required: policy.attribution_required
           }
         end
 
-        def provenance_json
+        def provenance_json(recipe)
           {
-            generated_at: @version.generated_at&.iso8601,
-            source_url: @version.source_url
+            normalizer_version: recipe&.normalizer_version,
+            splitter_version: recipe&.splitter_version,
+            manifest_checksum: @version.manifest_checksum
           }
         end
     end
