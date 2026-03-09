@@ -8,7 +8,7 @@ module DocsFetcher
     "gitlab" => "DocsFetcher::Github", # same git-hosting pattern
     "website" => "DocsFetcher::Website",
     "llms_txt" => "DocsFetcher::LlmsTxt",
-    "openapi" => "DocsFetcher::Website"  # fallback for now
+    "openapi" => "DocsFetcher::Openapi"
   }.freeze
 
   def self.for(source_type)
