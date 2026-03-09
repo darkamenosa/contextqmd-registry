@@ -24,7 +24,7 @@ const DEFAULT_SEO = {
   title: "ContextQMD",
   description:
     "Local-first documentation package system for MCP. Install, search, and retrieve version-aware docs for any library.",
-  image: "/og-image.jpg",
+  image: "/og-image.png",
 } as const
 
 export default function PublicLayout({

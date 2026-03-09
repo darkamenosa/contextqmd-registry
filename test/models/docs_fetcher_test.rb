@@ -49,6 +49,34 @@ class DocsFetcherTest < ActiveSupport::TestCase
     assert_equal "website", DocsFetcher.detect_source_type("not a valid url at all ^^^")
   end
 
+  test "detects github with trailing slash" do
+    assert_equal "github", DocsFetcher.detect_source_type("https://github.com/vercel/next.js/")
+  end
+
+  test "detects llms.txt with query params" do
+    assert_equal "llms_txt", DocsFetcher.detect_source_type("https://example.com/llms.txt?v=2")
+  end
+
+  test "detects openapi with api-docs path" do
+    assert_equal "openapi", DocsFetcher.detect_source_type("https://api.example.com/api-docs")
+  end
+
+  test "detects openapi.yaml as openapi" do
+    assert_equal "openapi", DocsFetcher.detect_source_type("https://api.example.com/v2/openapi.yaml")
+  end
+
+  test "defaults to website for empty string" do
+    assert_equal "website", DocsFetcher.detect_source_type("")
+  end
+
+  test "defaults to website for URL with port" do
+    assert_equal "website", DocsFetcher.detect_source_type("https://docs.example.com:8080/guide")
+  end
+
+  test "detects gitlab with subdomain pattern" do
+    assert_equal "gitlab", DocsFetcher.detect_source_type("https://gitlab.internal.corp.com/team/project")
+  end
+
   # --- for ---
 
   test "for returns Github fetcher" do
