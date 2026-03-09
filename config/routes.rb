@@ -81,10 +81,10 @@ get "privacy", to: "pages#privacy"
       resources :libraries, only: [ :index ], param: :slug
       get "libraries/:namespace/:name", to: "libraries#show", as: :library_detail
       get "libraries/:namespace/:name/versions", to: "versions#index"
-      get "libraries/:namespace/:name/versions/:version/manifest", to: "manifests#show"
-      get "libraries/:namespace/:name/versions/:version/page-index", to: "page_index#index"
-      get "libraries/:namespace/:name/versions/:version/pages/:page_uid", to: "page_index#show"
-      get "libraries/:namespace/:name/versions/:version/bundles/:profile", to: "bundles#show"
+      get "libraries/:namespace/:name/versions/:version/manifest", to: "manifests#show", version: /[^\/]+/
+      get "libraries/:namespace/:name/versions/:version/page-index", to: "page_index#index", version: /[^\/]+/
+      get "libraries/:namespace/:name/versions/:version/pages/:page_uid", to: "page_index#show", version: /[^\/]+/
+      get "libraries/:namespace/:name/versions/:version/bundles/:profile", to: "bundles#show", version: /[^\/]+/
       post "resolve", to: "resolve#create"
     end
   end
