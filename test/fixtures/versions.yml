@@ -1,0 +1,22 @@
+nextjs_stable:
+  library: nextjs
+  version: "16.1.6"
+  channel: stable
+  generated_at: <%= 2.days.ago.iso8601 %>
+  source_url: "https://nextjs.org/docs"
+  manifest_checksum: "sha256:nextjs1616checksum"
+
+nextjs_canary:
+  library: nextjs
+  version: "17.0.0-canary.1"
+  channel: canary
+  generated_at: <%= 1.day.ago.iso8601 %>
+  source_url: "https://nextjs.org/docs"
+
+rails_stable:
+  library: rails
+  version: "8.1.0"
+  channel: stable
+  generated_at: <%= 3.days.ago.iso8601 %>
+  source_url: "https://guides.rubyonrails.org"
+  manifest_checksum: "sha256:rails810checksum"

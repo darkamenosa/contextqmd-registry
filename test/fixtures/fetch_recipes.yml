@@ -1,0 +1,9 @@
+nextjs_stable_recipe:
+  version: nextjs_stable
+  source_type: "http"
+  url: "https://nextjs.org/docs"
+  allowed_hosts: <%= ["nextjs.org"].to_json %>
+  content_types: <%= ["text/html", "text/markdown"].to_json %>
+  max_bytes: 52428800
+  normalizer_version: "1.0.0"
+  splitter_version: "1.0.0"

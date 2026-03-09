@@ -1,0 +1,17 @@
+nextjs_policy:
+  library: nextjs
+  license_name: "MIT"
+  license_url: "https://github.com/vercel/next.js/blob/canary/license.md"
+  license_status: "verified"
+  mirror_allowed: true
+  origin_fetch_allowed: true
+  attribution_required: false
+
+rails_policy:
+  library: rails
+  license_name: "MIT"
+  license_url: "https://github.com/rails/rails/blob/main/MIT-LICENSE"
+  license_status: "verified"
+  mirror_allowed: true
+  origin_fetch_allowed: true
+  attribution_required: false
