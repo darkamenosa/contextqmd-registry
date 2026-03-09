@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_09_092752) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_09_134703) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -142,6 +142,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_09_092752) do
     t.datetime "updated_at", null: false
     t.string "url"
     t.bigint "version_id", null: false
+    t.index "(((setweight(to_tsvector('english'::regconfig, (COALESCE(title, ''::character varying))::text), 'A'::\"char\") || setweight(to_tsvector('english'::regconfig, COALESCE(description, ''::text)), 'B'::\"char\")) || setweight(to_tsvector('english'::regconfig, (COALESCE(path, ''::character varying))::text), 'C'::\"char\")))", name: "index_pages_on_search", using: :gin
+    t.index ["version_id", "page_uid"], name: "index_pages_on_version_id_and_page_uid", unique: true
     t.index ["version_id"], name: "index_pages_on_version_id"
   end
 

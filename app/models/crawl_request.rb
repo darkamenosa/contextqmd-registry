@@ -11,6 +11,8 @@ class CrawlRequest < ApplicationRecord
   validates :source_type, presence: true, inclusion: { in: SOURCE_TYPES }
   validates :status, presence: true, inclusion: { in: STATUSES }
 
+  after_create_commit :enqueue_processing
+
   scope :pending, -> { where(status: "pending") }
   scope :processing, -> { where(status: "processing") }
   scope :completed, -> { where(status: "completed") }
@@ -32,4 +34,14 @@ class CrawlRequest < ApplicationRecord
   def start_processing!
     update!(status: "processing")
   end
+
+  def processing?
+    status == "processing"
+  end
+
+  private
+
+    def enqueue_processing
+      ProcessCrawlRequestJob.perform_later(self)
+    end
 end

@@ -102,8 +102,6 @@ function formatTimeAgo(iso: string): string {
 }
 
 export default function RankingsIndex({ libraries, totalLibraries }: Props) {
-  const topLibrary = libraries[0]
-
   return (
     <PublicLayout
       title="Rankings — ContextQMD"

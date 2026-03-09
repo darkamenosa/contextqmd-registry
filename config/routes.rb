@@ -42,6 +42,7 @@ Rails.application.routes.draw do
       namespace :customers do
         resource :bulk_suspension, only: [ :create, :destroy ]
       end
+      resources :libraries, only: [ :index, :show, :edit, :update, :destroy ]
       resources :webhooks, only: [ :index ]
 
       namespace :analytics do
@@ -98,6 +99,7 @@ Rails.application.routes.draw do
       get "libraries/:namespace/:name/versions/:version/page-index", to: "page_index#index", version: /[^\/]+/
       get "libraries/:namespace/:name/versions/:version/pages/:page_uid", to: "page_index#show", version: /[^\/]+/
       get "libraries/:namespace/:name/versions/:version/bundles/:profile", to: "bundles#show", version: /[^\/]+/
+      post "libraries/:namespace/:name/versions/:version/query", to: "query_docs#create", version: /[^\/]+/
       post "resolve", to: "resolve#create"
     end
   end

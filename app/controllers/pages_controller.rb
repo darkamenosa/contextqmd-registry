@@ -36,6 +36,7 @@ class PagesController < InertiaController
   private
 
     def home_library_props(library)
+      best_version = library.versions.max_by { |v| v.pages.size }
       latest_version = library.versions.max_by(&:created_at)
       {
         namespace: library.namespace,
@@ -43,7 +44,7 @@ class PagesController < InertiaController
         display_name: library.display_name,
         default_version: library.default_version,
         version_count: library.versions.size,
-        page_count: latest_version&.pages&.size || 0,
+        page_count: best_version&.pages&.size || 0,
         license_status: library.source_policy&.license_status,
         updated_at: (latest_version&.created_at || library.updated_at).iso8601
       }

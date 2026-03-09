@@ -31,8 +31,9 @@ const sourceTypes = [
     value: "github",
     label: "GitHub",
     icon: GitBranch,
-    description: "Index docs from a GitHub repository",
-    placeholder: "https://github.com/vercel/next.js",
+    description:
+      "Index docs from a GitHub repository. Include /tree/<tag> for a specific version.",
+    placeholder: "https://github.com/rails/rails/tree/v8.1.2",
   },
   {
     value: "gitlab",

@@ -26,7 +26,7 @@ rails = Library.find_or_create_by!(namespace: "rails", name: "rails") do |lib|
   lib.display_name = "Ruby on Rails"
   lib.aliases = %w[rails rubyonrails ror]
   lib.homepage_url = "https://rubyonrails.org"
-  lib.default_version = "8.1.0"
+  lib.default_version = "8.1.2"
 end
 
 inertia = Library.find_or_create_by!(namespace: "inertiajs", name: "inertia") do |lib|
@@ -78,7 +78,7 @@ nextjs_canary = find_or_create_version(nextjs,
   manifest_checksum: nil)
 
 rails_stable = find_or_create_version(rails,
-  version: "8.1.0", channel: "stable",
+  version: "8.1.2", channel: "stable",
   generated_at: 3.days.ago,
   source_url: "https://guides.rubyonrails.org",
   manifest_checksum: "sha256:rails810stable")
@@ -104,7 +104,7 @@ tailwind_stable = find_or_create_version(tailwind,
 puts "  #{Version.count} versions"
 
 # --- Source Policies ---
-[nextjs, rails, inertia, react, tailwind].each do |lib|
+[ nextjs, rails, inertia, react, tailwind ].each do |lib|
   SourcePolicy.find_or_create_by!(library: lib) do |sp|
     sp.license_name = "MIT"
     sp.license_status = "verified"
@@ -119,7 +119,7 @@ puts "  #{SourcePolicy.count} source policies"
 # --- Fetch Recipes (one per version) ---
 {
   nextjs_stable => { source_type: "llms_full_txt", url: "https://nextjs.org/docs/llms-full.txt" },
-  rails_stable => { source_type: "github_markdown", url: "https://github.com/rails/rails/tree/v8.1.0/guides/source" },
+  rails_stable => { source_type: "github_markdown", url: "https://github.com/rails/rails/tree/v8.1.2/guides/source" },
   inertia_stable => { source_type: "github_markdown", url: "https://github.com/inertiajs/inertia/tree/v2.0/docs" },
   react_stable => { source_type: "llms_full_txt", url: "https://react.dev/llms-full.txt" },
   tailwind_stable => { source_type: "github_markdown", url: "https://github.com/tailwindlabs/tailwindcss.com/tree/main/src/docs" }
@@ -138,7 +138,7 @@ puts "  #{FetchRecipe.count} fetch recipes"
 nextjs_pages = [
   { page_uid: "pg_nextjs_installation", path: "app/getting-started/installation.md",
     title: "Installation", url: "https://nextjs.org/docs/app/getting-started/installation",
-    headings: ["Installation", "Automatic installation", "Manual installation"],
+    headings: [ "Installation", "Automatic installation", "Manual installation" ],
     bytes: 9123, checksum: "sha256:install_page_hash",
     description: <<~MD
       # Installation
@@ -177,7 +177,7 @@ nextjs_pages = [
   },
   { page_uid: "pg_nextjs_routing", path: "app/building-your-application/routing.md",
     title: "Routing", url: "https://nextjs.org/docs/app/building-your-application/routing",
-    headings: ["Routing", "Defining routes", "Pages", "Layouts"],
+    headings: [ "Routing", "Defining routes", "Pages", "Layouts" ],
     bytes: 15420, checksum: "sha256:routing_page_hash",
     description: <<~MD
       # Routing
@@ -225,7 +225,7 @@ nextjs_pages = [
   },
   { page_uid: "pg_nextjs_data_fetching", path: "app/building-your-application/data-fetching.md",
     title: "Data Fetching", url: "https://nextjs.org/docs/app/building-your-application/data-fetching",
-    headings: ["Data Fetching", "fetch API", "Server Components"],
+    headings: [ "Data Fetching", "fetch API", "Server Components" ],
     bytes: 12800, checksum: "sha256:data_fetching_page_hash",
     description: <<~MD
       # Data Fetching
@@ -256,7 +256,7 @@ nextjs_pages = [
   },
   { page_uid: "pg_nextjs_rendering", path: "app/building-your-application/rendering.md",
     title: "Rendering", url: "https://nextjs.org/docs/app/building-your-application/rendering",
-    headings: ["Rendering", "Server Components", "Client Components"],
+    headings: [ "Rendering", "Server Components", "Client Components" ],
     bytes: 18200, checksum: "sha256:rendering_page_hash",
     description: <<~MD
       # Rendering
@@ -293,7 +293,7 @@ nextjs_pages = [
   },
   { page_uid: "pg_nextjs_caching", path: "app/building-your-application/caching.md",
     title: "Caching", url: "https://nextjs.org/docs/app/building-your-application/caching",
-    headings: ["Caching", "Request Memoization", "Data Cache", "Full Route Cache"],
+    headings: [ "Caching", "Request Memoization", "Data Cache", "Full Route Cache" ],
     bytes: 22100, checksum: "sha256:caching_page_hash",
     description: <<~MD
       # Caching
@@ -339,7 +339,7 @@ end
 rails_pages = [
   { page_uid: "pg_rails_getting_started", path: "getting-started.md",
     title: "Getting Started with Rails", url: "https://guides.rubyonrails.org/getting_started.html",
-    headings: ["Getting Started", "Creating a New Rails Project", "MVC Architecture"],
+    headings: [ "Getting Started", "Creating a New Rails Project", "MVC Architecture" ],
     bytes: 25000, checksum: "sha256:rails_getting_started",
     description: <<~MD
       # Getting Started with Rails
@@ -364,7 +364,7 @@ rails_pages = [
   },
   { page_uid: "pg_rails_active_record", path: "active-record-basics.md",
     title: "Active Record Basics", url: "https://guides.rubyonrails.org/active_record_basics.html",
-    headings: ["Active Record", "CRUD Operations", "Validations", "Migrations"],
+    headings: [ "Active Record", "CRUD Operations", "Validations", "Migrations" ],
     bytes: 32000, checksum: "sha256:rails_active_record",
     description: <<~MD
       # Active Record Basics
@@ -432,7 +432,7 @@ end
 react_pages = [
   { page_uid: "pg_react_hooks", path: "reference/react/hooks.md",
     title: "React Hooks", url: "https://react.dev/reference/react/hooks",
-    headings: ["Hooks", "useState", "useEffect", "useContext"],
+    headings: [ "Hooks", "useState", "useEffect", "useContext" ],
     bytes: 18000, checksum: "sha256:react_hooks",
     description: <<~MD
       # React Hooks

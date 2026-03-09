@@ -32,10 +32,8 @@ export function NavUser() {
   const { currentUser, currentIdentity } = page.props
   const { isMobile } = useSidebar()
   const accountId = currentUser?.accountId ?? currentIdentity?.defaultAccountId
-  const role = currentUser?.role ?? currentIdentity?.defaultAccountRole
   const scopedPath = (path: string) =>
     withAccountScope(page.url, path, accountId)
-  const canManageAccount = role === "admin" || role === "owner"
 
   const displayName = currentUser?.name ?? currentIdentity?.name
   const name = displayName ?? "User"

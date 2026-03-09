@@ -30,7 +30,11 @@ module Identities
       end
 
       def after_sign_out_path_for(_resource)
-        root_path
+        if request.headers["X-Inertia"].present?
+          new_identity_session_path
+        else
+          root_path
+        end
       end
   end
 end
