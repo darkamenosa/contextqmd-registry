@@ -47,10 +47,14 @@ module Api
 
       # -- Authentication --
 
-      test "POST /resolve without auth returns 401" do
+      test "POST /resolve without auth returns 200" do
         post api_v1_resolve_path, params: { query: "nextjs-#{@hex}" }, as: :json
 
-        assert_response :unauthorized
+        assert_response :ok
+
+        body = response.parsed_body
+        assert body.key?("data"), "Response should include 'data' key"
+        assert_equal "nextjs-#{@hex}", body["data"]["library"]["name"]
       end
 
       # -- Validation --

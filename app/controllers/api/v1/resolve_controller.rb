@@ -3,6 +3,8 @@
 module Api
   module V1
     class ResolveController < BaseController
+      skip_before_action :authenticate_api_token!
+
       def create
         query = params[:query]
         return render_error(code: "bad_request", message: "Query parameter is required", status: :bad_request) if query.blank?

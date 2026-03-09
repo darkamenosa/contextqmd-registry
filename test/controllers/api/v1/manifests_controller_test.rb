@@ -66,10 +66,14 @@ module Api
         assert_equal "https://nextjs.org/docs", data["provenance"]["source_url"]
       end
 
-      test "show without auth returns 401" do
+      test "show without auth returns 200" do
         get "/api/v1/libraries/vercel/nextjs/versions/16.1.6/manifest"
 
-        assert_response :unauthorized
+        assert_response :ok
+
+        body = response.parsed_body
+        assert body.key?("data"), "Response should include 'data' key"
+        assert_equal "nextjs", body["data"]["library"]["name"]
       end
 
       test "show returns 404 for nonexistent library or version" do

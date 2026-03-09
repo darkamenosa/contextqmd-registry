@@ -3,6 +3,8 @@
 module Api
   module V1
     class LibrariesController < BaseController
+      skip_before_action :authenticate_api_token!
+
       def index
         libraries = if params[:query].present?
           search_libraries(params[:query])

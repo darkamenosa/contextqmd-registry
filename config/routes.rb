@@ -66,7 +66,7 @@ Rails.application.routes.draw do
   # Public pages
   root "pages#home"
   get "about", to: "pages#about"
-get "privacy", to: "pages#privacy"
+  get "privacy", to: "pages#privacy"
   get "terms", to: "pages#terms"
   get "contact", to: "pages#contact"
 

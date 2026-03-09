@@ -41,10 +41,14 @@ module Api
         assert_not_nil stable["generated_at"]
       end
 
-      test "index without auth returns 401" do
+      test "index without auth returns 200" do
         get "/api/v1/libraries/vercel/nextjs/versions"
 
-        assert_response :unauthorized
+        assert_response :ok
+
+        body = response.parsed_body
+        assert body.key?("data"), "Response should include 'data' key"
+        assert_kind_of Array, body["data"]
       end
 
       test "index returns 404 for nonexistent library" do

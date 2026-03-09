@@ -3,6 +3,7 @@
 module Api
   module V1
     class VersionsController < BaseController
+      skip_before_action :authenticate_api_token!
       include Concerns::LibraryVersionLookup
 
       before_action :find_library!

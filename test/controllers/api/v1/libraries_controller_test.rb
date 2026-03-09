@@ -27,10 +27,14 @@ module Api
 
       # -- GET /api/v1/libraries (index) --
 
-      test "index without auth returns 401" do
+      test "index without auth returns 200" do
         get api_v1_libraries_path
 
-        assert_response :unauthorized
+        assert_response :ok
+
+        body = response.parsed_body
+        assert body.key?("data"), "Response should include 'data' key"
+        assert_kind_of Array, body["data"]
       end
 
       test "index with auth returns 200 with array of libraries" do
@@ -88,10 +92,14 @@ module Api
 
       # -- GET /api/v1/libraries/:namespace/:name (show) --
 
-      test "show without auth returns 401" do
+      test "show without auth returns 200" do
         get api_v1_library_detail_path(namespace: "vercel", name: "nextjs")
 
-        assert_response :unauthorized
+        assert_response :ok
+
+        body = response.parsed_body
+        assert body.key?("data"), "Response should include 'data' key"
+        assert_equal "nextjs", body["data"]["name"]
       end
 
       test "show with auth returns 200 with single library" do

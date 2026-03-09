@@ -37,10 +37,14 @@ module Api
         assert_equal "https://cdn.example.com/bundles/nextjs-16.1.6-slim.tar.zst", data["url"]
       end
 
-      test "show without auth returns 401" do
+      test "show without auth returns 200" do
         get "/api/v1/libraries/vercel/nextjs/versions/16.1.6/bundles/slim"
 
-        assert_response :unauthorized
+        assert_response :ok
+
+        body = response.parsed_body
+        assert body.key?("data"), "Response should include 'data' key"
+        assert_equal "slim", body["data"]["profile"]
       end
 
       test "show returns 404 for nonexistent bundle profile" do

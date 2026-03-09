@@ -45,10 +45,14 @@ module Api
         assert_not_nil page["updated_at"]
       end
 
-      test "index without auth returns 401" do
+      test "index without auth returns 200" do
         get "/api/v1/libraries/vercel/nextjs/versions/16.1.6/page-index"
 
-        assert_response :unauthorized
+        assert_response :ok
+
+        body = response.parsed_body
+        assert body.key?("data"), "Response should include 'data' key"
+        assert_kind_of Array, body["data"]
       end
 
       test "index returns 404 for nonexistent version" do
@@ -78,10 +82,14 @@ module Api
         assert data.key?("content_md"), "Response should include content_md"
       end
 
-      test "show without auth returns 401" do
+      test "show without auth returns 200" do
         get "/api/v1/libraries/vercel/nextjs/versions/16.1.6/pages/pg_install_001"
 
-        assert_response :unauthorized
+        assert_response :ok
+
+        body = response.parsed_body
+        assert body.key?("data"), "Response should include 'data' key"
+        assert_equal "pg_install_001", body["data"]["page_uid"]
       end
 
       test "show returns 404 for nonexistent page" do
