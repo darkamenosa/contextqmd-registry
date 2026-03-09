@@ -11,7 +11,7 @@ class LibrariesController < InertiaController
     else
       Library.all
     end
-    libraries = libraries.includes(:source_policy).order(:namespace, :name)
+    libraries = libraries.includes(:source_policy, :versions).order(:namespace, :name)
 
     render inertia: "libraries/index", props: {
       libraries: libraries.map { |lib| library_props(lib) },
@@ -69,7 +69,8 @@ class LibrariesController < InertiaController
         aliases: library.aliases,
         homepage_url: library.homepage_url,
         default_version: library.default_version,
-        license_status: library.source_policy&.license_status
+        license_status: library.source_policy&.license_status,
+        version_count: library.versions.size
       }
     end
 

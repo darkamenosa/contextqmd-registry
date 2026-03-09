@@ -53,7 +53,7 @@ export const resolvePage = (name: string) => {
 }
 
 export const titleTemplate = (title: string) =>
-  title ? `${title} - ContextqmdRegistry` : "ContextqmdRegistry"
+  title ? `${title} - ContextQMD` : "ContextQMD"
 
 export const inertiaDefaults = {
   form: {

@@ -1,6 +1,6 @@
 import { type FormEvent, useState } from "react"
 import { Link, router } from "@inertiajs/react"
-import { ExternalLink, Library, Plus, Search } from "lucide-react"
+import { BookOpen, ExternalLink, Library, Plus, Search } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -16,6 +16,7 @@ interface LibraryItem {
   homepageUrl: string | null
   defaultVersion: string | null
   licenseStatus: string | null
+  versionCount: number
 }
 
 interface Props {
@@ -112,53 +113,66 @@ export default function LibrariesIndex({ libraries, query }: Props) {
             )}
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {libraries.map((lib) => (
-              <Link
-                key={`${lib.namespace}/${lib.name}`}
-                href={`/libraries/${lib.namespace}/${lib.name}`}
-                className="block"
-              >
-                <Card className="h-full transition-colors hover:border-foreground/20">
-                  <CardHeader>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <CardTitle className="truncate">
-                          {lib.displayName}
-                        </CardTitle>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {lib.namespace}/{lib.name}
-                        </p>
+          <>
+            <div className="mb-4 text-sm text-muted-foreground">
+              {query
+                ? `${libraries.length} result${libraries.length !== 1 ? "s" : ""} for "${query}"`
+                : `${libraries.length} libraries`}
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {libraries.map((lib) => (
+                <Link
+                  key={`${lib.namespace}/${lib.name}`}
+                  href={`/libraries/${lib.namespace}/${lib.name}`}
+                  className="block"
+                >
+                  <Card className="h-full transition-colors hover:border-foreground/20">
+                    <CardHeader>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <CardTitle className="truncate">
+                            {lib.displayName}
+                          </CardTitle>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {lib.namespace}/{lib.name}
+                          </p>
+                        </div>
+                        <LicenseBadge status={lib.licenseStatus} />
                       </div>
-                      <LicenseBadge status={lib.licenseStatus} />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    {lib.aliases.length > 0 && (
+                    </CardHeader>
+                    <CardContent>
                       <div className="flex flex-wrap gap-1">
+                        {lib.defaultVersion && (
+                          <Badge variant="secondary">
+                            v{lib.defaultVersion}
+                          </Badge>
+                        )}
                         {lib.aliases.map((alias) => (
-                          <Badge key={alias} variant="outline">
+                          <Badge key={alias} variant="outline" className="text-xs">
                             {alias}
                           </Badge>
                         ))}
                       </div>
-                    )}
-                    {lib.defaultVersion && (
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        Default: v{lib.defaultVersion}
-                      </p>
-                    )}
-                    {lib.homepageUrl && (
-                      <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
-                        <ExternalLink className="size-3" />
-                        <span className="truncate">{lib.homepageUrl}</span>
+                      <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
+                        {lib.versionCount > 0 && (
+                          <span className="flex items-center gap-1">
+                            <BookOpen className="size-3" />
+                            {lib.versionCount} version{lib.versionCount !== 1 ? "s" : ""}
+                          </span>
+                        )}
+                        {lib.homepageUrl && (
+                          <span className="flex items-center gap-1">
+                            <ExternalLink className="size-3" />
+                            Homepage
+                          </span>
+                        )}
                       </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+          </>
         )}
       </section>
     </PublicLayout>

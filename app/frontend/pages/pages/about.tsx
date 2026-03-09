@@ -37,7 +37,7 @@ export default function About() {
           </h1>
           <div className="mt-8 space-y-6 text-lg/relaxed text-muted-foreground">
             <p>
-              ContextqmdRegistry was founded with a simple belief: teams should
+              ContextQMD was founded with a simple belief: teams should
               spend their time building great products, not wrestling with
               tools. We&apos;re building the platform we always wished existed.
             </p>

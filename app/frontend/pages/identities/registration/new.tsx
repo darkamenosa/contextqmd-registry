@@ -59,7 +59,7 @@ export default function RegisterPage() {
           <div className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <Command className="size-4" />
           </div>
-          ContextqmdRegistry
+          ContextQMD
         </Link>
 
         <div className="flex flex-col gap-6">
@@ -67,7 +67,7 @@ export default function RegisterPage() {
             <CardHeader className="text-center">
               <CardTitle className="text-xl">Create an account</CardTitle>
               <CardDescription>
-                Get started with ContextqmdRegistry
+                Get started with ContextQMD
               </CardDescription>
             </CardHeader>
             <CardContent>

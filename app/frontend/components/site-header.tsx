@@ -37,7 +37,7 @@ export function SiteHeader() {
             <Command className="size-4" />
           </div>
           <span className="font-semibold tracking-tight">
-            ContextqmdRegistry
+            ContextQMD
           </span>
         </Link>
 
@@ -113,7 +113,7 @@ export function SiteHeader() {
                     <Command className="size-3.5" />
                   </div>
                   <span className="text-sm font-semibold tracking-tight">
-                    ContextqmdRegistry
+                    ContextQMD
                   </span>
                 </Link>
               </div>
