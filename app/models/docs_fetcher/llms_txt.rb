@@ -205,7 +205,8 @@ module DocsFetcher
       def extract_metadata(uri, content)
         host = uri.host.gsub(/^www\./, "")
         namespace = host.split(".").first.downcase
-        title = extract_first_h1(content) || namespace.capitalize
+        h1 = extract_first_h1(content)
+        title = h1 && library_title?(h1) ? h1 : namespace.tr("-", " ").gsub(/\b\w/, &:upcase)
 
         name_suffix = uri.path.include?("llms-full") ? "llms-full-txt" : "llms-txt"
         name = "#{namespace}-#{name_suffix}"
@@ -223,10 +224,23 @@ module DocsFetcher
       def extract_first_h1(content)
         content.lines.first(10).each do |line|
           if (match = line.match(/\A#\s+(.+)/))
-            return match[1].strip
+            title = match[1]
+              .gsub(/<[^>]+>/, "")  # strip inline HTML tags
+              .strip
+            return title if title.present?
           end
         end
         nil
+      end
+
+      # Returns true if the title looks like a library/project name
+      # (rather than a generic section heading like "Asset versioning")
+      def library_title?(title)
+        return false if title.blank?
+        # Generic section titles are usually 1-3 common words
+        generic = /\A(getting started|installation|overview|configuration|introduction|
+          quick start|asset versioning|setup|usage|guide|tutorial|documentation)\z/ix
+        !title.match?(generic)
       end
 
       # --- Section splitting (for full-content files) ---
