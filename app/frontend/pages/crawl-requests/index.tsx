@@ -182,12 +182,12 @@ export default function CrawlRequestsIndex({ crawlRequests, counts }: Props) {
   const completedCount = counts.completed + counts.failed
 
   return (
-    <PublicLayout title="Task List">
+    <PublicLayout title="Add Documentation">
       <section className="mx-auto max-w-7xl px-4 pt-16 pb-12 sm:px-6 lg:px-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-              Task List
+              Documentation Queue
             </h1>
             <p className="mt-4 text-lg text-muted-foreground">
               Documentation crawling and indexing tasks.

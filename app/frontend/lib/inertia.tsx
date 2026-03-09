@@ -53,7 +53,9 @@ export const resolvePage = (name: string) => {
 }
 
 export const titleTemplate = (title: string) =>
-  title ? `${title} - ContextQMD` : "ContextQMD"
+  title && title !== "ContextQMD" && !title.includes("ContextQMD")
+    ? `${title} — ContextQMD`
+    : title || "ContextQMD"
 
 export const inertiaDefaults = {
   form: {

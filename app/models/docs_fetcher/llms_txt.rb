@@ -3,25 +3,57 @@
 require "net/http"
 
 module DocsFetcher
-  # Fetches documentation from an llms.txt or llms-full.txt file and splits
-  # the content into individual pages by H2 (or H1) sections.
+  # Fetches documentation from an llms.txt or llms-full.txt file.
   #
-  # The llms.txt format is a markdown file optimized for LLM consumption.
-  # A typical file begins with `# Title`, followed by an overview paragraph,
-  # then dozens of `## Section` blocks each covering a specific topic.
+  # Handles two formats:
+  # 1. **Full content** (llms-full.txt or inline llms.txt): A single markdown file
+  #    with all documentation content under headings. Split into pages by H2/H1.
+  # 2. **Index/TOC** (llms.txt with links): A navigation file listing markdown links
+  #    like `[Title](/guide/page.md)`. Each linked page is fetched individually.
+  #
+  # Strategy:
+  # - If URL is llms.txt, first try llms-full.txt (has all content inline)
+  # - If that fails or URL is explicit, fetch the given URL
+  # - Detect whether fetched content is an index (many links, little prose)
+  # - If index: follow links to fetch each page's content
+  # - If full content: split by headings into pages
   class LlmsTxt
-    MAX_SIZE = 50_000_000 # 50 MB — llms-full.txt files can be several MB
+    MAX_SIZE = 50_000_000       # 50 MB per fetched file
+    MAX_TOTAL_BYTES = 20_000_000 # 20 MB total content budget
+    MAX_PAGES = 500
+    MAX_LINK_FETCHES = 200      # max linked pages to fetch from an index
 
     def fetch(url)
       uri = URI.parse(url.strip)
-      content = http_get(uri)
+      content = nil
+      used_full = false
+
+      # Try llms-full.txt first if URL points to llms.txt
+      if uri.path.end_with?("/llms.txt")
+        full_uri = uri.dup
+        full_uri.path = uri.path.sub(/\/llms\.txt\z/, "/llms-full.txt")
+        full_content = http_get(full_uri)
+        if full_content && full_content.strip.length > 100
+          content = full_content
+          uri = full_uri
+          used_full = true
+        end
+      end
+
+      content ||= http_get(uri)
       raise "Failed to fetch #{url}" unless content
 
       metadata = extract_metadata(uri, content)
-      sections = split_into_sections(content, url)
 
-      if sections.empty?
-        sections = [ fallback_single_page(content, url, metadata[:display_name]) ]
+      # Decide strategy: index with links or inline content?
+      if !used_full && index_style?(content)
+        pages = fetch_linked_pages(uri, content)
+      else
+        pages = split_into_sections(content, url)
+      end
+
+      if pages.empty?
+        pages = [ fallback_single_page(content, url, metadata[:display_name]) ]
       end
 
       Result.new(
@@ -31,7 +63,7 @@ module DocsFetcher
         homepage_url: url.sub(%r{/llms(?:-full)?\.txt$}, ""),
         aliases: metadata[:aliases],
         version: nil,
-        pages: sections
+        pages: pages
       )
     end
 
@@ -61,6 +93,113 @@ module DocsFetcher
         body.bytesize > MAX_SIZE ? body.byteslice(0, MAX_SIZE) : body
       end
 
+      # --- Index detection ---
+
+      # An index-style llms.txt has many markdown links and little prose content.
+      # Heuristic: if there are >= 5 links to .md/.txt files and the ratio of
+      # link-lines to total non-empty lines is > 40%, treat as index.
+      def index_style?(content)
+        links = extract_doc_links(content)
+        return false if links.size < 5
+
+        non_empty = content.lines.count { |l| l.strip.length > 0 }
+        return false if non_empty == 0
+
+        link_lines = content.lines.count { |l| l.match?(/\[.+?\]\(.+?\)/) }
+        link_lines.to_f / non_empty > 0.4
+      end
+
+      # Extract markdown links that point to documentation files.
+      # Returns array of { title:, path: } hashes.
+      def extract_doc_links(content)
+        links = []
+        content.scan(/\[([^\]]+)\]\(([^)]+)\)/).each do |title, path|
+          # Only follow links to markdown/text files or relative paths
+          next unless path.match?(/\.(?:md|mdx|txt)\z/i) || path.start_with?("/")
+          next if path.start_with?("http") && !path.match?(/\.(?:md|mdx|txt)\z/i)
+          links << { title: title.strip, path: path.strip }
+        end
+        links.uniq { |l| l[:path] }
+      end
+
+      # --- Link following ---
+
+      def fetch_linked_pages(base_uri, index_content)
+        links = extract_doc_links(index_content)
+        pages = []
+        total_bytes = 0
+        slug_counts = Hash.new(0)
+
+        links.first(MAX_LINK_FETCHES).each do |link|
+          break if total_bytes >= MAX_TOTAL_BYTES
+          break if pages.size >= MAX_PAGES
+
+          resolved_uri = resolve_link(base_uri, link[:path])
+          next unless resolved_uri
+
+          raw = http_get(resolved_uri)
+          next unless raw
+          next if raw.strip.empty?
+
+          title = extract_title_from_content(raw) || link[:title]
+          content = strip_frontmatter(raw)
+          next if content.strip.empty?
+
+          total_bytes += content.bytesize
+          break if total_bytes > MAX_TOTAL_BYTES && pages.any?
+
+          headings = content.scan(/^\#{2,4}\s+(.+)$/).flatten.map(&:strip)
+          slug = make_slug(link[:title], slug_counts)
+
+          pages << {
+            page_uid: slug,
+            path: link[:path].delete_prefix("/"),
+            title: title,
+            url: resolved_uri.to_s,
+            content: content,
+            headings: headings
+          }
+        end
+
+        pages
+      end
+
+      def resolve_link(base_uri, path)
+        if path.start_with?("http")
+          URI.parse(path)
+        else
+          # Resolve relative path against the base URL's origin
+          URI.join("#{base_uri.scheme}://#{base_uri.host}:#{base_uri.port}", path)
+        end
+      rescue URI::InvalidURIError
+        nil
+      end
+
+      def extract_title_from_content(content)
+        # Try frontmatter title first
+        if content.start_with?("---")
+          fm = content.split("---", 3)[1]
+          if fm && (match = fm.match(/^title:\s*["']?(.+?)["']?\s*$/))
+            return match[1].strip
+          end
+        end
+        # Then try ATX heading
+        strip_frontmatter(content).lines.first(20).each do |line|
+          if (match = line.match(/\A#\s+(.+)/))
+            return match[1].strip
+          end
+        end
+        nil
+      end
+
+      # Remove YAML frontmatter (--- delimited block at start of file)
+      def strip_frontmatter(content)
+        return content unless content.start_with?("---")
+
+        parts = content.split("---", 3)
+        parts.length >= 3 ? parts[2].lstrip : content
+      end
+
       # --- Metadata extraction ---
 
       def extract_metadata(uri, content)
@@ -76,7 +215,7 @@ module DocsFetcher
         {
           namespace: namespace,
           name: name,
-          display_name: "#{title} (llms.txt)",
+          display_name: title,
           aliases: aliases
         }
       end
@@ -90,7 +229,7 @@ module DocsFetcher
         nil
       end
 
-      # --- Section splitting ---
+      # --- Section splitting (for full-content files) ---
 
       def split_into_sections(content, base_url)
         heading_level = detect_split_level(content)
@@ -121,8 +260,6 @@ module DocsFetcher
         pages
       end
 
-      # Determine whether to split on H2 or H1. Prefer H2 if there are at
-      # least 2 of them; otherwise fall back to H1.
       def detect_split_level(content)
         h2_count = content.scan(/^##(?!#)\s+.+/).size
         return 2 if h2_count >= 2
@@ -133,9 +270,6 @@ module DocsFetcher
         nil
       end
 
-      # Split content into sections based on the given heading level.
-      # Returns an array of { title:, content: } hashes.
-      # Text before the first heading becomes an "Overview" section.
       def split_on_heading(content, level)
         prefix = "#" * level
         sections = []
@@ -144,7 +278,6 @@ module DocsFetcher
 
         content.each_line do |line|
           if line.match?(/\A#{prefix}\s+/) && !line.match?(/\A#{prefix}#/)
-            # Flush the previous section
             if current_title || current_lines.any?
               sections << {
                 title: current_title || "Overview",
@@ -159,7 +292,6 @@ module DocsFetcher
           end
         end
 
-        # Flush the last section
         if current_title || current_lines.any?
           sections << {
             title: current_title || "Overview",
@@ -194,8 +326,6 @@ module DocsFetcher
 
       # --- Heading extraction ---
 
-      # Extract sub-headings that are deeper than the split level.
-      # For example, if we split on H2, extract H3 and H4 headings.
       def extract_sub_headings(content, split_level)
         min_hashes = split_level + 1
         content.scan(/^\#{#{min_hashes},6}\s+(.+)$/).flatten.map(&:strip)

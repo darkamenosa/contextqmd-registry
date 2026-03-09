@@ -240,26 +240,46 @@ module DocsFetcher
 
       # --- Content extraction ---
 
-      def extract_title(content, filename)
-        # Look only in the first 30 lines to avoid matching code blocks
-        header_region = content.lines.first(30).join
+      # Headings that start with these patterns are likely instructions,
+      # not page titles. Skip them and try the next heading.
+      INSTRUCTION_PREFIXES = /\A(use |you should|if you|install |run |make sure|please |note:|ensure |do not )/i
 
-        # Try ATX-style: # Title
-        if (match = header_region.match(/^#\s+(.+)$/))
-          clean_title(match[1], filename)
-        # Try Setext-style: Title\n====
-        elsif (match = header_region.match(/^([^\n#*`<>]{3,})\n={3,}\s*$/))
-          clean_title(match[1], filename)
-        else
-          humanize_filename(filename)
+      def extract_title(content, filename)
+        # Try frontmatter title first
+        if content.start_with?("---")
+          fm = content.split("---", 3)[1]
+          if fm && (match = fm.match(/^title:\s*["']?(.+?)["']?\s*$/))
+            return clean_title(match[1], filename)
+          end
         end
+
+        # Look only in the first 30 lines to avoid matching code blocks
+        header_lines = content.lines.first(30)
+
+        # Try ATX-style headings, skipping instruction-like ones
+        header_lines.each do |line|
+          next unless (match = line.match(/^#\s+(.+)$/))
+          title = clean_title(match[1], filename)
+          next if title.match?(INSTRUCTION_PREFIXES)
+          return title
+        end
+
+        # Try Setext-style: Title\n====
+        header_region = header_lines.join
+        if (match = header_region.match(/^([^\n#*`<>]{3,})\n={3,}\s*$/))
+          title = clean_title(match[1], filename)
+          return title unless title.match?(INSTRUCTION_PREFIXES)
+        end
+
+        humanize_filename(filename)
       end
 
       def clean_title(raw, filename)
-        # Strip HTML tags, badge images, markdown links
+        # Strip HTML tags, badge images, markdown links, backslashes
         clean = raw.gsub(/<[^>]+>/, "")
                     .gsub(/\[!\[.*?\]\(.*?\)\]/, "")
                     .gsub(/\[([^\]]+)\]\([^)]+\)/, '\1')
+                    .gsub("\\", "")
                     .strip
         clean.empty? ? humanize_filename(filename) : clean
       end
