@@ -1,24 +1,75 @@
-import { Link } from "@inertiajs/react"
+import { type FormEvent, useState } from "react"
+import { Link, router } from "@inertiajs/react"
 import {
   ArrowRight,
   BookOpen,
+  Clock,
   Download,
   Globe,
+  Plus,
   Search,
   Server,
+  Star,
   Terminal,
 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import PublicLayout from "@/layouts/public-layout"
+
+interface LibraryItem {
+  namespace: string
+  name: string
+  displayName: string
+  defaultVersion: string | null
+  versionCount: number
+  pageCount: number
+  licenseStatus: string | null
+  updatedAt: string
+}
 
 interface Props {
   libraryCount: number
   pageCount: number
   versionCount: number
+  libraries: LibraryItem[]
+  crawlPending: number
 }
+
+function formatTimeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const hours = Math.floor(diff / 3600000)
+  if (hours < 1) return "just now"
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
+
+function formatCount(n: number): string {
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`
+  return String(n)
+}
+
+const mcpConfig = `{
+  "mcpServers": {
+    "contextqmd": {
+      "command": "npx",
+      "args": ["-y", "contextqmd-mcp"]
+    }
+  }
+}`
 
 const features = [
   {
@@ -59,16 +110,69 @@ const features = [
   },
 ]
 
-const mcpConfig = `{
-  "mcpServers": {
-    "contextqmd": {
-      "command": "npx",
-      "args": ["-y", "contextqmd-mcp"]
+function LibraryTable({ libraries }: { libraries: LibraryItem[] }) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>SOURCE</TableHead>
+          <TableHead className="text-right">PAGES</TableHead>
+          <TableHead className="text-right">VERSIONS</TableHead>
+          <TableHead className="text-right">UPDATE</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {libraries.map((lib) => (
+          <TableRow key={`${lib.namespace}/${lib.name}`}>
+            <TableCell>
+              <Link
+                href={`/libraries/${lib.namespace}/${lib.name}`}
+                className="group flex items-center gap-3"
+              >
+                <div>
+                  <span className="font-medium text-primary group-hover:underline">
+                    {lib.displayName}
+                  </span>
+                  <span className="ml-3 text-sm text-muted-foreground">
+                    /{lib.namespace}/{lib.name}
+                  </span>
+                </div>
+              </Link>
+            </TableCell>
+            <TableCell className="text-right font-mono text-sm">
+              {formatCount(lib.pageCount)}
+            </TableCell>
+            <TableCell className="text-right font-mono text-sm">
+              {lib.versionCount}
+            </TableCell>
+            <TableCell className="text-right text-sm text-muted-foreground">
+              {formatTimeAgo(lib.updatedAt)}
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  )
+}
+
+export default function Home({
+  libraryCount,
+  libraries,
+  crawlPending,
+}: Props) {
+  const [search, setSearch] = useState("")
+
+  const handleSearch = (e: FormEvent) => {
+    e.preventDefault()
+    if (search.trim()) {
+      router.get("/libraries", { query: search.trim() })
     }
   }
-}`
 
-export default function Home({ libraryCount, pageCount, versionCount }: Props) {
+  const sortedByRecent = [...libraries].sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  )
+
   return (
     <PublicLayout
       title="ContextQMD — Local-First Docs for AI"
@@ -80,128 +184,148 @@ export default function Home({ libraryCount, pageCount, versionCount }: Props) {
       {/* Hero */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_30%_20%,_var(--muted)_0%,_transparent_50%)]" />
-        <div className="mx-auto max-w-7xl px-4 pt-20 pb-24 sm:px-6 sm:pt-28 sm:pb-32 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 pt-16 pb-8 sm:px-6 sm:pt-20 sm:pb-12 lg:px-8">
           <div className="mx-auto max-w-3xl text-center">
-            <Badge variant="outline" className="mb-4">
-              Open Source Documentation Registry
-            </Badge>
-            <h1 className="text-5xl font-bold tracking-tight sm:text-7xl">
-              Local-first docs{" "}
+            <h1 className="text-4xl font-bold tracking-tight sm:text-6xl">
+              Up-to-date docs{" "}
               <span className="text-muted-foreground">for AI</span>
             </h1>
-            <p className="mx-auto mt-6 max-w-xl text-lg/relaxed text-muted-foreground">
-              Install documentation packages locally. Search them with QMD.
-              Version-aware, offline-capable, MCP-native.
+            <p className="mx-auto mt-4 max-w-xl text-lg/relaxed text-muted-foreground">
+              Get the latest documentation into Claude, Cursor, or any
+              MCP-compatible editor. Local-first, version-aware.
             </p>
-            <div className="mt-10 flex items-center justify-center gap-4">
-              <Button
-                size="lg"
-                nativeButton={false}
-                render={<Link href="/libraries" />}
-              >
-                Browse Libraries
-                <ArrowRight className="size-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="lg"
-                nativeButton={false}
-                render={<Link href="/libraries/new" />}
-              >
-                Submit Library
-              </Button>
-            </div>
+
+            {/* Search bar */}
+            <form
+              onSubmit={handleSearch}
+              className="mx-auto mt-8 flex max-w-lg gap-2"
+            >
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Search a library (e.g. Next, React)"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <Button type="submit">Search</Button>
+            </form>
           </div>
         </div>
       </section>
 
-      {/* Stats */}
-      <section className="border-y bg-muted/30">
-        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-3 gap-8">
-            <div className="text-center">
-              <div className="text-3xl font-bold tracking-tight">
-                {libraryCount}
-              </div>
-              <div className="mt-1 text-sm text-muted-foreground">
-                Libraries
-              </div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold tracking-tight">
-                {versionCount}
-              </div>
-              <div className="mt-1 text-sm text-muted-foreground">
-                Versions
-              </div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold tracking-tight">
-                {pageCount}
-              </div>
-              <div className="mt-1 text-sm text-muted-foreground">
-                Doc Pages
-              </div>
-            </div>
+      {/* Library Table — context7 style */}
+      <section className="mx-auto max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
+        <Tabs defaultValue="popular">
+          <div className="flex items-center justify-between">
+            <TabsList>
+              <TabsTrigger value="popular" className="gap-1.5">
+                <Star className="size-3.5" />
+                Popular
+              </TabsTrigger>
+              <TabsTrigger value="recent" className="gap-1.5">
+                <Clock className="size-3.5" />
+                Recent
+              </TabsTrigger>
+            </TabsList>
+            <Button
+              variant="outline"
+              size="sm"
+              nativeButton={false}
+              render={<Link href="/crawl/new" />}
+            >
+              <Plus className="size-4" />
+              Add Docs
+            </Button>
           </div>
+
+          <TabsContent value="popular" className="mt-4">
+            <div className="rounded-xl border">
+              <LibraryTable libraries={libraries} />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="recent" className="mt-4">
+            <div className="rounded-xl border">
+              <LibraryTable libraries={sortedByRecent} />
+            </div>
+          </TabsContent>
+        </Tabs>
+
+        <div className="mt-3 flex items-center justify-between text-sm text-muted-foreground">
+          <span>{libraryCount.toLocaleString()} LIBRARIES</span>
+          {crawlPending > 0 && (
+            <Link href="/crawl" className="flex items-center gap-1 hover:text-foreground">
+              SEE TASKS IN PROGRESS
+              <ArrowRight className="size-3" />
+            </Link>
+          )}
         </div>
       </section>
 
       {/* MCP Quickstart */}
-      <section className="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
-        <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
-          <div>
-            <Badge variant="secondary" className="mb-3">
-              Quick Start
-            </Badge>
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              Add to your editor in seconds
-            </h2>
-            <p className="mt-4 text-muted-foreground">
-              Add ContextQMD to your MCP config. Works with Claude Desktop,
-              Cursor, Windsurf, and any MCP-compatible tool.
-            </p>
-            <div className="mt-6 space-y-3 text-sm">
-              <div className="flex items-start gap-3">
-                <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-                  1
+      <section className="border-t">
+        <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
+          <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
+            <div>
+              <Badge variant="secondary" className="mb-3">
+                Quick Start
+              </Badge>
+              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+                Add to your editor in seconds
+              </h2>
+              <p className="mt-4 text-muted-foreground">
+                Add ContextQMD to your MCP config. Works with Claude Desktop,
+                Cursor, Windsurf, and any MCP-compatible tool.
+              </p>
+              <div className="mt-6 space-y-3 text-sm">
+                <div className="flex items-start gap-3">
+                  <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                    1
+                  </div>
+                  <span>
+                    Add the MCP server config to your editor settings
+                  </span>
                 </div>
-                <span>
-                  Add the MCP server config to your editor settings
-                </span>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-                  2
+                <div className="flex items-start gap-3">
+                  <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                    2
+                  </div>
+                  <span>
+                    Use{" "}
+                    <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                      install_docs
+                    </code>{" "}
+                    to download a library&apos;s documentation
+                  </span>
                 </div>
-                <span>
-                  Use <code className="rounded bg-muted px-1.5 py-0.5 text-xs">install_docs</code> to download a
-                  library&apos;s documentation
-                </span>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-                  3
+                <div className="flex items-start gap-3">
+                  <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                    3
+                  </div>
+                  <span>
+                    Use{" "}
+                    <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                      search_docs
+                    </code>{" "}
+                    to find relevant docs locally
+                  </span>
                 </div>
-                <span>
-                  Use <code className="rounded bg-muted px-1.5 py-0.5 text-xs">search_docs</code> to find relevant
-                  docs locally
-                </span>
               </div>
             </div>
-          </div>
-          <div className="overflow-hidden rounded-xl border bg-zinc-950 text-zinc-100">
-            <div className="flex items-center gap-2 border-b border-zinc-800 px-4 py-3">
-              <div className="size-3 rounded-full bg-zinc-700" />
-              <div className="size-3 rounded-full bg-zinc-700" />
-              <div className="size-3 rounded-full bg-zinc-700" />
-              <span className="ml-2 text-xs text-zinc-500">
-                mcp.json
-              </span>
+            <div className="overflow-hidden rounded-xl border bg-zinc-950 text-zinc-100">
+              <div className="flex items-center gap-2 border-b border-zinc-800 px-4 py-3">
+                <div className="size-3 rounded-full bg-zinc-700" />
+                <div className="size-3 rounded-full bg-zinc-700" />
+                <div className="size-3 rounded-full bg-zinc-700" />
+                <span className="ml-2 text-xs text-zinc-500">mcp.json</span>
+              </div>
+              <pre className="overflow-x-auto p-4 text-sm leading-relaxed">
+                <code>{mcpConfig}</code>
+              </pre>
             </div>
-            <pre className="overflow-x-auto p-4 text-sm leading-relaxed">
-              <code>{mcpConfig}</code>
-            </pre>
           </div>
         </div>
       </section>
@@ -217,7 +341,6 @@ export default function Home({ libraryCount, pageCount, versionCount }: Props) {
               ContextQMD is a documentation package manager for AI coding tools.
             </p>
           </div>
-
           <div className="mt-16 grid gap-8 md:grid-cols-2 lg:grid-cols-3">
             {features.map((feature) => (
               <Card
