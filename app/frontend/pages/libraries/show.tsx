@@ -1,5 +1,7 @@
 import { type FormEvent, Fragment, useState } from "react"
 import { Link, router } from "@inertiajs/react"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import type { PaginationData } from "@/types"
 import {
   ArrowLeft,
@@ -376,11 +378,25 @@ install_docs({ library: "${slug}" })`
             )}
 
             {pages.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                {initialSearch
-                  ? "No pages match your search."
-                  : "No pages available for this version."}
-              </p>
+              <div className="rounded-xl border border-dashed p-8 text-center">
+                <FileText className="mx-auto size-8 text-muted-foreground/50" />
+                <p className="mt-3 text-sm text-muted-foreground">
+                  {initialSearch
+                    ? "No pages match your search."
+                    : "Documentation hasn't been indexed yet. Check back soon or submit a crawl request."}
+                </p>
+                {!initialSearch && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    nativeButton={false}
+                    render={<Link href="/crawl/new" />}
+                    className="mt-4"
+                  >
+                    Submit Crawl Request
+                  </Button>
+                )}
+              </div>
             ) : (
               <>
                 <div className="rounded-xl border">
@@ -455,9 +471,18 @@ install_docs({ library: "${slug}" })`
                                 >
                                   <div className="relative">
                                     <CopyButton text={page.content} />
-                                    <pre className="max-h-96 overflow-auto whitespace-pre-wrap p-4 text-sm leading-relaxed">
-                                      {page.content}
-                                    </pre>
+                                    <div className="max-h-[500px] overflow-y-auto border-t border-b border-border/50 p-4 pr-12 shadow-inner">
+                                      <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:scroll-mt-4 prose-pre:bg-zinc-950 prose-pre:text-zinc-100 prose-code:before:content-none prose-code:after:content-none">
+                                        <ReactMarkdown
+                                          remarkPlugins={[remarkGfm]}
+                                          components={{
+                                            img: () => null,
+                                          }}
+                                        >
+                                          {page.content}
+                                        </ReactMarkdown>
+                                      </div>
+                                    </div>
                                   </div>
                                 </TableCell>
                               </TableRow>
