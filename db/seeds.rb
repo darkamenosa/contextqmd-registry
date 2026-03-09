@@ -139,23 +139,188 @@ nextjs_pages = [
   { page_uid: "pg_nextjs_installation", path: "app/getting-started/installation.md",
     title: "Installation", url: "https://nextjs.org/docs/app/getting-started/installation",
     headings: ["Installation", "Automatic installation", "Manual installation"],
-    bytes: 9123, checksum: "sha256:install_page_hash" },
+    bytes: 9123, checksum: "sha256:install_page_hash",
+    description: <<~MD
+      # Installation
+
+      ## Automatic installation
+
+      We recommend starting a new Next.js app using `create-next-app`, which sets up everything automatically for you.
+
+      ```bash
+      npx create-next-app@latest
+      ```
+
+      On installation, you'll see prompts for project name, TypeScript, ESLint, Tailwind CSS, `src/` directory, App Router, and import alias.
+
+      ## Manual installation
+
+      To manually create a new Next.js app, install the required packages:
+
+      ```bash
+      npm install next@latest react@latest react-dom@latest
+      ```
+
+      Add the following scripts to your `package.json`:
+
+      ```json
+      {
+        "scripts": {
+          "dev": "next dev",
+          "build": "next build",
+          "start": "next start",
+          "lint": "next lint"
+        }
+      }
+      ```
+    MD
+  },
   { page_uid: "pg_nextjs_routing", path: "app/building-your-application/routing.md",
     title: "Routing", url: "https://nextjs.org/docs/app/building-your-application/routing",
     headings: ["Routing", "Defining routes", "Pages", "Layouts"],
-    bytes: 15420, checksum: "sha256:routing_page_hash" },
+    bytes: 15420, checksum: "sha256:routing_page_hash",
+    description: <<~MD
+      # Routing
+
+      Next.js uses a file-system based router where folders are used to define routes.
+
+      ## Defining routes
+
+      Each folder in the `app` directory represents a route segment. Nested folders create nested routes. A `page.js` file makes a route segment publicly accessible.
+
+      ```
+      app/
+        page.js          -> /
+        about/
+          page.js        -> /about
+        blog/
+          [slug]/
+            page.js      -> /blog/:slug
+      ```
+
+      ## Pages
+
+      A page is UI that is unique to a route. You define a page by exporting a component from a `page.js` file.
+
+      ```tsx
+      export default function Page() {
+        return <h1>Hello, Next.js!</h1>
+      }
+      ```
+
+      ## Layouts
+
+      A layout is UI that is shared between multiple routes. Layouts preserve state, remain interactive, and do not re-render on navigation.
+
+      ```tsx
+      export default function RootLayout({ children }) {
+        return (
+          <html lang="en">
+            <body>{children}</body>
+          </html>
+        )
+      }
+      ```
+    MD
+  },
   { page_uid: "pg_nextjs_data_fetching", path: "app/building-your-application/data-fetching.md",
     title: "Data Fetching", url: "https://nextjs.org/docs/app/building-your-application/data-fetching",
     headings: ["Data Fetching", "fetch API", "Server Components"],
-    bytes: 12800, checksum: "sha256:data_fetching_page_hash" },
+    bytes: 12800, checksum: "sha256:data_fetching_page_hash",
+    description: <<~MD
+      # Data Fetching
+
+      Next.js extends the native `fetch` Web API to allow you to configure the caching and revalidating behavior for each fetch request on the server.
+
+      ## fetch API
+
+      You can use `fetch` with `async`/`await` in Server Components, in Route Handlers, and in Server Actions.
+
+      ```tsx
+      async function getData() {
+        const res = await fetch('https://api.example.com/...')
+        if (!res.ok) throw new Error('Failed to fetch data')
+        return res.json()
+      }
+
+      export default async function Page() {
+        const data = await getData()
+        return <main>{JSON.stringify(data)}</main>
+      }
+      ```
+
+      ## Server Components
+
+      Server Components allow you to fetch data directly in the component without useEffect or useState. This reduces the amount of JavaScript sent to the client.
+    MD
+  },
   { page_uid: "pg_nextjs_rendering", path: "app/building-your-application/rendering.md",
     title: "Rendering", url: "https://nextjs.org/docs/app/building-your-application/rendering",
     headings: ["Rendering", "Server Components", "Client Components"],
-    bytes: 18200, checksum: "sha256:rendering_page_hash" },
+    bytes: 18200, checksum: "sha256:rendering_page_hash",
+    description: <<~MD
+      # Rendering
+
+      Rendering converts the code you write into user interfaces. React and Next.js allow you to create hybrid web applications where parts of your code can be rendered on the server or the client.
+
+      ## Server Components
+
+      React Server Components allow you to write UI that can be rendered and optionally cached on the server. By default, Next.js uses Server Components.
+
+      Benefits of server rendering:
+      - **Data Fetching**: Fetch data closer to your data source
+      - **Security**: Keep sensitive data on the server
+      - **Performance**: Reduce client-side JavaScript bundle
+      - **SEO**: Server-rendered HTML is crawlable
+
+      ## Client Components
+
+      Client Components allow you to write interactive UI that is prerendered on the server and uses client JavaScript to run in the browser.
+
+      Use the `"use client"` directive at the top of a file to define a Client Component:
+
+      ```tsx
+      'use client'
+
+      import { useState } from 'react'
+
+      export default function Counter() {
+        const [count, setCount] = useState(0)
+        return <button onClick={() => setCount(count + 1)}>Count: {count}</button>
+      }
+      ```
+    MD
+  },
   { page_uid: "pg_nextjs_caching", path: "app/building-your-application/caching.md",
     title: "Caching", url: "https://nextjs.org/docs/app/building-your-application/caching",
     headings: ["Caching", "Request Memoization", "Data Cache", "Full Route Cache"],
-    bytes: 22100, checksum: "sha256:caching_page_hash" }
+    bytes: 22100, checksum: "sha256:caching_page_hash",
+    description: <<~MD
+      # Caching
+
+      Next.js improves your application's performance and reduces costs by caching rendering work and data requests.
+
+      ## Request Memoization
+
+      React extends the `fetch` API to automatically memoize requests with the same URL and options. You can call fetch for the same data in multiple places in a React component tree while only executing it once.
+
+      ## Data Cache
+
+      Next.js has a built-in Data Cache that persists the result of data fetches across incoming server requests and deployments. `fetch` requests that use `force-cache` or `no-store` opt into the Data Cache.
+
+      ```tsx
+      // Cached by default
+      fetch('https://...', { cache: 'force-cache' })
+
+      // Not cached
+      fetch('https://...', { cache: 'no-store' })
+      ```
+
+      ## Full Route Cache
+
+      Next.js automatically renders and caches routes at build time. The Full Route Cache allows you to serve the cached result instead of rendering on every request.
+    MD
+  }
 ]
 
 nextjs_pages.each do |attrs|
@@ -166,6 +331,154 @@ nextjs_pages.each do |attrs|
     p.headings = attrs[:headings]
     p.bytes = attrs[:bytes]
     p.checksum = attrs[:checksum]
+    p.description = attrs[:description]
+  end
+end
+
+# --- Sample Pages (Rails stable) ---
+rails_pages = [
+  { page_uid: "pg_rails_getting_started", path: "getting-started.md",
+    title: "Getting Started with Rails", url: "https://guides.rubyonrails.org/getting_started.html",
+    headings: ["Getting Started", "Creating a New Rails Project", "MVC Architecture"],
+    bytes: 25000, checksum: "sha256:rails_getting_started",
+    description: <<~MD
+      # Getting Started with Rails
+
+      This guide covers getting up and running with Ruby on Rails.
+
+      ## Creating a New Rails Project
+
+      ```bash
+      rails new myapp --database=postgresql
+      cd myapp
+      bin/rails server
+      ```
+
+      ## MVC Architecture
+
+      Rails follows the Model-View-Controller architectural pattern:
+      - **Models** handle data and business logic
+      - **Views** handle the display of information
+      - **Controllers** handle the flow between models and views
+    MD
+  },
+  { page_uid: "pg_rails_active_record", path: "active-record-basics.md",
+    title: "Active Record Basics", url: "https://guides.rubyonrails.org/active_record_basics.html",
+    headings: ["Active Record", "CRUD Operations", "Validations", "Migrations"],
+    bytes: 32000, checksum: "sha256:rails_active_record",
+    description: <<~MD
+      # Active Record Basics
+
+      Active Record is the M in MVC - the model. It facilitates creation and use of business objects whose data requires persistent storage to a database.
+
+      ## CRUD Operations
+
+      Active Record provides methods for creating, reading, updating, and deleting data:
+
+      ```ruby
+      # Create
+      user = User.create(name: "David", email: "david@example.com")
+
+      # Read
+      users = User.all
+      user = User.find(1)
+
+      # Update
+      user.update(name: "Dave")
+
+      # Delete
+      user.destroy
+      ```
+
+      ## Validations
+
+      ```ruby
+      class User < ApplicationRecord
+        validates :name, presence: true
+        validates :email, uniqueness: true
+      end
+      ```
+
+      ## Migrations
+
+      ```ruby
+      class CreateUsers < ActiveRecord::Migration[8.0]
+        def change
+          create_table :users do |t|
+            t.string :name
+            t.string :email
+            t.timestamps
+          end
+        end
+      end
+      ```
+    MD
+  }
+]
+
+rails_pages.each do |attrs|
+  Page.find_or_create_by!(version: rails_stable, page_uid: attrs[:page_uid]) do |p|
+    p.path = attrs[:path]
+    p.title = attrs[:title]
+    p.url = attrs[:url]
+    p.headings = attrs[:headings]
+    p.bytes = attrs[:bytes]
+    p.checksum = attrs[:checksum]
+    p.description = attrs[:description]
+  end
+end
+
+# --- Sample Pages (React stable) ---
+react_pages = [
+  { page_uid: "pg_react_hooks", path: "reference/react/hooks.md",
+    title: "React Hooks", url: "https://react.dev/reference/react/hooks",
+    headings: ["Hooks", "useState", "useEffect", "useContext"],
+    bytes: 18000, checksum: "sha256:react_hooks",
+    description: <<~MD
+      # React Hooks
+
+      Hooks let you use state and other React features in function components.
+
+      ## useState
+
+      `useState` declares a state variable that you can update directly.
+
+      ```tsx
+      const [count, setCount] = useState(0)
+      ```
+
+      ## useEffect
+
+      `useEffect` connects a component to an external system.
+
+      ```tsx
+      useEffect(() => {
+        const connection = createConnection(serverUrl, roomId)
+        connection.connect()
+        return () => connection.disconnect()
+      }, [serverUrl, roomId])
+      ```
+
+      ## useContext
+
+      `useContext` reads and subscribes to a context from your component.
+
+      ```tsx
+      const theme = useContext(ThemeContext)
+      ```
+    MD
+  }
+]
+
+react_pages.each do |attrs|
+  Page.find_or_create_by!(version: react_stable, page_uid: attrs[:page_uid]) do |p|
+    p.path = attrs[:path]
+    p.title = attrs[:title]
+    p.url = attrs[:url]
+    p.headings = attrs[:headings]
+    p.bytes = attrs[:bytes]
+    p.checksum = attrs[:checksum]
+    p.description = attrs[:description]
   end
 end
 
