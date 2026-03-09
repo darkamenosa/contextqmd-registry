@@ -6,7 +6,11 @@ class PagesController < InertiaController
   disallow_account_scope
 
   def home
-    render inertia: "pages/home"
+    render inertia: "pages/home", props: {
+      library_count: Library.count,
+      version_count: Version.count,
+      page_count: Page.count
+    }
   end
 
   def about

@@ -21,9 +21,9 @@ interface PublicLayoutProps {
 }
 
 const DEFAULT_SEO = {
-  title: "ContextqmdRegistry",
+  title: "ContextQMD",
   description:
-    "The all-in-one platform that helps your team collaborate, automate, and scale — without the complexity.",
+    "Local-first documentation package system for MCP. Install, search, and retrieve version-aware docs for any library.",
   image: "/og-image.jpg",
 } as const
 
@@ -78,7 +78,7 @@ export default function PublicLayout({
         <meta
           head-key="og:site_name"
           property="og:site_name"
-          content="ContextqmdRegistry"
+          content="ContextQMD"
         />
 
         {/* Twitter Card */}

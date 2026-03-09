@@ -22,10 +22,14 @@ class LibrariesController < InertiaController
   def show
     library = Library.includes(:versions, :source_policy).find_by!(namespace: params[:namespace], name: params[:name])
     versions = library.versions.ordered
+    default_version = versions.find { |v| v.version == library.default_version } || versions.first
+    pages = default_version ? default_version.pages.order(:path) : Page.none
 
     render inertia: "libraries/show", props: {
       library: library_props(library),
-      versions: versions.map { |v| version_props(v) }
+      versions: versions.map { |v| version_props(v) },
+      pages: pages.map { |p| page_props(p) },
+      default_version_label: default_version&.version
     }
   rescue ActiveRecord::RecordNotFound
     redirect_to libraries_path, alert: "Library not found"
@@ -75,6 +79,17 @@ class LibrariesController < InertiaController
         channel: version.channel,
         generated_at: version.generated_at&.iso8601,
         page_count: version.pages.count
+      }
+    end
+
+    def page_props(page)
+      {
+        page_uid: page.page_uid,
+        path: page.path,
+        title: page.title,
+        url: page.url,
+        headings: page.headings,
+        bytes: page.bytes
       }
     end
 

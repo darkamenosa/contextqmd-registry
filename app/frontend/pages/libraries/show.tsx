@@ -1,8 +1,20 @@
+import { useState } from "react"
 import { Link } from "@inertiajs/react"
-import { ArrowLeft, ExternalLink } from "lucide-react"
+import {
+  ArrowLeft,
+  BookOpen,
+  Check,
+  Copy,
+  ExternalLink,
+  FileText,
+  Globe,
+  Terminal,
+} from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Table,
   TableBody,
@@ -30,21 +42,55 @@ interface VersionItem {
   pageCount: number
 }
 
+interface PageItem {
+  pageUid: string
+  path: string
+  title: string
+  url: string
+  headings: string[]
+  bytes: number
+}
+
 interface Props {
   library: LibraryDetail
   versions: VersionItem[]
+  pages: PageItem[]
+  defaultVersionLabel: string | null
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="absolute top-2 right-2 size-8 p-0"
+      onClick={handleCopy}
+    >
+      {copied ? (
+        <Check className="size-3.5 text-green-500" />
+      ) : (
+        <Copy className="size-3.5" />
+      )}
+    </Button>
+  )
 }
 
 function LicenseBadge({ status }: { status: string | null }) {
   if (!status) return null
-
   const variant =
     status === "verified"
       ? "secondary"
       : status === "unclear"
         ? "outline"
         : "destructive"
-
   return <Badge variant={variant}>{status}</Badge>
 }
 
@@ -55,7 +101,6 @@ function ChannelBadge({ channel }: { channel: string }) {
       : channel === "latest"
         ? "default"
         : "outline"
-
   return <Badge variant={variant}>{channel}</Badge>
 }
 
@@ -68,12 +113,32 @@ function formatDate(iso: string | null): string {
   })
 }
 
-export default function LibraryShow({ library, versions }: Props) {
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+export default function LibraryShow({
+  library,
+  versions,
+  pages,
+  defaultVersionLabel,
+}: Props) {
   const slug = `${library.namespace}/${library.name}`
-  const apiEndpoint = `/api/v1/libraries/${slug}`
+
+  const mcpInstall = `// In your MCP-enabled editor, use the install_docs tool:
+resolve_docs_library({ name: "${library.aliases[0] || library.name}" })
+install_docs({ library: "${slug}" })`
+
+  const apiResolve = `curl https://contextqmd.com/api/v1/resolve \\
+  -X POST -H "Content-Type: application/json" \\
+  -d '{"query": "${library.aliases[0] || library.name}"}'`
+
+  const apiPages = `curl https://contextqmd.com/api/v1/libraries/${slug}/versions/${defaultVersionLabel || "latest"}/page-index`
 
   return (
-    <PublicLayout title={library.displayName}>
+    <PublicLayout title={`${library.displayName} — ContextQMD`}>
       <section className="mx-auto max-w-7xl px-4 pt-16 pb-12 sm:px-6 lg:px-8">
         {/* Back link */}
         <Button
@@ -94,84 +159,255 @@ export default function LibraryShow({ library, versions }: Props) {
               {library.displayName}
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">{slug}</p>
-            <div className="mt-3 flex items-center gap-2">
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               <LicenseBadge status={library.licenseStatus} />
               {library.defaultVersion && (
                 <Badge variant="outline">v{library.defaultVersion}</Badge>
               )}
-            </div>
-          </div>
-          {library.homepageUrl && (
-            <Button variant="outline" nativeButton={false} render={<a href={library.homepageUrl} target="_blank" rel="noopener noreferrer" />}>
-              <ExternalLink className="size-4" />
-              Homepage
-            </Button>
-          )}
-        </div>
-
-        {/* Aliases */}
-        {library.aliases.length > 0 && (
-          <div className="mt-8">
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              Aliases
-            </h2>
-            <div className="mt-2 flex flex-wrap gap-2">
               {library.aliases.map((alias) => (
-                <Badge key={alias} variant="outline">
+                <Badge key={alias} variant="outline" className="text-xs">
                   {alias}
                 </Badge>
               ))}
             </div>
           </div>
-        )}
-      </section>
-
-      {/* Versions table */}
-      <section className="mx-auto max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
-        <h2 className="text-lg font-semibold">Versions</h2>
-        {versions.length === 0 ? (
-          <p className="mt-4 text-sm text-muted-foreground">
-            No versions have been published yet.
-          </p>
-        ) : (
-          <div className="mt-4 rounded-xl border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Version</TableHead>
-                  <TableHead>Channel</TableHead>
-                  <TableHead>Generated</TableHead>
-                  <TableHead className="text-right">Pages</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {versions.map((v) => (
-                  <TableRow key={v.version}>
-                    <TableCell className="font-medium">{v.version}</TableCell>
-                    <TableCell>
-                      <ChannelBadge channel={v.channel} />
-                    </TableCell>
-                    <TableCell>{formatDate(v.generatedAt)}</TableCell>
-                    <TableCell className="text-right">{v.pageCount}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+          <div className="flex gap-2">
+            {library.homepageUrl && (
+              <Button
+                variant="outline"
+                size="sm"
+                nativeButton={false}
+                render={
+                  <a
+                    href={library.homepageUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  />
+                }
+              >
+                <ExternalLink className="size-4" />
+                Homepage
+              </Button>
+            )}
           </div>
-        )}
+        </div>
+
+        {/* Quick stats */}
+        <div className="mt-8 grid grid-cols-3 gap-4">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold">{versions.length}</div>
+              <div className="text-sm text-muted-foreground">Versions</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold">{pages.length}</div>
+              <div className="text-sm text-muted-foreground">
+                Pages{defaultVersionLabel ? ` (v${defaultVersionLabel})` : ""}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold">
+                {library.aliases.length}
+              </div>
+              <div className="text-sm text-muted-foreground">Aliases</div>
+            </CardContent>
+          </Card>
+        </div>
       </section>
 
-      {/* API usage */}
+      {/* Tabs */}
       <section className="mx-auto max-w-7xl px-4 pb-24 sm:px-6 lg:px-8">
-        <h2 className="text-lg font-semibold">API Usage</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Access this library programmatically via the ContextQMD API.
-        </p>
-        <div className="mt-4 overflow-x-auto rounded-lg border bg-muted/30 px-4 py-3">
-          <code className="text-sm">
-            GET {apiEndpoint}
-          </code>
-        </div>
+        <Tabs defaultValue="pages">
+          <TabsList>
+            <TabsTrigger value="pages">
+              <FileText className="mr-1.5 size-4" />
+              Pages
+            </TabsTrigger>
+            <TabsTrigger value="versions">
+              <BookOpen className="mr-1.5 size-4" />
+              Versions
+            </TabsTrigger>
+            <TabsTrigger value="usage">
+              <Terminal className="mr-1.5 size-4" />
+              Usage
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Pages tab */}
+          <TabsContent value="pages" className="mt-6">
+            {pages.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No pages available for this version.
+              </p>
+            ) : (
+              <div className="rounded-xl border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Title</TableHead>
+                      <TableHead>Path</TableHead>
+                      <TableHead className="text-right">Size</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pages.map((page) => (
+                      <TableRow key={page.pageUid}>
+                        <TableCell>
+                          <div className="font-medium">{page.title}</div>
+                          {page.headings.length > 1 && (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {page.headings.slice(1, 4).map((h) => (
+                                <span
+                                  key={h}
+                                  className="text-xs text-muted-foreground"
+                                >
+                                  {h}
+                                  {page.headings.indexOf(h) <
+                                  Math.min(page.headings.length - 1, 3)
+                                    ? " · "
+                                    : ""}
+                                </span>
+                              ))}
+                              {page.headings.length > 4 && (
+                                <span className="text-xs text-muted-foreground">
+                                  +{page.headings.length - 4} more
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground">
+                          {page.path}
+                        </TableCell>
+                        <TableCell className="text-right text-sm text-muted-foreground">
+                          {formatBytes(page.bytes)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Versions tab */}
+          <TabsContent value="versions" className="mt-6">
+            {versions.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No versions published yet.
+              </p>
+            ) : (
+              <div className="rounded-xl border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Version</TableHead>
+                      <TableHead>Channel</TableHead>
+                      <TableHead>Generated</TableHead>
+                      <TableHead className="text-right">Pages</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {versions.map((v) => (
+                      <TableRow key={v.version}>
+                        <TableCell className="font-medium">
+                          {v.version}
+                          {v.version === library.defaultVersion && (
+                            <Badge
+                              variant="secondary"
+                              className="ml-2 text-xs"
+                            >
+                              default
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <ChannelBadge channel={v.channel} />
+                        </TableCell>
+                        <TableCell>{formatDate(v.generatedAt)}</TableCell>
+                        <TableCell className="text-right">
+                          {v.pageCount}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Usage tab */}
+          <TabsContent value="usage" className="mt-6 space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Terminal className="size-4" />
+                  MCP Tool Usage
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="mb-3 text-sm text-muted-foreground">
+                  Use these MCP tools in your editor to install and search{" "}
+                  {library.displayName} docs:
+                </p>
+                <div className="relative overflow-hidden rounded-lg border bg-zinc-950 text-zinc-100">
+                  <CopyButton text={mcpInstall} />
+                  <pre className="overflow-x-auto p-4 text-sm leading-relaxed">
+                    <code>{mcpInstall}</code>
+                  </pre>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Globe className="size-4" />
+                  API: Resolve Library
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="mb-3 text-sm text-muted-foreground">
+                  Resolve this library via the REST API:
+                </p>
+                <div className="relative overflow-hidden rounded-lg border bg-zinc-950 text-zinc-100">
+                  <CopyButton text={apiResolve} />
+                  <pre className="overflow-x-auto p-4 text-sm leading-relaxed">
+                    <code>{apiResolve}</code>
+                  </pre>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <FileText className="size-4" />
+                  API: Page Index
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="mb-3 text-sm text-muted-foreground">
+                  Fetch the page index for{" "}
+                  {defaultVersionLabel
+                    ? `v${defaultVersionLabel}`
+                    : "the default version"}
+                  :
+                </p>
+                <div className="relative overflow-hidden rounded-lg border bg-zinc-950 text-zinc-100">
+                  <CopyButton text={apiPages} />
+                  <pre className="overflow-x-auto p-4 text-sm leading-relaxed">
+                    <code>{apiPages}</code>
+                  </pre>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </section>
     </PublicLayout>
   )
