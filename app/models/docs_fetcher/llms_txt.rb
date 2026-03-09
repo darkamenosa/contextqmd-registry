@@ -168,12 +168,12 @@ module DocsFetcher
         if path.start_with?("http")
           URI.parse(path)
         elsif path.start_with?("/")
-          # Absolute path — resolve against origin
-          URI.join("#{base_uri.scheme}://#{base_uri.host}:#{base_uri.port}", path)
+          # Absolute path — resolve against origin (URI.join handles port normalization)
+          URI.join(base_uri, path)
         else
           # Relative path — resolve against the llms.txt file's directory
           base_dir = base_uri.path.sub(%r{/[^/]*\z}, "/")
-          URI.join("#{base_uri.scheme}://#{base_uri.host}:#{base_uri.port}", base_dir, path)
+          URI.join(base_uri, base_dir, path)
         end
       rescue URI::InvalidURIError
         nil
