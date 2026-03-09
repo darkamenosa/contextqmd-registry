@@ -10,7 +10,7 @@ const contactInfo = [
   {
     icon: Mail,
     title: "Email",
-    detail: "hello@contextqmd_registry.app",
+    detail: "hello@contextqmd.com",
     description: "We respond within 24 hours.",
   },
   {

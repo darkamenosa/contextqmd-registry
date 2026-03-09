@@ -70,7 +70,7 @@ export default function Terms() {
             </h2>
             <p className="mt-3">
               If you have any questions about these Terms, please contact us at
-              legal@contextqmd_registry.app.
+              legal@contextqmd.com.
             </p>
           </div>
         </div>
