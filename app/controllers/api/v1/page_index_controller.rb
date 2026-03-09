@@ -5,15 +5,16 @@ module Api
     class PageIndexController < BaseController
       skip_before_action :authenticate_api_token!
       include Concerns::LibraryVersionLookup
+      include Concerns::CursorPaginatable
 
       before_action :find_library_and_version!
 
       def index
-        pages = @version.pages.ordered
+        result = paginate(@version.pages)
 
         render_data(
-          pages.map { |p| page_summary_json(p) },
-          meta: { cursor: nil }
+          result[:records].map { |p| page_summary_json(p) },
+          cursor: result[:next_cursor]
         )
       end
 

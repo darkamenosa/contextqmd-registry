@@ -5,15 +5,16 @@ module Api
     class VersionsController < BaseController
       skip_before_action :authenticate_api_token!
       include Concerns::LibraryVersionLookup
+      include Concerns::CursorPaginatable
 
       before_action :find_library!
 
       def index
-        versions = @library.versions.ordered
+        result = paginate(@library.versions)
 
         render_data(
-          versions.map { |v| version_json(v) },
-          meta: { cursor: nil }
+          result[:records].map { |v| version_json(v) },
+          cursor: result[:next_cursor]
         )
       end
 

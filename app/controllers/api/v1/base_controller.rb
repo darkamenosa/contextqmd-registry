@@ -34,8 +34,8 @@ module Api
           end
         end
 
-        def render_data(data, meta: {})
-          render json: { data: data, meta: meta }
+        def render_data(data, cursor: nil, meta: {})
+          render json: { data: data, meta: meta.merge(cursor: cursor) }
         end
 
         def render_error(code:, message:, status:)

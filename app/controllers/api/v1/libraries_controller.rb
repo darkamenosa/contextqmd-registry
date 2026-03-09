@@ -4,6 +4,7 @@ module Api
   module V1
     class LibrariesController < BaseController
       skip_before_action :authenticate_api_token!
+      include Concerns::CursorPaginatable
 
       def index
         libraries = if params[:query].present?
@@ -12,11 +13,11 @@ module Api
           Library.all
         end
 
-        libraries = libraries.order(:namespace, :name).limit(25)
+        result = paginate(libraries)
 
         render_data(
-          libraries.map { |lib| library_json(lib) },
-          meta: { cursor: nil }
+          result[:records].map { |lib| library_json(lib) },
+          cursor: result[:next_cursor]
         )
       end
 
