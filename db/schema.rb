@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_09_052642) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_09_065545) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -69,6 +69,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_09_052642) do
     t.index ["reset_password_token"], name: "index_identities_on_reset_password_token", unique: true
   end
 
+  create_table "libraries", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.jsonb "aliases", default: []
+    t.datetime "created_at", null: false
+    t.string "default_version"
+    t.string "display_name", null: false
+    t.string "homepage_url"
+    t.string "name", null: false
+    t.string "namespace", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id"], name: "index_libraries_on_account_id"
+    t.index ["aliases"], name: "index_libraries_on_aliases", using: :gin
+    t.index ["namespace", "name"], name: "index_libraries_on_namespace_and_name", unique: true
+  end
+
   create_table "users", force: :cascade do |t|
     t.bigint "account_id", null: false
     t.boolean "active", default: true, null: false
@@ -89,6 +104,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_09_052642) do
   add_foreign_key "access_tokens", "identities"
   add_foreign_key "account_cancellations", "accounts", on_delete: :cascade
   add_foreign_key "account_cancellations", "users", column: "initiated_by_id", on_delete: :nullify
+  add_foreign_key "libraries", "accounts"
   add_foreign_key "users", "accounts"
   add_foreign_key "users", "identities", on_delete: :nullify
 end
