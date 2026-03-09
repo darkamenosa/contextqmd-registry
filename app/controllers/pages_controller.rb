@@ -6,7 +6,7 @@ class PagesController < InertiaController
   disallow_account_scope
 
   def home
-    libraries = Library.includes(:versions, :source_policy).order(:namespace, :name)
+    libraries = Library.includes(versions: :pages, source_policy: []).order(:namespace, :name)
 
     render inertia: "pages/home", props: {
       library_count: Library.count,
@@ -43,7 +43,7 @@ class PagesController < InertiaController
         display_name: library.display_name,
         default_version: library.default_version,
         version_count: library.versions.size,
-        page_count: latest_version&.pages&.count || 0,
+        page_count: latest_version&.pages&.size || 0,
         license_status: library.source_policy&.license_status,
         updated_at: (latest_version&.created_at || library.updated_at).iso8601
       }

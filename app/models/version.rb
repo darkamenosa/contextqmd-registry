@@ -7,7 +7,7 @@ class Version < ApplicationRecord
   has_one :fetch_recipe, dependent: :destroy
 
   validates :version, presence: true, uniqueness: { scope: :library_id }
-  validates :channel, inclusion: { in: %w[stable latest canary snapshot] }
+  validates :channel, presence: true, inclusion: { in: %w[stable latest canary snapshot] }
 
   scope :ordered, -> { order(generated_at: :desc) }
   scope :stable, -> { where(channel: "stable") }

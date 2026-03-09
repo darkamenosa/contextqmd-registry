@@ -20,7 +20,7 @@ class LibrariesController < InertiaController
   end
 
   def show
-    library = Library.includes(:versions, :source_policy).find_by!(namespace: params[:namespace], name: params[:name])
+    library = Library.includes(versions: :pages, source_policy: []).find_by!(namespace: params[:namespace], name: params[:name])
     versions = library.versions.ordered
     default_version = versions.find { |v| v.version == library.default_version } || versions.first
     pages = default_version ? default_version.pages.order(:path) : Page.none
@@ -79,7 +79,7 @@ class LibrariesController < InertiaController
         version: version.version,
         channel: version.channel,
         generated_at: version.generated_at&.iso8601,
-        page_count: version.pages.count
+        page_count: version.pages.size
       }
     end
 

@@ -21,7 +21,11 @@ class CrawlRequestsController < InertiaController
 
   def new
     membership = Current.identity.accessible_memberships.includes(:account).first
-    redirect_to new_app_crawl_request_path(account_id: membership.account.external_account_id)
+    if membership
+      redirect_to new_app_crawl_request_path(account_id: membership.account.external_account_id)
+    else
+      redirect_to root_path, alert: "Please complete your account setup first."
+    end
   end
 
   private

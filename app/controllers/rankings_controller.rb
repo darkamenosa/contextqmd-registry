@@ -5,7 +5,7 @@ class RankingsController < InertiaController
   disallow_account_scope
 
   def index
-    libraries = Library.includes(:versions, :source_policy).all
+    libraries = Library.includes(versions: :pages, source_policy: []).all
 
     ranked = libraries.map { |lib| ranking_props(lib) }
       .sort_by { |r| -r[:score] }
@@ -21,7 +21,7 @@ class RankingsController < InertiaController
 
     def ranking_props(library)
       latest_version = library.versions.max_by(&:created_at)
-      page_count = latest_version&.pages&.count || 0
+      page_count = latest_version&.pages&.size || 0
       version_count = library.versions.size
       days_since_update = if latest_version&.created_at
         ((Time.current - latest_version.created_at) / 1.day).to_i
