@@ -90,7 +90,8 @@ class LibrariesController < InertiaController
         title: page.title,
         url: page.url,
         headings: page.headings,
-        bytes: page.bytes
+        bytes: page.bytes,
+        content: page.description
       }
     end
 

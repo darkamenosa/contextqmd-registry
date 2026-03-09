@@ -1,9 +1,11 @@
-import { useState } from "react"
+import { Fragment, useState } from "react"
 import { Link } from "@inertiajs/react"
 import {
   ArrowLeft,
   BookOpen,
   Check,
+  ChevronDown,
+  ChevronRight,
   Copy,
   ExternalLink,
   FileText,
@@ -49,6 +51,7 @@ interface PageItem {
   url: string
   headings: string[]
   bytes: number
+  content: string | null
 }
 
 interface Props {
@@ -125,6 +128,7 @@ export default function LibraryShow({
   pages,
   defaultVersionLabel,
 }: Props) {
+  const [expandedPage, setExpandedPage] = useState<string | null>(null)
   const slug = `${library.namespace}/${library.name}`
 
   const mcpInstall = `// In your MCP-enabled editor, use the install_docs tool:
@@ -248,46 +252,78 @@ install_docs({ library: "${slug}" })`
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-8" />
                       <TableHead>Title</TableHead>
                       <TableHead>Path</TableHead>
                       <TableHead className="text-right">Size</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {pages.map((page) => (
-                      <TableRow key={page.pageUid}>
-                        <TableCell>
-                          <div className="font-medium">{page.title}</div>
-                          {page.headings.length > 1 && (
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {page.headings.slice(1, 4).map((h) => (
-                                <span
-                                  key={h}
-                                  className="text-xs text-muted-foreground"
-                                >
-                                  {h}
-                                  {page.headings.indexOf(h) <
-                                  Math.min(page.headings.length - 1, 3)
-                                    ? " · "
-                                    : ""}
-                                </span>
-                              ))}
-                              {page.headings.length > 4 && (
-                                <span className="text-xs text-muted-foreground">
-                                  +{page.headings.length - 4} more
-                                </span>
+                    {pages.map((page) => {
+                      const isExpanded = expandedPage === page.pageUid
+                      return (
+                        <Fragment key={page.pageUid}>
+                          <TableRow
+                            className="cursor-pointer"
+                            onClick={() =>
+                              setExpandedPage(
+                                isExpanded ? null : page.pageUid,
+                              )
+                            }
+                          >
+                            <TableCell className="w-8 pr-0">
+                              {isExpanded ? (
+                                <ChevronDown className="size-4 text-muted-foreground" />
+                              ) : (
+                                <ChevronRight className="size-4 text-muted-foreground" />
                               )}
-                            </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="font-medium">{page.title}</div>
+                              {page.headings.length > 1 && (
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {page.headings.slice(1, 4).map((h) => (
+                                    <span
+                                      key={h}
+                                      className="text-xs text-muted-foreground"
+                                    >
+                                      {h}
+                                      {page.headings.indexOf(h) <
+                                      Math.min(page.headings.length - 1, 3)
+                                        ? " · "
+                                        : ""}
+                                    </span>
+                                  ))}
+                                  {page.headings.length > 4 && (
+                                    <span className="text-xs text-muted-foreground">
+                                      +{page.headings.length - 4} more
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell className="font-mono text-xs text-muted-foreground">
+                              {page.path}
+                            </TableCell>
+                            <TableCell className="text-right text-sm text-muted-foreground">
+                              {formatBytes(page.bytes)}
+                            </TableCell>
+                          </TableRow>
+                          {isExpanded && page.content && (
+                            <TableRow>
+                              <TableCell colSpan={4} className="bg-muted/30 p-0">
+                                <div className="relative">
+                                  <CopyButton text={page.content} />
+                                  <pre className="max-h-96 overflow-auto whitespace-pre-wrap p-4 text-sm leading-relaxed">
+                                    {page.content}
+                                  </pre>
+                                </div>
+                              </TableCell>
+                            </TableRow>
                           )}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">
-                          {page.path}
-                        </TableCell>
-                        <TableCell className="text-right text-sm text-muted-foreground">
-                          {formatBytes(page.bytes)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                        </Fragment>
+                      )
+                    })}
                   </TableBody>
                 </Table>
               </div>
