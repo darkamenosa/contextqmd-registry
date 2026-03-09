@@ -13,7 +13,6 @@ Rails.application.routes.draw do
   scope "app/:account_id", constraints: { account_id: /\d+/ } do
     namespace :app, path: "" do
       resource :dashboard, only: :show
-      resources :projects, only: [ :index ]
       resources :crawl_requests, only: [ :new, :create ], path: "crawl"
       resource :settings, only: [ :show, :update, :destroy ]
     end

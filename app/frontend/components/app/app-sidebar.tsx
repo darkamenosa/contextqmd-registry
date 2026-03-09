@@ -1,6 +1,6 @@
 import { usePage } from "@inertiajs/react"
 import type { SharedProps } from "@/types"
-import { FolderOpen, LayoutDashboard, Plus } from "lucide-react"
+import { LayoutDashboard, Plus } from "lucide-react"
 
 import { withAccountScope } from "@/lib/account-scope"
 import {
@@ -26,11 +26,6 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
       title: "Dashboard",
       url: scopedPath("/app/dashboard"),
       icon: LayoutDashboard,
-    },
-    {
-      title: "Projects",
-      url: scopedPath("/app/projects"),
-      icon: FolderOpen,
     },
     {
       title: "Submit Docs",

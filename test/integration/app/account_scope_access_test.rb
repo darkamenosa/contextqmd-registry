@@ -11,11 +11,11 @@ class App::AccountScopeAccessTest < ActionDispatch::IntegrationTest
       name: "Unknown Scope Guest"
     )
 
-    get app_projects_path(account_id: account.external_account_id)
+    get app_dashboard_path(account_id: account.external_account_id)
 
     assert_redirected_to new_identity_session_path
 
-    get app_projects_path(account_id: 9_999_999)
+    get app_dashboard_path(account_id: 9_999_999)
 
     assert_redirected_to new_identity_session_path
   ensure
@@ -30,7 +30,7 @@ class App::AccountScopeAccessTest < ActionDispatch::IntegrationTest
 
     sign_in(identity)
 
-    get app_projects_path(account_id: 9_999_999)
+    get app_dashboard_path(account_id: 9_999_999)
 
     assert_response :not_found
   ensure
@@ -44,7 +44,7 @@ class App::AccountScopeAccessTest < ActionDispatch::IntegrationTest
     )
     _access_token, raw_token = AccessToken.generate(identity: identity, name: "Unknown Scope API")
 
-    get app_projects_path(account_id: 9_999_999), headers: {
+    get app_dashboard_path(account_id: 9_999_999), headers: {
       "Authorization" => "Bearer #{raw_token}"
     }
 
