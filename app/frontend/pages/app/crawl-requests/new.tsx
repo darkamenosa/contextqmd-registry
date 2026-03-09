@@ -1,5 +1,5 @@
 import type { FormEvent } from "react"
-import { Head, useForm } from "@inertiajs/react"
+import { Head, useForm, usePage } from "@inertiajs/react"
 import {
   BookOpen,
   Code2,
@@ -65,12 +65,16 @@ const sourceTypes = [
 ]
 
 export default function AppCrawlRequestsNew() {
+  const { url: pageUrl } = usePage()
   const { data, setData, post, processing, transform } = useForm({
     url: "",
     sourceType: "github",
   })
 
   const selectedSource = sourceTypes.find((s) => s.value === data.sourceType)
+
+  // POST to collection path: /app/:id/crawl (strip /new from current URL)
+  const createPath = pageUrl.replace(/\/new$/, "")
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -80,7 +84,7 @@ export default function AppCrawlRequestsNew() {
         source_type: data.sourceType,
       },
     }))
-    post("")
+    post(createPath)
   }
 
   return (
