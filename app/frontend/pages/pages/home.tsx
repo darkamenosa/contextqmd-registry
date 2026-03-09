@@ -170,14 +170,21 @@ export default function Home({
     }
   }
 
+  // Popular: sort by page count desc (libraries with content first)
+  const sortedByPopular = [...libraries].sort(
+    (a, b) => b.pageCount - a.pageCount || b.versionCount - a.versionCount,
+  )
+
   const sortedByRecent = [...libraries].sort(
     (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
   )
 
-  // "Trending" = most pages (documentation coverage as a rough signal)
-  const sortedByTrending = [...libraries].sort(
-    (a, b) => b.pageCount - a.pageCount || b.versionCount - a.versionCount,
-  )
+  // Trending: libraries with most recent activity AND content
+  const sortedByTrending = [...libraries]
+    .filter((lib) => lib.pageCount > 0)
+    .sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime() || b.pageCount - a.pageCount,
+    )
 
   return (
     <PublicLayout
@@ -253,7 +260,7 @@ export default function Home({
 
           <TabsContent value="popular" className="mt-4">
             <div className="overflow-x-auto rounded-xl border">
-              <LibraryTable libraries={libraries} />
+              <LibraryTable libraries={sortedByPopular} />
             </div>
           </TabsContent>
 

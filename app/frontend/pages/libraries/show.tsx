@@ -77,6 +77,13 @@ interface Props {
   search: string
 }
 
+/** Strip inline HTML tags (especially img) from markdown source before rendering */
+function cleanMarkdown(md: string): string {
+  return md
+    .replace(/<img[^>]*>/gi, "") // remove img tags
+    .replace(/<br\s*\/?>/gi, "\n") // convert br to newlines
+}
+
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
 
@@ -479,7 +486,7 @@ install_docs({ library: "${slug}" })`
                                             img: () => null,
                                           }}
                                         >
-                                          {page.content}
+                                          {cleanMarkdown(page.content)}
                                         </ReactMarkdown>
                                       </div>
                                     </div>

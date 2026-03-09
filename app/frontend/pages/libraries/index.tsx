@@ -2,7 +2,6 @@ import { type FormEvent, useState } from "react"
 import { Link, router } from "@inertiajs/react"
 import {
   BookOpen,
-  ExternalLink,
   FileText,
   Library,
   Plus,
@@ -196,11 +195,8 @@ export default function LibrariesIndex({ libraries, query }: Props) {
                             {lib.pageCount} page{lib.pageCount !== 1 ? "s" : ""}
                           </span>
                         )}
-                        {lib.homepageUrl && (
-                          <span className="flex items-center gap-1">
-                            <ExternalLink className="size-3" />
-                            Homepage
-                          </span>
+                        {lib.pageCount === 0 && lib.versionCount === 0 && (
+                          <span className="italic">Not yet indexed</span>
                         )}
                       </div>
                     </CardContent>

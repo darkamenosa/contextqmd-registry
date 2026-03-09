@@ -21,7 +21,7 @@ export function SiteFooter() {
               </li>
               <li>
                 <Link href="/crawl" className="hover:text-foreground">
-                  Task List
+                  Add Docs
                 </Link>
               </li>
             </ul>
