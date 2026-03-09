@@ -5,7 +5,7 @@ require "test_helper"
 module Api
   module V1
     class LibrariesControllerTest < ActionDispatch::IntegrationTest
-      fixtures :accounts, :libraries
+      fixtures :accounts, :libraries, :versions, :pages
 
       setup do
         @identity, @account, = create_tenant(

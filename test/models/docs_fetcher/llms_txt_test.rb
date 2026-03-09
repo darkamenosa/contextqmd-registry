@@ -312,6 +312,51 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
     assert_equal 1, links.size
   end
 
+  test "extract_doc_links finds absolute URLs ending in .md" do
+    content = <<~MD
+      - [Quick Start](https://react.dev/learn.md)
+      - [Tutorial](https://react.dev/learn/tutorial-tic-tac-toe.md)
+      - [Not a doc](https://react.dev/blog)
+    MD
+
+    links = @fetcher.send(:extract_doc_links, content)
+    paths = links.map { |l| l[:path] }
+
+    assert_includes paths, "https://react.dev/learn.md"
+    assert_includes paths, "https://react.dev/learn/tutorial-tic-tac-toe.md"
+    assert_not_includes paths, "https://react.dev/blog"
+  end
+
+  # --- Frontmatter stripping ---
+
+  test "strip_frontmatter removes YAML frontmatter" do
+    content = "---\nurl: /guide/pages.md\n---\n# Pages\n\nContent here."
+    stripped = @fetcher.send(:strip_frontmatter, content)
+
+    assert_equal "# Pages\n\nContent here.", stripped
+  end
+
+  test "strip_frontmatter returns content unchanged when no frontmatter" do
+    content = "# No Frontmatter\n\nJust content."
+    stripped = @fetcher.send(:strip_frontmatter, content)
+
+    assert_equal content, stripped
+  end
+
+  test "extract_title_from_content finds title in frontmatter" do
+    content = "---\ntitle: My Page Title\n---\n# Different Heading\n\nContent."
+    title = @fetcher.send(:extract_title_from_content, content)
+
+    assert_equal "My Page Title", title
+  end
+
+  test "extract_title_from_content finds ATX heading after frontmatter" do
+    content = "---\nurl: /guide.md\n---\n# Getting Started\n\nContent."
+    title = @fetcher.send(:extract_title_from_content, content)
+
+    assert_equal "Getting Started", title
+  end
+
   # --- Link resolution ---
 
   test "resolve_link resolves relative paths against base URI" do
