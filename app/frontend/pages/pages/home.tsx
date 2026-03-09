@@ -64,9 +64,9 @@ export default function Home() {
                 variant="outline"
                 size="lg"
                 nativeButton={false}
-                render={<Link href="/pricing" />}
+                render={<Link href="/about" />}
               >
-                View Pricing
+                Learn More
               </Button>
             </div>
           </div>

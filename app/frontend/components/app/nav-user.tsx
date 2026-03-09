@@ -1,7 +1,6 @@
 import { router, usePage } from "@inertiajs/react"
 import type { SharedProps } from "@/types"
 import {
-  CreditCard,
   EllipsisVertical,
   KeyRound,
   LogOut,
@@ -96,14 +95,6 @@ export function NavUser() {
                 <UserCircle />
                 Settings
               </DropdownMenuItem>
-              {canManageAccount && (
-                <DropdownMenuItem
-                  onClick={() => router.visit(scopedPath("/app/billing"))}
-                >
-                  <CreditCard />
-                  Billing
-                </DropdownMenuItem>
-              )}
               <DropdownMenuItem
                 onClick={() =>
                   router.visit(

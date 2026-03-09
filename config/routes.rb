@@ -15,7 +15,6 @@ Rails.application.routes.draw do
       resource :dashboard, only: :show
       resources :projects, only: [ :index ]
       resource :settings, only: [ :show, :update, :destroy ]
-      resource :billing, only: :show
     end
     get "access_tokens", to: "app/access_tokens#index", as: :scoped_app_access_tokens
     post "access_tokens", to: "app/access_tokens#create"
@@ -53,7 +52,6 @@ Rails.application.routes.draw do
       resource :settings, only: :show
       namespace :settings do
         resource :team, only: :show
-        resource :billing, only: :show
       end
     end
     mount MissionControl::Jobs::Engine, at: "/admin/jobs" if defined?(MissionControl::Jobs::Engine)
@@ -68,8 +66,7 @@ Rails.application.routes.draw do
   # Public pages
   root "pages#home"
   get "about", to: "pages#about"
-  get "pricing", to: "pages#pricing"
-  get "privacy", to: "pages#privacy"
+get "privacy", to: "pages#privacy"
   get "terms", to: "pages#terms"
   get "contact", to: "pages#contact"
 

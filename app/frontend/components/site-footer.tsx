@@ -7,16 +7,6 @@ export function SiteFooter() {
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="grid grid-cols-2 gap-8 md:grid-cols-3">
           <div>
-            <h3 className="text-sm font-semibold">Product</h3>
-            <ul className="mt-4 flex flex-col gap-2 text-sm text-muted-foreground">
-              <li>
-                <Link href="/pricing" className="hover:text-foreground">
-                  Pricing
-                </Link>
-              </li>
-            </ul>
-          </div>
-          <div>
             <h3 className="text-sm font-semibold">Company</h3>
             <ul className="mt-4 flex flex-col gap-2 text-sm text-muted-foreground">
               <li>

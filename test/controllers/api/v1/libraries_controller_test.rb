@@ -126,9 +126,9 @@ module Api
 
       private
 
-      def auth_headers
-        { "Authorization" => "Bearer #{@raw_token}" }
-      end
+        def auth_headers
+          { "Authorization" => "Bearer #{@raw_token}" }
+        end
     end
   end
 end

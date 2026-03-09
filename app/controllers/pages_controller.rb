@@ -13,10 +13,6 @@ class PagesController < InertiaController
     render inertia: "pages/about"
   end
 
-  def pricing
-    render inertia: "pages/pricing"
-  end
-
   def privacy
     render inertia: "pages/privacy"
   end
