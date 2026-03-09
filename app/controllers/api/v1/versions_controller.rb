@@ -10,7 +10,10 @@ module Api
       before_action :find_library!
 
       def index
-        result = paginate(@library.versions)
+        versions = @library.versions
+        versions = versions.where(channel: params[:channel]) if params[:channel].present?
+
+        result = paginate(versions)
 
         render_data(
           result[:records].map { |v| version_json(v) },

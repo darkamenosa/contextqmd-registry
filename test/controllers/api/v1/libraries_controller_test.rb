@@ -121,6 +121,23 @@ module Api
         assert_equal "16.1.6", lib["default_version"]
       end
 
+      test "show includes stats for library with versions" do
+        get api_v1_library_detail_path(namespace: "vercel", name: "nextjs")
+
+        assert_response :ok
+        lib = response.parsed_body["data"]
+        assert lib.key?("version_count"), "Should include version_count"
+        assert lib.key?("stats"), "Detail view should include stats"
+      end
+
+      test "index does not include stats" do
+        get api_v1_libraries_path
+
+        assert_response :ok
+        lib = response.parsed_body["data"].first
+        assert_not lib.key?("stats"), "Index view should not include stats"
+      end
+
       test "show returns 404 for nonexistent library" do
         get api_v1_library_detail_path(namespace: "unknown", name: "nope"),
           headers: auth_headers

@@ -4,6 +4,7 @@ module Api
   module V1
     class ResolveController < BaseController
       skip_before_action :authenticate_api_token!
+      rate_limit to: 120, within: 1.minute, by: -> { request.remote_ip }, only: :create
 
       def create
         query = params[:query]

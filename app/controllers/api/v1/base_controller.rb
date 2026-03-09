@@ -4,6 +4,10 @@ module Api
   module V1
     class BaseController < ActionController::API
       include ActionController::HttpAuthentication::Token::ControllerMethods
+      include ActionController::RateLimiting
+
+      # Default rate limit for all API endpoints: 300 req/min per IP
+      rate_limit to: 300, within: 1.minute, by: -> { request.remote_ip }
 
       before_action :authenticate_api_token!
 

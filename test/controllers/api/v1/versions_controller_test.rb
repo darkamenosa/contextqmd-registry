@@ -51,6 +51,23 @@ module Api
         assert_kind_of Array, body["data"]
       end
 
+      test "index filters by channel when param provided" do
+        get "/api/v1/libraries/vercel/nextjs/versions", params: { channel: "stable" }
+
+        assert_response :ok
+        body = response.parsed_body
+        channels = body["data"].map { |v| v["channel"] }
+        assert channels.all? { |c| c == "stable" }, "All versions should be stable"
+      end
+
+      test "index returns all channels when no filter" do
+        get "/api/v1/libraries/vercel/nextjs/versions"
+
+        assert_response :ok
+        body = response.parsed_body
+        assert_operator body["data"].size, :>=, 1
+      end
+
       test "index returns 404 for nonexistent library" do
         get "/api/v1/libraries/unknown/nope/versions", headers: auth_headers
 

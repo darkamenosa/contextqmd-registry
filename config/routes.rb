@@ -101,6 +101,7 @@ Rails.application.routes.draw do
       get "libraries/:namespace/:name/versions/:version/bundles/:profile", to: "bundles#show", version: /[^\/]+/
       post "libraries/:namespace/:name/versions/:version/query", to: "query_docs#create", version: /[^\/]+/
       post "resolve", to: "resolve#create"
+      post "crawl", to: "crawl_requests#create"
     end
   end
 

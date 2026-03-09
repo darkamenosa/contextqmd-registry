@@ -9,7 +9,9 @@ module Api
       before_action :find_library_and_version!
 
       def show
-        render_data(manifest_json)
+        cache_key = "manifest:#{@library.id}:#{@version.id}:#{@version.manifest_checksum}"
+        data = Rails.cache.fetch(cache_key, expires_in: 1.hour) { manifest_json }
+        render_data(data)
       end
 
       private

@@ -11,7 +11,7 @@ module Api
         assert_response :ok
         body = response.parsed_body
         assert_equal "ContextQMD Registry", body["data"]["name"]
-        assert_equal "1.0", body["data"]["version"]
+        assert_equal "1.1", body["data"]["version"]
       end
 
       test "includes all feature flags" do
@@ -21,8 +21,24 @@ module Api
         assert_equal true, features["bundle_download"]
         assert_equal true, features["cursor_pagination"]
         assert_equal true, features["origin_fetch_recipes"]
+        assert_equal true, features["source_type_detection"]
+        assert_equal true, features["rate_limiting"]
+        assert_equal true, features["response_caching"]
+        assert_equal true, features["content_deduplication"]
+        assert_equal true, features["token_bounded_retrieval"]
         assert_equal false, features["signed_manifests"]
         assert_equal false, features["delta_sync"]
+      end
+
+      test "includes source_types" do
+        get api_v1_capabilities_path
+
+        source_types = response.parsed_body["data"]["source_types"]
+        assert_includes source_types, "github"
+        assert_includes source_types, "gitlab"
+        assert_includes source_types, "website"
+        assert_includes source_types, "llms_txt"
+        assert_includes source_types, "openapi"
       end
 
       test "response has correct envelope" do

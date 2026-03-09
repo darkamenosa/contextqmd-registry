@@ -103,6 +103,30 @@ module Api
         assert_response :ok
         assert_equal 500, response.parsed_body["meta"]["max_tokens"]
       end
+
+      test "fast mode returns whole pages without chunk splitting" do
+        post "/api/v1/libraries/test-ns/test-lib/versions/1.0.0/query",
+          params: { query: "install configure", max_tokens: 50_000, mode: "fast" },
+          as: :json
+
+        assert_response :ok
+        body = response.parsed_body
+        assert_equal "fast", body["meta"]["mode"]
+        assert_operator body["data"].size, :>=, 1
+
+        first = body["data"].first
+        assert first.key?("page_uid")
+        assert first.key?("content_md")
+      end
+
+      test "full mode is the default" do
+        post "/api/v1/libraries/test-ns/test-lib/versions/1.0.0/query",
+          params: { query: "install", max_tokens: 50_000 },
+          as: :json
+
+        assert_response :ok
+        assert_equal "full", response.parsed_body["meta"]["mode"]
+      end
     end
   end
 end

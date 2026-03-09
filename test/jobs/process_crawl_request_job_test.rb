@@ -205,6 +205,78 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     assert_equal existing.id, @crawl_request.library_id
   end
 
+  test "skips saving unchanged pages on re-crawl (deduplication)" do
+    ns = "ns-#{SecureRandom.hex(4)}"
+    lib_name = "lib-#{SecureRandom.hex(4)}"
+
+    result = DocsFetcher::Result.new(
+      namespace: ns, name: lib_name, display_name: "Lib",
+      homepage_url: "https://example.com", aliases: [],
+      version: nil,
+      pages: [
+        { page_uid: "intro", path: "intro.md", title: "Intro",
+          url: "https://example.com", content: "Hello world", headings: [] }
+      ]
+    )
+
+    # First crawl
+    with_stub_fetcher(result) { ProcessCrawlRequestJob.perform_now(@crawl_request) }
+    library = @crawl_request.reload.library
+    version = library.versions.first
+    page = version.pages.find_by(page_uid: "intro")
+    original_updated_at = page.updated_at
+
+    # Re-crawl with same content — page should NOT be re-saved
+    cr2 = CrawlRequest.create!(identity: @identity, url: "https://example.com/llms.txt", source_type: "llms_txt", status: "pending")
+    travel 1.minute do
+      with_stub_fetcher(result) { ProcessCrawlRequestJob.perform_now(cr2) }
+    end
+
+    page.reload
+    assert_equal original_updated_at, page.updated_at, "Unchanged page should not be re-saved"
+  end
+
+  test "removes stale pages on re-crawl" do
+    ns = "ns-#{SecureRandom.hex(4)}"
+    lib_name = "lib-#{SecureRandom.hex(4)}"
+
+    result_v1 = DocsFetcher::Result.new(
+      namespace: ns, name: lib_name, display_name: "Lib",
+      homepage_url: "https://example.com", aliases: [],
+      version: nil,
+      pages: [
+        { page_uid: "intro", path: "intro.md", title: "Intro",
+          url: "https://example.com/intro", content: "Hello", headings: [] },
+        { page_uid: "old-page", path: "old-page.md", title: "Old",
+          url: "https://example.com/old", content: "Stale content", headings: [] }
+      ]
+    )
+
+    with_stub_fetcher(result_v1) { ProcessCrawlRequestJob.perform_now(@crawl_request) }
+    library = @crawl_request.reload.library
+    version = library.versions.first
+    assert_equal 2, version.pages.count
+
+    # Re-crawl without old-page
+    result_v2 = DocsFetcher::Result.new(
+      namespace: ns, name: lib_name, display_name: "Lib",
+      homepage_url: "https://example.com", aliases: [],
+      version: nil,
+      pages: [
+        { page_uid: "intro", path: "intro.md", title: "Intro",
+          url: "https://example.com/intro", content: "Hello updated", headings: [] }
+      ]
+    )
+
+    cr2 = CrawlRequest.create!(identity: @identity, url: "https://example.com/llms.txt", source_type: "llms_txt", status: "pending")
+    with_stub_fetcher(result_v2) { ProcessCrawlRequestJob.perform_now(cr2) }
+
+    version.reload
+    assert_equal 1, version.pages.count
+    assert_nil version.pages.find_by(page_uid: "old-page"), "Stale page should be removed"
+    assert_not_nil version.pages.find_by(page_uid: "intro")
+  end
+
   private
 
     def stub_docs_fetcher(result)

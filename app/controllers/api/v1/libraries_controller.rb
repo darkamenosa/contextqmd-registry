@@ -40,14 +40,30 @@ module Api
         end
 
         def library_json(library)
-          {
+          data = {
             namespace: library.namespace,
             name: library.name,
             display_name: library.display_name,
             aliases: library.aliases,
             homepage_url: library.homepage_url,
-            default_version: library.default_version
+            default_version: library.default_version,
+            version_count: library.versions.count
           }
+
+          # Add stats for detail view (single library)
+          if action_name == "show"
+            default = library.versions.find_by(version: library.default_version) ||
+                      library.versions.ordered.first
+            if default
+              data[:stats] = {
+                page_count: default.pages.count,
+                total_bytes: default.pages.sum(:bytes),
+                last_generated_at: default.generated_at&.iso8601
+              }
+            end
+          end
+
+          data
         end
     end
   end

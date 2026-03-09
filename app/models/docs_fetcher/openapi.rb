@@ -281,7 +281,7 @@ module DocsFetcher
       def http_get(uri, redirect_limit: 5)
         raise "Too many redirects" if redirect_limit <= 0
 
-        proxy = proxy_uri
+        proxy = ProxyPool.next_proxy
         http = Net::HTTP.new(uri.hostname, uri.port,
           proxy&.host, proxy&.port, proxy&.user, proxy&.password)
         http.use_ssl = uri.scheme == "https"
@@ -301,15 +301,6 @@ module DocsFetcher
 
         body = response.body.force_encoding("UTF-8")
         body.bytesize > MAX_SIZE ? nil : body
-      end
-
-      def proxy_uri
-        proxy_url = ENV["CRAWL_PROXY_URL"]
-        return nil if proxy_url.blank?
-
-        URI.parse(proxy_url)
-      rescue URI::InvalidURIError
-        nil
       end
   end
 end

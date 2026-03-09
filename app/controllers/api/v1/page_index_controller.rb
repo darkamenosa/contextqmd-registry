@@ -21,7 +21,9 @@ module Api
       def show
         page = @version.pages.find_by!(page_uid: params[:page_uid])
 
-        render_data(page_detail_json(page))
+        cache_key = "page:#{page.id}:#{page.checksum}"
+        data = Rails.cache.fetch(cache_key, expires_in: 6.hours) { page_detail_json(page) }
+        render_data(data)
       rescue ActiveRecord::RecordNotFound
         render_error(code: "not_found", message: "Page not found", status: :not_found)
       end

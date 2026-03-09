@@ -13,14 +13,24 @@ module Api
         hosted_content: false,
         cursor_pagination: true,
         private_sources: false,
-        delta_sync: false
+        delta_sync: false,
+        source_type_detection: true,
+        rate_limiting: true,
+        response_caching: true,
+        content_deduplication: true,
+        stale_page_cleanup: true,
+        token_bounded_retrieval: true,
+        proxy_pool: true
       }.freeze
+
+      SOURCE_TYPES = DocsFetcher::FETCHERS.keys.freeze
 
       def show
         render_data({
           name: "ContextQMD Registry",
-          version: "1.0",
-          features: FEATURES
+          version: "1.1",
+          features: FEATURES,
+          source_types: SOURCE_TYPES
         })
       end
     end

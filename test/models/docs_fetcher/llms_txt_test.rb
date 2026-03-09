@@ -98,7 +98,7 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
 
     assert_equal "docs", metadata[:namespace]
     assert_equal "docs-llms-txt", metadata[:name]
-    assert_equal "My Great Lib (llms.txt)", metadata[:display_name]
+    assert_equal "My Great Lib", metadata[:display_name]
     assert_includes metadata[:aliases], "docs"
   end
 
@@ -110,7 +110,7 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
 
     assert_equal "react", metadata[:namespace]
     assert_equal "react-llms-full-txt", metadata[:name]
-    assert_equal "React Documentation (llms.txt)", metadata[:display_name]
+    assert_equal "React Documentation", metadata[:display_name]
   end
 
   test "falls back to namespace for display name when no H1" do
@@ -119,7 +119,7 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
 
     metadata = @fetcher.send(:extract_metadata, uri, content)
 
-    assert_equal "Tailwindcss (llms.txt)", metadata[:display_name]
+    assert_equal "Tailwindcss", metadata[:display_name]
   end
 
   test "strips www prefix from host for namespace" do
@@ -218,6 +218,116 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
     assert_nil @fetcher.send(:detect_split_level, content)
   end
 
+  # --- Index detection ---
+
+  test "index_style? returns true for content with many doc links" do
+    content = <<~MD
+      # Inertia Rails
+
+      > Build modern SPAs with Rails.
+
+      ## Table of Contents
+
+      - [Introduction](/guide.md)
+      - [Server-side setup](/guide/server-side-setup.md)
+      - [Client-side setup](/guide/client-side-setup.md)
+      - [Pages](/guide/pages.md)
+      - [Responses](/guide/responses.md)
+      - [Redirects](/guide/redirects.md)
+      - [Forms](/guide/forms.md)
+      - [Validation](/guide/validation.md)
+      - [Shared data](/guide/shared-data.md)
+      - [Testing](/guide/testing.md)
+    MD
+
+    assert @fetcher.send(:index_style?, content)
+  end
+
+  test "index_style? returns false for content-rich file" do
+    content = <<~MD
+      # My Library
+
+      This is a full documentation file with lots of content.
+
+      ## Installation
+
+      Run `npm install my-library` to install the package. Then import it
+      in your application and configure the settings as described below.
+      Make sure you have Node.js 18+ installed.
+
+      ## Usage
+
+      Here's how you use the library in your code. First create an instance,
+      then call the methods you need. The API is designed to be intuitive
+      and easy to learn.
+
+      ## API Reference
+
+      The main class exposes several methods for working with data.
+      Each method returns a promise that resolves with the result.
+    MD
+
+    assert_not @fetcher.send(:index_style?, content)
+  end
+
+  test "index_style? returns false for fewer than 5 links" do
+    content = <<~MD
+      # Small project
+
+      - [README](/README.md)
+      - [Guide](/guide.md)
+
+      Lots of prose content goes here to fill the page.
+    MD
+
+    assert_not @fetcher.send(:index_style?, content)
+  end
+
+  # --- Link extraction ---
+
+  test "extract_doc_links finds markdown links to .md files" do
+    content = <<~MD
+      - [Introduction](/guide.md)
+      - [Setup](/guide/setup.md)
+      - [Not a doc](https://example.com/page)
+      - [Also a doc](/reference/api.mdx)
+    MD
+
+    links = @fetcher.send(:extract_doc_links, content)
+    paths = links.map { |l| l[:path] }
+
+    assert_includes paths, "/guide.md"
+    assert_includes paths, "/guide/setup.md"
+    assert_includes paths, "/reference/api.mdx"
+    assert_not_includes paths, "https://example.com/page"
+  end
+
+  test "extract_doc_links deduplicates by path" do
+    content = <<~MD
+      - [Intro](/guide.md)
+      - [Introduction](/guide.md)
+    MD
+
+    links = @fetcher.send(:extract_doc_links, content)
+    assert_equal 1, links.size
+  end
+
+  # --- Link resolution ---
+
+  test "resolve_link resolves relative paths against base URI" do
+    base = URI.parse("https://inertia-rails.dev/llms.txt")
+    resolved = @fetcher.send(:resolve_link, base, "/guide/pages.md")
+
+    assert_equal "https://inertia-rails.dev/guide/pages.md", resolved.to_s
+  end
+
+  test "resolve_link returns absolute URLs as-is" do
+    base = URI.parse("https://inertia-rails.dev/llms.txt")
+    resolved = @fetcher.send(:resolve_link, base, "https://other.dev/docs.md")
+
+    assert_equal "https://other.dev/docs.md", resolved.to_s
+  end
+
   # --- Full fetch with stubbed HTTP ---
 
   test "fetch returns a Result with pages from H2 sections" do
@@ -236,7 +346,12 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
     MD
 
     fetcher = DocsFetcher::LlmsTxt.new
-    fetcher.define_singleton_method(:http_get) { |*_args, **_kw| content }
+    # Stub http_get to return nil for llms-full.txt, content for llms.txt
+    call_count = 0
+    fetcher.define_singleton_method(:http_get) do |uri, **_kw|
+      call_count += 1
+      call_count == 1 ? nil : content # first call is llms-full.txt (nil), second is llms.txt
+    end
 
     result = fetcher.fetch("https://example.com/llms.txt")
 
@@ -247,11 +362,78 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
     assert_equal "https://example.com", result.homepage_url
   end
 
+  test "fetch prefers llms-full.txt when available" do
+    full_content = <<~MD
+      # My Library Full
+
+      All the docs are here.
+
+      ## Getting Started
+
+      Full getting started guide with lots of content here.
+
+      ## API Reference
+
+      Complete API reference documentation.
+    MD
+
+    fetcher = DocsFetcher::LlmsTxt.new
+    fetcher.define_singleton_method(:http_get) { |*_args, **_kw| full_content }
+
+    result = fetcher.fetch("https://example.com/llms.txt")
+
+    assert_instance_of DocsFetcher::Result, result
+    assert_equal "example-llms-full-txt", result.name
+    assert_equal 3, result.pages.size
+  end
+
+  test "fetch follows links for index-style llms.txt" do
+    index_content = <<~MD
+      # My Framework
+
+      > Build things fast.
+
+      - [Introduction](/guide.md)
+      - [Setup](/guide/setup.md)
+      - [Pages](/guide/pages.md)
+      - [Forms](/guide/forms.md)
+      - [Validation](/guide/validation.md)
+      - [Testing](/guide/testing.md)
+      - [Advanced](/guide/advanced.md)
+    MD
+
+    page_content = "# Introduction\n\nWelcome to the framework.\n\n## Overview\n\nThis is great."
+
+    fetcher = DocsFetcher::LlmsTxt.new
+    call_count = 0
+    fetcher.define_singleton_method(:http_get) do |uri, **_kw|
+      call_count += 1
+      if call_count == 1
+        nil # llms-full.txt not found
+      elsif call_count == 2
+        index_content # llms.txt itself
+      else
+        page_content # each linked page
+      end
+    end
+
+    result = fetcher.fetch("https://example.com/llms.txt")
+
+    assert_instance_of DocsFetcher::Result, result
+    assert_equal 7, result.pages.size
+    assert_equal "Introduction", result.pages.first[:title]
+    assert_includes result.pages.first[:headings], "Overview"
+  end
+
   test "fetch uses fallback when no sections can be split" do
     content = "Just a block of plain text.\nNo headings at all."
 
     fetcher = DocsFetcher::LlmsTxt.new
-    fetcher.define_singleton_method(:http_get) { |*_args, **_kw| content }
+    call_count = 0
+    fetcher.define_singleton_method(:http_get) do |*_args, **_kw|
+      call_count += 1
+      call_count == 1 ? nil : content
+    end
 
     result = fetcher.fetch("https://example.com/llms.txt")
 

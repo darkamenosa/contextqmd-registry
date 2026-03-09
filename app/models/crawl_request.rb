@@ -11,6 +11,7 @@ class CrawlRequest < ApplicationRecord
   validates :source_type, presence: true, inclusion: { in: SOURCE_TYPES }
   validates :status, presence: true, inclusion: { in: STATUSES }
 
+  before_validation :detect_source_type, if: -> { url.present? }
   after_create_commit :enqueue_processing
 
   scope :pending, -> { where(status: "pending") }
@@ -44,6 +45,10 @@ class CrawlRequest < ApplicationRecord
   end
 
   private
+
+    def detect_source_type
+      self.source_type = DocsFetcher.detect_source_type(url)
+    end
 
     def enqueue_processing
       ProcessCrawlRequestJob.perform_later(self)

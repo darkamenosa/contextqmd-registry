@@ -266,7 +266,7 @@ module DocsFetcher
       end
 
       def http_request(uri)
-        proxy = proxy_uri
+        proxy = ProxyPool.next_proxy
         http = Net::HTTP.new(uri.hostname, uri.port,
           proxy&.host, proxy&.port, proxy&.user, proxy&.password)
         http.use_ssl = uri.scheme == "https"
@@ -277,16 +277,6 @@ module DocsFetcher
         request["User-Agent"] = USER_AGENT
         request["Accept"] = "text/html"
         http.request(request)
-      end
-
-      def proxy_uri
-        proxy_url = ENV["CRAWL_PROXY_URL"]
-        return nil if proxy_url.blank?
-
-        URI.parse(proxy_url)
-      rescue URI::InvalidURIError
-        Rails.logger.warn("Invalid CRAWL_PROXY_URL: #{proxy_url}")
-        nil
       end
   end
 end

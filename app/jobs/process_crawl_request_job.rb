@@ -65,11 +65,19 @@ class ProcessCrawlRequestJob < ApplicationJob
     end
 
     def create_pages(version, pages, source_type: nil)
+      incoming_uids = Set.new
+
       pages.each do |page_data|
         content = page_data[:content].to_s
         checksum = Digest::SHA256.hexdigest(content)
+        uid = page_data[:page_uid]
+        incoming_uids << uid
 
-        page = version.pages.find_or_initialize_by(page_uid: page_data[:page_uid])
+        page = version.pages.find_or_initialize_by(page_uid: uid)
+
+        # Skip save if content hasn't changed (deduplication)
+        next if page.persisted? && page.checksum == checksum
+
         page.assign_attributes(
           path: page_data[:path],
           title: page_data[:title],
@@ -82,6 +90,9 @@ class ProcessCrawlRequestJob < ApplicationJob
         )
         page.save!
       end
+
+      # Remove stale pages that no longer exist in the source
+      version.pages.where.not(page_uid: incoming_uids.to_a).destroy_all if incoming_uids.any?
     end
 
     def record_fetch_recipe(version, crawl_request)
