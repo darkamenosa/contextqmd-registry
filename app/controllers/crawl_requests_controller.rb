@@ -3,7 +3,7 @@
 class CrawlRequestsController < InertiaController
   allow_unauthenticated_access only: :index
   disallow_account_scope
-  before_action :authenticate_identity!, only: [ :new, :create ]
+  before_action :authenticate_identity!, only: :new
 
   def index
     crawl_requests = CrawlRequest.includes(:identity, :library).recent.limit(50)
@@ -20,17 +20,8 @@ class CrawlRequestsController < InertiaController
   end
 
   def new
-    render inertia: "crawl-requests/new"
-  end
-
-  def create
-    crawl_request = Current.identity.crawl_requests.new(crawl_request_params)
-
-    if crawl_request.save
-      redirect_to crawl_requests_path, notice: "URL submitted for crawling!"
-    else
-      redirect_to new_crawl_request_path, alert: crawl_request.errors.full_messages.join(", ")
-    end
+    membership = Current.identity.accessible_memberships.includes(:account).first
+    redirect_to new_app_crawl_request_path(account_id: membership.account.external_account_id)
   end
 
   private
@@ -48,9 +39,5 @@ class CrawlRequestsController < InertiaController
         created_at: cr.created_at.iso8601,
         updated_at: cr.updated_at.iso8601
       }
-    end
-
-    def crawl_request_params
-      params.expect(crawl_request: [ :url, :source_type ])
     end
 end

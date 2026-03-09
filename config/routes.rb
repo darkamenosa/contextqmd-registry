@@ -14,6 +14,7 @@ Rails.application.routes.draw do
     namespace :app, path: "" do
       resource :dashboard, only: :show
       resources :projects, only: [ :index ]
+      resources :crawl_requests, only: [ :new, :create ], path: "crawl"
       resource :settings, only: [ :show, :update, :destroy ]
     end
     get "access_tokens", to: "app/access_tokens#index", as: :scoped_app_access_tokens
@@ -70,8 +71,11 @@ Rails.application.routes.draw do
     end
   end
 
-  # Crawl requests (authenticated)
-  resources :crawl_requests, only: [ :index, :new, :create ], path: "crawl"
+  # Crawl requests: index is public, new redirects to app layout
+  resources :crawl_requests, only: [ :index, :new ], path: "crawl"
+
+  # Rankings
+  get "rankings", to: "rankings#index"
 
   # Public pages
   root "pages#home"

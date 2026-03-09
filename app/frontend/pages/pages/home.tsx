@@ -11,6 +11,7 @@ import {
   Server,
   Star,
   Terminal,
+  TrendingUp,
 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -173,6 +174,11 @@ export default function Home({
     (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
   )
 
+  // "Trending" = most pages (documentation coverage as a rough signal)
+  const sortedByTrending = [...libraries].sort(
+    (a, b) => b.pageCount - a.pageCount || b.versionCount - a.versionCount,
+  )
+
   return (
     <PublicLayout
       title="ContextQMD — Local-First Docs for AI"
@@ -225,6 +231,10 @@ export default function Home({
                 <Star className="size-3.5" />
                 Popular
               </TabsTrigger>
+              <TabsTrigger value="trending" className="gap-1.5">
+                <TrendingUp className="size-3.5" />
+                Trending
+              </TabsTrigger>
               <TabsTrigger value="recent" className="gap-1.5">
                 <Clock className="size-3.5" />
                 Recent
@@ -242,13 +252,19 @@ export default function Home({
           </div>
 
           <TabsContent value="popular" className="mt-4">
-            <div className="rounded-xl border">
+            <div className="overflow-x-auto rounded-xl border">
               <LibraryTable libraries={libraries} />
             </div>
           </TabsContent>
 
+          <TabsContent value="trending" className="mt-4">
+            <div className="overflow-x-auto rounded-xl border">
+              <LibraryTable libraries={sortedByTrending} />
+            </div>
+          </TabsContent>
+
           <TabsContent value="recent" className="mt-4">
-            <div className="rounded-xl border">
+            <div className="overflow-x-auto rounded-xl border">
               <LibraryTable libraries={sortedByRecent} />
             </div>
           </TabsContent>

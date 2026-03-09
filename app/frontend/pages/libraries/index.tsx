@@ -80,7 +80,7 @@ export default function LibrariesIndex({ libraries, query }: Props) {
           <Button
             variant="outline"
             nativeButton={false}
-            render={<Link href="/libraries/new" />}
+            render={<Link href="/crawl/new" />}
           >
             <Plus className="size-4" />
             Submit

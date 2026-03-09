@@ -141,11 +141,10 @@ export default function AppDashboard({ stats, recentCrawls, recentLibraries }: P
         <Button
           variant="outline"
           nativeButton={false}
-          render={<Link href="/libraries/new" />}
+          render={<Link href="/crawl" />}
           size="sm"
         >
-          <Plus className="size-4" />
-          Add Library
+          View Crawl Queue
         </Button>
         <Button
           variant="outline"

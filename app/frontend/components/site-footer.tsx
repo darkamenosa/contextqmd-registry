@@ -5,24 +5,29 @@ export function SiteFooter() {
   return (
     <footer className="border-t bg-background">
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
           <div>
             <h3 className="text-sm font-semibold">Registry</h3>
             <ul className="mt-4 flex flex-col gap-2 text-sm text-muted-foreground">
               <li>
                 <Link href="/libraries" className="hover:text-foreground">
-                  Browse Libraries
+                  Libraries
                 </Link>
               </li>
               <li>
-                <Link href="/libraries/new" className="hover:text-foreground">
-                  Submit Library
+                <Link href="/rankings" className="hover:text-foreground">
+                  Rankings
+                </Link>
+              </li>
+              <li>
+                <Link href="/crawl" className="hover:text-foreground">
+                  Crawl Queue
                 </Link>
               </li>
             </ul>
           </div>
           <div>
-            <h3 className="text-sm font-semibold">Developers</h3>
+            <h3 className="text-sm font-semibold">Company</h3>
             <ul className="mt-4 flex flex-col gap-2 text-sm text-muted-foreground">
               <li>
                 <Link href="/about" className="hover:text-foreground">
