@@ -18,14 +18,10 @@ module Api
         get api_v1_capabilities_path
 
         features = response.parsed_body["data"]["features"]
-        assert_equal true, features["bundle_download"]
+        assert_equal false, features["bundle_download"] # not yet implemented
         assert_equal true, features["cursor_pagination"]
         assert_equal true, features["origin_fetch_recipes"]
-        assert_equal true, features["source_type_detection"]
-        assert_equal true, features["rate_limiting"]
-        assert_equal true, features["response_caching"]
-        assert_equal true, features["content_deduplication"]
-        assert_equal true, features["token_bounded_retrieval"]
+        assert_equal true, features["hosted_content"]
         assert_equal false, features["signed_manifests"]
         assert_equal false, features["delta_sync"]
       end

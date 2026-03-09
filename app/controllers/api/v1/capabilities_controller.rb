@@ -6,21 +6,14 @@ module Api
       skip_before_action :authenticate_api_token!
 
       FEATURES = {
-        bundle_download: true,
+        bundle_download: false, # not yet implemented — page-by-page only
         signed_manifests: false,
         signed_fetch_recipes: false,
         origin_fetch_recipes: true,
-        hosted_content: false,
+        hosted_content: true, # registry hosts page content via API
         cursor_pagination: true,
         private_sources: false,
-        delta_sync: false,
-        source_type_detection: true,
-        rate_limiting: true,
-        response_caching: true,
-        content_deduplication: true,
-        stale_page_cleanup: true,
-        token_bounded_retrieval: true,
-        proxy_pool: true
+        delta_sync: false
       }.freeze
 
       SOURCE_TYPES = DocsFetcher::FETCHERS.keys.freeze
