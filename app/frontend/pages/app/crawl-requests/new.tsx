@@ -2,7 +2,6 @@ import type { FormEvent } from "react"
 import { Head, useForm, usePage } from "@inertiajs/react"
 import {
   BookOpen,
-  Code2,
   FileCode,
   FileText,
   GitBranch,
@@ -28,19 +27,12 @@ import AppLayout from "@/layouts/app-layout"
 
 const sourceTypes = [
   {
-    value: "github",
-    label: "GitHub",
+    value: "git",
+    label: "Git Repository",
     icon: GitBranch,
     description:
-      "Index docs from a GitHub repository. Include /tree/<tag> for a specific version.",
+      "Index docs from a Git repository (GitHub, GitLab, Bitbucket). Include /tree/<tag> for a specific version.",
     placeholder: "https://github.com/rails/rails/tree/v8.1.2",
-  },
-  {
-    value: "gitlab",
-    label: "GitLab",
-    icon: Code2,
-    description: "Index docs from a GitLab repository",
-    placeholder: "https://gitlab.com/org/project",
   },
   {
     value: "website",
@@ -69,7 +61,7 @@ export default function AppCrawlRequestsNew() {
   const { url: pageUrl } = usePage()
   const { data, setData, post, processing, transform } = useForm({
     url: "",
-    sourceType: "github",
+    sourceType: "git",
   })
 
   const selectedSource = sourceTypes.find((s) => s.value === data.sourceType)

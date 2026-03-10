@@ -46,6 +46,7 @@ interface Props {
 }
 
 const sourceTypeLabels: Record<string, string> = {
+  git: "Git",
   github: "GitHub",
   gitlab: "GitLab",
   website: "Website",

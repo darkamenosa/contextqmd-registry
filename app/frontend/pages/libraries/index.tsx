@@ -40,6 +40,7 @@ function LicenseBadge({ status }: { status: string | null }) {
 }
 
 const SOURCE_TYPE_LABELS: Record<string, string> = {
+  git: "Git",
   github: "GitHub",
   github_markdown: "GitHub",
   gitlab: "GitLab",

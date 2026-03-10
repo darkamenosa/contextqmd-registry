@@ -4,8 +4,7 @@
 # Each fetcher returns a DocsFetcher::Result with library metadata and pages.
 module DocsFetcher
   FETCHERS = {
-    "github" => "DocsFetcher::Github",
-    "gitlab" => "DocsFetcher::Gitlab",
+    "git" => "DocsFetcher::Git",
     "website" => "DocsFetcher::Website",
     "llms_txt" => "DocsFetcher::LlmsTxt",
     "openapi" => "DocsFetcher::Openapi"
@@ -13,6 +12,8 @@ module DocsFetcher
 
   GITHUB_HOSTS = %w[github.com].freeze
   GITLAB_HOSTS = %w[gitlab.com].freeze
+  BITBUCKET_HOSTS = %w[bitbucket.org].freeze
+  GIT_HOSTS = (GITHUB_HOSTS + GITLAB_HOSTS + BITBUCKET_HOSTS).freeze
 
   def self.for(source_type)
     klass = FETCHERS[source_type]
@@ -21,14 +22,14 @@ module DocsFetcher
   end
 
   # Auto-detect source_type from a URL string.
-  # Returns one of: "github", "gitlab", "llms_txt", "openapi", "website"
+  # Returns one of: "git", "llms_txt", "openapi", "website"
   def self.detect_source_type(url)
     uri = URI.parse(url.strip)
     host = uri.host&.downcase || ""
     path = uri.path&.downcase || ""
 
-    return "github" if GITHUB_HOSTS.include?(host)
-    return "gitlab" if GITLAB_HOSTS.include?(host) || gitlab_host?(host)
+    return "git" if GIT_HOSTS.include?(host)
+    return "git" if gitlab_host?(host)
     return "llms_txt" if path.match?(/llms(?:-full|-small)?\.txt\z/)
     return "openapi" if openapi_path?(path)
 

@@ -30,11 +30,12 @@ module Api
         get api_v1_capabilities_path
 
         source_types = response.parsed_body["data"]["source_types"]
-        assert_includes source_types, "github"
-        assert_includes source_types, "gitlab"
+        assert_includes source_types, "git"
         assert_includes source_types, "website"
         assert_includes source_types, "llms_txt"
         assert_includes source_types, "openapi"
+        assert_not_includes source_types, "github"
+        assert_not_includes source_types, "gitlab"
       end
 
       test "response has correct envelope" do

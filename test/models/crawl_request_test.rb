@@ -7,16 +7,22 @@ class CrawlRequestTest < ActiveSupport::TestCase
 
   # --- Auto-detect source_type ---
 
-  test "auto-detects github source_type from URL" do
+  test "auto-detects git source_type from GitHub URL" do
     cr = CrawlRequest.new(url: "https://github.com/rails/rails", identity: @identity, status: "pending")
     cr.valid?
-    assert_equal "github", cr.source_type
+    assert_equal "git", cr.source_type
   end
 
-  test "auto-detects gitlab source_type from URL" do
+  test "auto-detects git source_type from GitLab URL" do
     cr = CrawlRequest.new(url: "https://gitlab.com/group/project", identity: @identity, status: "pending")
     cr.valid?
-    assert_equal "gitlab", cr.source_type
+    assert_equal "git", cr.source_type
+  end
+
+  test "auto-detects git source_type from Bitbucket URL" do
+    cr = CrawlRequest.new(url: "https://bitbucket.org/owner/repo", identity: @identity, status: "pending")
+    cr.valid?
+    assert_equal "git", cr.source_type
   end
 
   test "auto-detects llms_txt source_type from URL" do
@@ -34,7 +40,7 @@ class CrawlRequestTest < ActiveSupport::TestCase
   test "auto-detect overrides explicit source_type from URL" do
     cr = CrawlRequest.new(url: "https://github.com/rails/rails", source_type: "website", identity: @identity, status: "pending")
     cr.valid?
-    assert_equal "github", cr.source_type
+    assert_equal "git", cr.source_type
   end
 
   test "auto-detects openapi source_type" do
@@ -46,7 +52,7 @@ class CrawlRequestTest < ActiveSupport::TestCase
   # --- Validations ---
 
   test "validates presence of url" do
-    cr = CrawlRequest.new(source_type: "github", identity: @identity, status: "pending")
+    cr = CrawlRequest.new(source_type: "git", identity: @identity, status: "pending")
     assert_not cr.valid?
     assert_includes cr.errors[:url], "can't be blank"
   end

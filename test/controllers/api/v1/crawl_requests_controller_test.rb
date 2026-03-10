@@ -30,7 +30,7 @@ module Api
 
         assert_response :ok
         body = response.parsed_body
-        assert_equal "github", body["data"]["source_type"]
+        assert_equal "git", body["data"]["source_type"]
         assert_equal "pending", body["data"]["status"]
         assert_equal "queued", body["meta"]["status"]
       end

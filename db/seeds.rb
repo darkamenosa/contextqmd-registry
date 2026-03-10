@@ -119,10 +119,10 @@ puts "  #{SourcePolicy.count} source policies"
 # --- Fetch Recipes (one per version) ---
 {
   nextjs_stable => { source_type: "llms_full_txt", url: "https://nextjs.org/docs/llms-full.txt" },
-  rails_stable => { source_type: "github_markdown", url: "https://github.com/rails/rails/tree/v8.1.2/guides/source" },
-  inertia_stable => { source_type: "github_markdown", url: "https://github.com/inertiajs/inertia/tree/v2.0/docs" },
+  rails_stable => { source_type: "git", url: "https://github.com/rails/rails/tree/v8.1.2/guides/source" },
+  inertia_stable => { source_type: "git", url: "https://github.com/inertiajs/inertia/tree/v2.0/docs" },
   react_stable => { source_type: "llms_full_txt", url: "https://react.dev/llms-full.txt" },
-  tailwind_stable => { source_type: "github_markdown", url: "https://github.com/tailwindlabs/tailwindcss.com/tree/main/src/docs" }
+  tailwind_stable => { source_type: "git", url: "https://github.com/tailwindlabs/tailwindcss.com/tree/main/src/docs" }
 }.each do |version, attrs|
   FetchRecipe.find_or_create_by!(version: version) do |fr|
     fr.source_type = attrs[:source_type]

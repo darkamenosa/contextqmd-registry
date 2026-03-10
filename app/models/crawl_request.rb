@@ -7,7 +7,7 @@ class CrawlRequest < ApplicationRecord
   belongs_to :identity
   belongs_to :library, optional: true
 
-  SOURCE_TYPES = %w[github gitlab website openapi llms_txt].freeze
+  SOURCE_TYPES = %w[git website openapi llms_txt].freeze
   STATUSES = %w[pending processing completed failed cancelled].freeze
 
   validates :url, presence: true, format: { with: URI::DEFAULT_PARSER.make_regexp(%w[http https]) }
