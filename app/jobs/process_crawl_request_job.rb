@@ -3,9 +3,8 @@
 class ProcessCrawlRequestJob < ApplicationJob
   queue_as :default
 
-  # Mark as failed only after all retries are exhausted.
-  # High attempt count ensures transient failures (rate limits, timeouts) don't drop requests.
-  retry_on StandardError, wait: :polynomially_longer, attempts: 10 do |job, error|
+  # Fail immediately — no retries. Errors surface quickly for debugging.
+  discard_on(StandardError) do |job, error|
     crawl_request = job.arguments.first
     crawl_request&.fail!(error.message) unless crawl_request&.completed?
   end
