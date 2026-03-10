@@ -1,11 +1,10 @@
-import { Fragment, useState, type FormEvent } from "react"
+import { useState, type FormEvent } from "react"
 import { Link, router } from "@inertiajs/react"
 import type { PaginationData } from "@/types"
 import {
   ArrowLeft,
   BookOpen,
   Check,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Copy,
@@ -22,13 +21,14 @@ import remarkGfm from "remark-gfm"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Table,
   TableBody,
@@ -312,84 +312,91 @@ install_docs({ library: "${slug}" })`
 
           {/* Pages tab */}
           <TabsContent value="pages" className="mt-6">
-            {/* Version selector */}
-            {versions.length > 1 && (
-              <div className="mb-4 flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Version:</span>
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    render={
-                      <Button variant="outline" size="sm" className="gap-1" />
-                    }
+            {/* Toolbar: unified filter bar */}
+            <div className="mb-5 flex flex-col gap-2 rounded-lg border bg-muted/20 p-2 sm:flex-row sm:items-center sm:gap-3">
+              {versions.length > 1 && (
+                <div className="flex shrink-0 items-center gap-2">
+                  <Select
+                    value={selectedVersion || versions[0]?.version}
+                    onValueChange={(val) => val && switchVersion(val as string)}
                   >
-                    {selectedVersion || versions[0]?.version || "—"}
-                    <ChevronDown className="size-3" />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start">
-                    {versions.map((v) => (
-                      <DropdownMenuItem
-                        key={v.version}
-                        onClick={() => switchVersion(v.version)}
-                      >
-                        <span className="flex-1">{v.version}</span>
-                        <span className="ml-4 text-xs text-muted-foreground">
-                          {v.pageCount} pages
-                        </span>
-                        {v.version === selectedVersion && (
-                          <Check className="ml-2 size-3.5" />
-                        )}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                {selectedVersionData && (
-                  <ChannelBadge channel={selectedVersionData.channel} />
-                )}
-              </div>
-            )}
-
-            {/* Search pages */}
-            <form onSubmit={handleSearch} className="mb-4 flex max-w-md gap-2">
-              <div className="relative flex-1">
-                <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  type="text"
-                  placeholder="Search pages by title, content, or path..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
-              <Button type="submit" size="sm">
-                Search
-              </Button>
-              {initialSearch && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearSearch}
-                >
-                  <X className="size-4" />
-                  Clear
-                </Button>
+                    <SelectTrigger size="sm" className="bg-background">
+                      <SelectValue placeholder="Version" />
+                    </SelectTrigger>
+                    <SelectContent align="start" alignItemWithTrigger={false}>
+                      {versions.map((v) => (
+                        <SelectItem key={v.version} value={v.version}>
+                          <span>{v.version}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {v.pageCount} pages
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedVersionData && (
+                    <ChannelBadge channel={selectedVersionData.channel} />
+                  )}
+                </div>
               )}
-            </form>
 
+              <form onSubmit={handleSearch} className="flex min-w-0 flex-1">
+                <div className="relative min-w-0 flex-1">
+                  <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    placeholder="Search pages..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="h-7 bg-background pr-8 pl-8 text-sm"
+                  />
+                  {(searchQuery || initialSearch) && (
+                    <button
+                      type="button"
+                      onClick={clearSearch}
+                      className="absolute top-1/2 right-2.5 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  )}
+                </div>
+              </form>
+            </div>
+
+            {/* Search results pill */}
             {initialSearch && (
-              <p className="mb-4 text-sm text-muted-foreground">
-                {pagination.total} result{pagination.total !== 1 ? "s" : ""} for
-                &ldquo;{initialSearch}&rdquo;
-              </p>
+              <div className="mb-4">
+                <span className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                  {pagination.total} result
+                  {pagination.total !== 1 ? "s" : ""} for
+                  <span className="font-semibold text-foreground">
+                    &ldquo;{initialSearch}&rdquo;
+                  </span>
+                  <button
+                    type="button"
+                    onClick={clearSearch}
+                    className="ml-0.5 rounded-xs p-0.5 hover:bg-foreground/10"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </span>
+              </div>
             )}
 
             {pages.length === 0 ? (
-              <div className="rounded-xl border border-dashed p-8 text-center">
-                <FileText className="mx-auto size-8 text-muted-foreground/50" />
-                <p className="mt-3 text-sm text-muted-foreground">
+              <div className="rounded-xl border border-dashed p-12 text-center">
+                <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-muted">
+                  <FileText className="size-5 text-muted-foreground" />
+                </div>
+                <p className="mt-4 text-sm font-medium">
                   {initialSearch
-                    ? "No pages match your search."
-                    : "Documentation hasn't been indexed yet. Check back soon or submit a crawl request."}
+                    ? "No pages match your search"
+                    : "No documentation indexed yet"}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {initialSearch
+                    ? "Try a different search term."
+                    : "Check back soon or submit a crawl request."}
                 </p>
                 {!initialSearch && (
                   <Button
@@ -405,112 +412,99 @@ install_docs({ library: "${slug}" })`
               </div>
             ) : (
               <>
-                <div className="rounded-xl border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-8" />
-                        <TableHead>Title</TableHead>
-                        <TableHead>Path</TableHead>
-                        <TableHead className="text-right">Size</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {pages.map((page) => {
-                        const isExpanded = expandedPage === page.pageUid
-                        return (
-                          <Fragment key={page.pageUid}>
-                            <TableRow
-                              className="cursor-pointer"
-                              onClick={() =>
-                                setExpandedPage(
-                                  isExpanded ? null : page.pageUid
-                                )
-                              }
-                            >
-                              <TableCell className="w-8 pr-0">
-                                {isExpanded ? (
-                                  <ChevronDown className="size-4 text-muted-foreground" />
-                                ) : (
-                                  <ChevronRight className="size-4 text-muted-foreground" />
+                <div className="overflow-hidden rounded-xl border">
+                  {pages.map((page, idx) => {
+                    const isExpanded = expandedPage === page.pageUid
+                    return (
+                      <div
+                        key={page.pageUid}
+                        className={idx > 0 ? "border-t" : ""}
+                      >
+                        <button
+                          type="button"
+                          className="group flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-muted/40"
+                          onClick={() =>
+                            setExpandedPage(isExpanded ? null : page.pageUid)
+                          }
+                        >
+                          <div className="mt-0.5 shrink-0">
+                            <ChevronRight
+                              className={`size-4 text-muted-foreground transition-transform duration-150 ${isExpanded ? "rotate-90" : ""}`}
+                            />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm/5 font-semibold group-hover:text-primary">
+                              {page.title}
+                            </div>
+                            {page.headings.length > 1 && (
+                              <div className="mt-1.5 flex flex-wrap gap-1">
+                                {page.headings.slice(1, 5).map((h) => (
+                                  <span
+                                    key={h}
+                                    className="inline-block rounded-xs bg-muted px-1.5 py-0.5 text-[11px]/3 text-muted-foreground"
+                                  >
+                                    {h}
+                                  </span>
+                                ))}
+                                {page.headings.length > 5 && (
+                                  <span className="inline-block px-1.5 py-0.5 text-[11px]/3 text-muted-foreground">
+                                    +{page.headings.length - 5} more
+                                  </span>
                                 )}
-                              </TableCell>
-                              <TableCell>
-                                <div className="font-medium">{page.title}</div>
-                                {page.headings.length > 1 && (
-                                  <div className="mt-1 flex flex-wrap gap-1">
-                                    {page.headings.slice(1, 4).map((h, i) => (
-                                      <span
-                                        key={h}
-                                        className="text-xs text-muted-foreground"
-                                      >
-                                        {h}
-                                        {i <
-                                        Math.min(page.headings.length - 2, 2)
-                                          ? " · "
-                                          : ""}
-                                      </span>
-                                    ))}
-                                    {page.headings.length > 4 && (
-                                      <span className="text-xs text-muted-foreground">
-                                        +{page.headings.length - 4} more
-                                      </span>
-                                    )}
-                                  </div>
-                                )}
-                              </TableCell>
-                              <TableCell className="font-mono text-xs text-muted-foreground">
-                                {page.path}
-                              </TableCell>
-                              <TableCell className="text-right text-sm text-muted-foreground">
-                                {formatBytes(page.bytes)}
-                              </TableCell>
-                            </TableRow>
-                            {isExpanded && page.content && (
-                              <TableRow>
-                                <TableCell
-                                  colSpan={4}
-                                  className="bg-muted/30 p-0"
-                                >
-                                  <div className="relative">
-                                    <CopyButton text={page.content} />
-                                    <div className="max-h-[500px] overflow-y-auto border-t border-b border-border/50 p-4 pr-12 shadow-inner">
-                                      <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:scroll-mt-4 prose-code:before:content-none prose-code:after:content-none prose-pre:bg-zinc-950 prose-pre:text-zinc-100">
-                                        <ReactMarkdown
-                                          remarkPlugins={[remarkGfm]}
-                                          components={{
-                                            img: () => null,
-                                          }}
-                                        >
-                                          {cleanMarkdown(page.content)}
-                                        </ReactMarkdown>
-                                      </div>
-                                      {selectedVersion && (
-                                        <div className="mt-4 border-t border-border/50 pt-3">
-                                          <Link
-                                            href={`/libraries/${slug}/versions/${selectedVersion}/pages/${page.pageUid}`}
-                                            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
-                                          >
-                                            <FileText className="size-3.5" />
-                                            View full page
-                                          </Link>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                </TableCell>
-                              </TableRow>
+                              </div>
                             )}
-                          </Fragment>
-                        )
-                      })}
-                    </TableBody>
-                  </Table>
+                          </div>
+                          <div className="hidden shrink-0 items-center gap-2 sm:flex">
+                            <code className="rounded-xs bg-muted px-1.5 py-0.5 text-[11px]/3 font-medium text-muted-foreground">
+                              {page.path}
+                            </code>
+                            <span className="min-w-12 text-right text-[11px] text-muted-foreground/70 tabular-nums">
+                              {formatBytes(page.bytes)}
+                            </span>
+                          </div>
+                        </button>
+                        {isExpanded && page.content && (
+                          <div className="relative border-t border-border/60 bg-muted/20">
+                            <CopyButton text={page.content} />
+                            <div className="max-h-[500px] overflow-y-auto p-4 pr-12">
+                              <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:scroll-mt-4 prose-code:before:content-none prose-code:after:content-none prose-pre:overflow-x-auto prose-pre:bg-zinc-950 prose-pre:text-zinc-100">
+                                <ReactMarkdown
+                                  remarkPlugins={[remarkGfm]}
+                                  components={{
+                                    img: () => null,
+                                  }}
+                                >
+                                  {cleanMarkdown(page.content)}
+                                </ReactMarkdown>
+                              </div>
+                              {selectedVersion && (
+                                <div className="mt-4 border-t border-border/40 pt-3">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    nativeButton={false}
+                                    render={
+                                      <Link
+                                        href={`/libraries/${slug}/versions/${selectedVersion}/pages/${page.pageUid}`}
+                                      />
+                                    }
+                                  >
+                                    <FileText className="size-3.5" />
+                                    View full page
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
 
                 {/* Pagination */}
                 {pagination.pages > 1 && (
-                  <div className="mt-4 flex items-center justify-center gap-2">
+                  <div className="mt-5 flex items-center justify-between">
                     <Button
                       variant="outline"
                       size="sm"
@@ -518,11 +512,10 @@ install_docs({ library: "${slug}" })`
                       disabled={!pagination.hasPrevious}
                     >
                       <ChevronLeft className="size-4" />
-                      Previous
+                      <span className="hidden sm:inline">Previous</span>
                     </Button>
-                    <span className="text-sm text-muted-foreground">
-                      Page {pagination.page} of {pagination.pages} (
-                      {pagination.total} pages)
+                    <span className="rounded-md bg-muted px-3 py-1 text-xs font-medium text-muted-foreground tabular-nums">
+                      {pagination.page} / {pagination.pages}
                     </span>
                     <Button
                       variant="outline"
@@ -530,7 +523,7 @@ install_docs({ library: "${slug}" })`
                       onClick={() => goToPage(pagination.page + 1)}
                       disabled={!pagination.hasNext}
                     >
-                      Next
+                      <span className="hidden sm:inline">Next</span>
                       <ChevronRight className="size-4" />
                     </Button>
                   </div>
