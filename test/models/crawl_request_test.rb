@@ -56,4 +56,24 @@ class CrawlRequestTest < ActiveSupport::TestCase
     cr.valid?
     assert_equal "website", cr.source_type
   end
+
+  # --- SSRF protection ---
+
+  test "rejects localhost URLs" do
+    cr = CrawlRequest.new(url: "http://localhost:3000/admin", identity: @identity, status: "pending")
+    assert_not cr.valid?
+    assert_includes cr.errors[:url], "must not point to a private address"
+  end
+
+  test "rejects 127.0.0.1 URLs" do
+    cr = CrawlRequest.new(url: "http://127.0.0.1/secret", identity: @identity, status: "pending")
+    assert_not cr.valid?
+    assert_includes cr.errors[:url], "must not point to a private address"
+  end
+
+  test "rejects 0.0.0.0 URLs" do
+    cr = CrawlRequest.new(url: "http://0.0.0.0:8080/api", identity: @identity, status: "pending")
+    assert_not cr.valid?
+    assert_includes cr.errors[:url], "must not point to a private address"
+  end
 end

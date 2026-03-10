@@ -27,9 +27,6 @@ class ProcessCrawlRequestJob < ApplicationJob
     library.update!(default_version: version.version) if library.default_version.blank?
 
     crawl_request.complete!(library)
-  rescue StandardError => e
-    crawl_request.fail!(e.message) if crawl_request.processing?
-    raise
   end
 
   private

@@ -3,6 +3,8 @@
 require "test_helper"
 
 class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
+  include ActiveJob::TestHelper
+
   setup do
     identity, @account, _user = create_tenant
     @identity = identity
@@ -110,22 +112,19 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     assert_equal "stable", version.channel
   end
 
-  test "marks crawl request as failed on error" do
+  test "marks crawl request as failed on error after retries exhausted" do
     error_fetcher = Object.new
     error_fetcher.define_singleton_method(:fetch) { |_url| raise "Network error" }
 
     original_for = DocsFetcher.method(:for)
     DocsFetcher.define_singleton_method(:for) { |_source_type| error_fetcher }
 
-    # retry_on with perform_now retries inline; after all attempts the job
-    # may or may not re-raise depending on Rails version.  We handle both.
-    begin
-      ProcessCrawlRequestJob.perform_now(@crawl_request)
-    rescue RuntimeError
-      # expected — some Rails versions re-raise after final retry
-    ensure
-      DocsFetcher.define_singleton_method(:for, original_for)
+    # Use perform_enqueued_jobs to trigger retry_on's exhaustion handler
+    perform_enqueued_jobs do
+      ProcessCrawlRequestJob.perform_later(@crawl_request)
     end
+
+    DocsFetcher.define_singleton_method(:for, original_for)
 
     @crawl_request.reload
     assert_equal "failed", @crawl_request.status
