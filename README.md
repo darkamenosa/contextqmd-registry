@@ -4,7 +4,7 @@ Documentation package registry for ContextQMD. A Rails API that stores, indexes,
 
 ## What it does
 
-The registry is the backend for [contextqmd-mcp](https://github.com/tuyenhx/contextqmd-mcp). It:
+The registry is the backend for [contextqmd-mcp](https://github.com/darkamenosa/contextqmd-mcp). It:
 
 - Crawls documentation from GitHub repos, llms.txt files, websites, and OpenAPI specs
 - Splits docs into versioned pages with headings, checksums, and search metadata
