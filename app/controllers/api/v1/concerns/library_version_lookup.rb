@@ -16,9 +16,25 @@ module Api
 
           def find_library_and_version!
             @library = Library.find_by!(namespace: params[:namespace], name: params[:name])
-            @version = @library.versions.find_by!(version: params[:version])
+            @version = resolve_url_version(@library, params[:version])
+            raise ActiveRecord::RecordNotFound unless @version
           rescue ActiveRecord::RecordNotFound
             render_error(code: "not_found", message: "Library or version not found", status: :not_found)
+          end
+
+          def resolve_url_version(library, version_param)
+            case version_param
+            when "latest"
+              if library.default_version.present?
+                library.versions.find_by(version: library.default_version) || library.versions.ordered.first
+              else
+                library.versions.ordered.first
+              end
+            when "stable"
+              library.versions.stable.ordered.first
+            else
+              library.versions.find_by(version: version_param)
+            end
           end
 
           # Shared serializers — single source of truth for API JSON shapes.

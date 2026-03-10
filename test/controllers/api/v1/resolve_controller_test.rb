@@ -95,6 +95,9 @@ module Api
         assert_equal "16.1.6", version["version"]
         assert_equal "stable", version["channel"]
         assert_equal "sha256:nextjs1616checksum", version["manifest_checksum"]
+
+        assert body["data"].key?("manifest_url")
+        assert_includes body["data"]["manifest_url"], @nextjs_stable.version
       end
 
       test "POST /resolve with namespace/name format returns library" do
@@ -148,6 +151,22 @@ module Api
       test "POST /resolve with exact version_hint returns that version" do
         post api_v1_resolve_path,
           params: { query: "nextjs-#{@hex}", version_hint: "17.0.0-canary.1" },
+          headers: auth_headers,
+          as: :json
+
+        assert_response :ok
+
+        body = response.parsed_body
+        version = body["data"]["version"]
+        assert_equal "17.0.0-canary.1", version["version"]
+        assert_equal "canary", version["channel"]
+      end
+
+      # -- Version hint: canary channel --
+
+      test "POST /resolve with version_hint canary returns canary version" do
+        post api_v1_resolve_path,
+          params: { query: "nextjs-#{@hex}", version_hint: "canary" },
           headers: auth_headers,
           as: :json
 

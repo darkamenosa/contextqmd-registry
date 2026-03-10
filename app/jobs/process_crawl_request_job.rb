@@ -24,7 +24,9 @@ class ProcessCrawlRequestJob < ApplicationJob
     record_fetch_recipe(version, crawl_request)
     update_manifest_checksum!(version)
 
-    library.update!(default_version: version.version) if library.default_version.blank?
+    if library.default_version.blank? || !library.versions.exists?(version: library.default_version)
+      library.update!(default_version: version.version)
+    end
 
     crawl_request.complete!(library)
   end

@@ -19,7 +19,8 @@ module Api
 
         render_data({
           library: serialize_library_summary(library),
-          version: serialize_version_summary(version)
+          version: serialize_version_summary(version),
+          manifest_url: "/api/v1/libraries/#{library.namespace}/#{library.name}/versions/#{version.version}/manifest"
         })
       end
 
@@ -50,8 +51,8 @@ module Api
           case version_hint
           when nil, "", "latest"
             resolve_latest(library)
-          when "stable"
-            library.versions.stable.ordered.first
+          when "stable", "canary", "snapshot"
+            library.versions.where(channel: version_hint).ordered.first
           else
             library.versions.find_by(version: version_hint)
           end

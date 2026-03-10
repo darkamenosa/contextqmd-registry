@@ -86,6 +86,25 @@ module Api
         assert_equal "not_found", body["error"]["code"]
       end
 
+      test "GET manifest with 'latest' resolves to default version" do
+        get "/api/v1/libraries/vercel/nextjs/versions/latest/manifest"
+
+        assert_response :ok
+
+        body = response.parsed_body
+        assert_equal "16.1.6", body["data"]["version"]
+      end
+
+      test "GET manifest with 'stable' resolves to stable channel version" do
+        get "/api/v1/libraries/vercel/nextjs/versions/stable/manifest"
+
+        assert_response :ok
+
+        body = response.parsed_body
+        assert_equal "16.1.6", body["data"]["version"]
+        assert_equal "stable", body["data"]["channel"]
+      end
+
       private
 
         def auth_headers
