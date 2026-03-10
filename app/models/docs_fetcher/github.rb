@@ -324,9 +324,8 @@ module DocsFetcher
                        repo.tr("-", " ").split.map(&:capitalize).join(" ")
         description = repo_data["description"]
 
-        # Use topics + repo name for aliases
-        topics = repo_data["topics"] || []
-        aliases = ([ repo, repo.tr("-", "") ] + topics.first(5)).uniq
+        # Only use name variants as aliases — topics are too generic and cause cross-matching
+        aliases = [ repo, repo.tr("-", ""), repo.tr(".", "-") ].map(&:downcase).uniq
 
         Result.new(
           namespace: owner.downcase,

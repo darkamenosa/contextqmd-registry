@@ -4,8 +4,8 @@ class ProcessCrawlRequestJob < ApplicationJob
   queue_as :default
 
   # Mark as failed only after all retries are exhausted.
-  # The block runs when retry_on gives up (after 3 attempts).
-  retry_on StandardError, wait: :polynomially_longer, attempts: 3 do |job, error|
+  # High attempt count ensures transient failures (rate limits, timeouts) don't drop requests.
+  retry_on StandardError, wait: :polynomially_longer, attempts: 10 do |job, error|
     crawl_request = job.arguments.first
     crawl_request&.fail!(error.message) unless crawl_request&.completed?
   end
@@ -39,10 +39,7 @@ class ProcessCrawlRequestJob < ApplicationJob
       # 1. Exact namespace/name match
       library = Library.find_by(namespace: result.namespace, name: result.name)
 
-      # 2. Try matching by name alone (e.g. GitHub "hotwired/stimulus" vs website "stimulus/stimulus")
-      library ||= Library.find_by(name: result.name)
-
-      # 3. Try alias match — same lib crawled from different sources
+      # 2. Try alias match — same lib crawled from different sources
       #    (e.g. GitHub aliases=["stimulus"] matches website namespace="stimulus")
       unless library
         candidates = (result.aliases || []) + [ result.name ]
