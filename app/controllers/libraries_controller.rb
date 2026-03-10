@@ -57,9 +57,14 @@ class LibrariesController < InertiaController
   end
 
   def create
+    account = Current.identity.users.first&.account
+    unless account
+      redirect_to new_library_path, alert: "Please complete your account setup first."
+      return
+    end
+
     library = Library.new(library_params)
-    # For now, assign a default account (first account of the identity)
-    library.account = Current.identity.users.first&.account || Account.first
+    library.account = account
 
     if library.save
       redirect_to detail_libraries_path(namespace: library.namespace, name: library.name),

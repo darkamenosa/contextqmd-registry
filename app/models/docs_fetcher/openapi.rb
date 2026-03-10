@@ -294,7 +294,7 @@ module DocsFetcher
         response = http.request(request)
 
         if response.is_a?(Net::HTTPRedirection) && response["location"]
-          return http_get(URI.parse(response["location"]), redirect_limit: redirect_limit - 1)
+          return http_get(URI.join(uri, response["location"]), redirect_limit: redirect_limit - 1)
         end
 
         return nil unless response.is_a?(Net::HTTPSuccess)

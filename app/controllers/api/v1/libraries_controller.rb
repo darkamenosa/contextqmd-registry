@@ -16,7 +16,7 @@ module Api
           Library.all
         end
 
-        result = paginate(libraries)
+        result = paginate(libraries.includes(:versions))
 
         render_data(
           result[:records].map { |lib| library_summary_json(lib) },
@@ -38,7 +38,7 @@ module Api
         end
 
         def library_summary_json(library)
-          serialize_library_summary(library).merge(version_count: library.versions.count)
+          serialize_library_summary(library).merge(version_count: library.versions.size)
         end
 
         def library_detail_json(library)

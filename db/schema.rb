@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_10_050008) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_10_050821) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -88,7 +88,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_10_050008) do
     t.datetime "updated_at", null: false
     t.string "url"
     t.bigint "version_id", null: false
-    t.index ["version_id"], name: "index_fetch_recipes_on_version_id"
+    t.index ["version_id"], name: "index_fetch_recipes_on_version_id", unique: true
   end
 
   create_table "identities", force: :cascade do |t|
