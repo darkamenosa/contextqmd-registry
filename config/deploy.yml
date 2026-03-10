@@ -2,22 +2,22 @@
 service: contextqmd_registry
 
 # Name of the container image.
-image: your-user/contextqmd_registry
+image: tuyenhx/contextqmd_registry
 
 # Deploy to these servers.
 servers:
   web:
-    - 192.168.0.1
+    - 46.225.105.37
   vite:
     hosts:
-      - 192.168.0.1
+      - 46.225.105.37
     cmd: node public/vite-ssr/ssr.js
     options:
       init: true
       network-alias: vite_ssr
   job:
     hosts:
-      - 192.168.0.1
+      - 46.225.105.37
     cmd: bin/jobs
     options:
       init: true
@@ -26,11 +26,11 @@ servers:
 # Note: If using Cloudflare, set encryption mode to "Full" in SSL/TLS settings.
 proxy:
   ssl: true
-  host: app.example.com
+  host: contextqmd.com
 
 # Credentials for your image host.
 registry:
-  username: your-user
+  username: tuyenhx
   password:
     - KAMAL_REGISTRY_PASSWORD
 
@@ -45,7 +45,7 @@ env:
 
     # Database configuration
     DB_HOST: contextqmd_registry-db
-    APP_HOST: app.example.com
+    APP_HOST: contextqmd.com
     INERTIA_SSR_URL: http://vite_ssr:13714
 
     # Job queue configuration - optimized for 2 vCPU, 4GB RAM
@@ -79,7 +79,7 @@ builder:
 accessories:
   db:
     image: postgres:18
-    host: 192.168.0.1
+    host: 46.225.105.37
     port: "127.0.0.1:5432:5432"
     env:
       clear:
@@ -93,7 +93,7 @@ accessories:
       - contextqmd_registry_data:/var/lib/postgresql
 #  redis:
 #    image: valkey/valkey:9
-#    host: 192.168.0.1
+#    host: 46.225.105.37
 #    port: "127.0.0.1:6379:6379"
 #    directories:
 #      - redis_data:/data
