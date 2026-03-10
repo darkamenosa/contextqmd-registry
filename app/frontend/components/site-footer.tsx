@@ -65,8 +65,7 @@ export function SiteFooter() {
             <span className="font-medium">ContextQMD</span>
           </Link>
           <span>
-            &copy; {new Date().getFullYear()} ContextQMD. All rights
-            reserved.
+            &copy; {new Date().getFullYear()} ContextQMD. All rights reserved.
           </span>
         </div>
       </div>

@@ -65,7 +65,11 @@ function formatTimeAgo(iso: string): string {
   return `${days}d ago`
 }
 
-export default function AppDashboard({ stats, recentCrawls, recentLibraries }: Props) {
+export default function AppDashboard({
+  stats,
+  recentCrawls,
+  recentLibraries,
+}: Props) {
   return (
     <AppLayout>
       <Head title="Dashboard" />
@@ -119,9 +123,7 @@ export default function AppDashboard({ stats, recentCrawls, recentLibraries }: P
               </div>
               <div>
                 <div className="text-2xl font-bold">{stats.crawlPending}</div>
-                <div className="text-xs text-muted-foreground">
-                  Crawl Queue
-                </div>
+                <div className="text-xs text-muted-foreground">Crawl Queue</div>
               </div>
             </div>
           </CardContent>
@@ -215,9 +217,7 @@ export default function AppDashboard({ stats, recentCrawls, recentLibraries }: P
           </CardHeader>
           <CardContent>
             {recentLibraries.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No libraries yet.
-              </p>
+              <p className="text-sm text-muted-foreground">No libraries yet.</p>
             ) : (
               <div className="space-y-3">
                 {recentLibraries.map((lib) => (

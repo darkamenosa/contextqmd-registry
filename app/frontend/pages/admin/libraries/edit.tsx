@@ -146,9 +146,7 @@ export default function AdminLibraryEdit({ library }: Props) {
                   <Button
                     variant="outline"
                     nativeButton={false}
-                    render={
-                      <Link href={`/admin/libraries/${library.id}`} />
-                    }
+                    render={<Link href={`/admin/libraries/${library.id}`} />}
                   >
                     Cancel
                   </Button>

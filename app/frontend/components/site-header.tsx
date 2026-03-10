@@ -36,9 +36,7 @@ export function SiteHeader() {
           <div className="flex size-8 items-center justify-center rounded-lg bg-foreground text-background">
             <Command className="size-4" />
           </div>
-          <span className="font-semibold tracking-tight">
-            ContextQMD
-          </span>
+          <span className="font-semibold tracking-tight">ContextQMD</span>
         </Link>
 
         {/* Center nav */}

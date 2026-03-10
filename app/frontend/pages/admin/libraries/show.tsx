@@ -448,7 +448,9 @@ export default function AdminLibraryShow({
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete &ldquo;{library.displayName}&rdquo;?</DialogTitle>
+            <DialogTitle>
+              Delete &ldquo;{library.displayName}&rdquo;?
+            </DialogTitle>
             <DialogDescription>
               This will permanently delete this library and all its versions,
               pages, and bundles. Any crawl requests referencing this library

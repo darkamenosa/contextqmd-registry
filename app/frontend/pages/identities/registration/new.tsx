@@ -66,9 +66,7 @@ export default function RegisterPage() {
           <Card>
             <CardHeader className="text-center">
               <CardTitle className="text-xl">Create an account</CardTitle>
-              <CardDescription>
-                Get started with ContextQMD
-              </CardDescription>
+              <CardDescription>Get started with ContextQMD</CardDescription>
             </CardHeader>
             <CardContent>
               <FieldGroup className="gap-5">

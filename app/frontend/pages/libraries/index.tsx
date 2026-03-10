@@ -1,12 +1,6 @@
-import { type FormEvent, useState } from "react"
+import { useState, type FormEvent } from "react"
 import { Link, router } from "@inertiajs/react"
-import {
-  BookOpen,
-  FileText,
-  Library,
-  Plus,
-  Search,
-} from "lucide-react"
+import { BookOpen, FileText, Library, Plus, Search } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -177,7 +171,11 @@ export default function LibrariesIndex({ libraries, query }: Props) {
                         )}
                         <SourceTypeBadge sourceType={lib.sourceType} />
                         {lib.aliases.map((alias) => (
-                          <Badge key={alias} variant="outline" className="text-xs">
+                          <Badge
+                            key={alias}
+                            variant="outline"
+                            className="text-xs"
+                          >
                             {alias}
                           </Badge>
                         ))}
@@ -186,7 +184,8 @@ export default function LibrariesIndex({ libraries, query }: Props) {
                         {lib.versionCount > 0 && (
                           <span className="flex items-center gap-1">
                             <BookOpen className="size-3" />
-                            {lib.versionCount} version{lib.versionCount !== 1 ? "s" : ""}
+                            {lib.versionCount} version
+                            {lib.versionCount !== 1 ? "s" : ""}
                           </span>
                         )}
                         {lib.pageCount > 0 && (

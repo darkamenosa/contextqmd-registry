@@ -22,9 +22,7 @@ export default function Contact() {
             <Button
               size="lg"
               nativeButton={false}
-              render={
-                <a href="mailto:contextqmd@example.com" />
-              }
+              render={<a href="mailto:contextqmd@example.com" />}
             >
               <Mail className="size-5" />
               Send us an Email

@@ -10,7 +10,6 @@ import {
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Table,
   TableBody,
@@ -19,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import PublicLayout from "@/layouts/public-layout"
 
 interface CrawlRequestItem {
@@ -93,9 +93,7 @@ function stateDisplay(cr: CrawlRequestItem) {
         </span>
       )
     default:
-      return (
-        <span className="text-sm text-muted-foreground">{cr.status}</span>
-      )
+      return <span className="text-sm text-muted-foreground">{cr.status}</span>
   }
 }
 
@@ -173,10 +171,10 @@ function TaskTable({ tasks }: { tasks: CrawlRequestItem[] }) {
 
 export default function CrawlRequestsIndex({ crawlRequests, counts }: Props) {
   const active = crawlRequests.filter(
-    (cr) => cr.status === "pending" || cr.status === "processing",
+    (cr) => cr.status === "pending" || cr.status === "processing"
   )
   const completed = crawlRequests.filter(
-    (cr) => cr.status === "completed" || cr.status === "failed",
+    (cr) => cr.status === "completed" || cr.status === "failed"
   )
 
   const activeCount = counts.pending + counts.processing
@@ -204,10 +202,7 @@ export default function CrawlRequestsIndex({ crawlRequests, counts }: Props) {
               <RefreshCw className="size-4" />
               Refresh
             </Button>
-            <Button
-              nativeButton={false}
-              render={<Link href="/crawl/new" />}
-            >
+            <Button nativeButton={false} render={<Link href="/crawl/new" />}>
               <Plus className="size-4" />
               Add Docs
             </Button>

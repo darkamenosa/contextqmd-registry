@@ -1,7 +1,5 @@
-import { type FormEvent, Fragment, useState } from "react"
+import { Fragment, useState, type FormEvent } from "react"
 import { Link, router } from "@inertiajs/react"
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
 import type { PaginationData } from "@/types"
 import {
   ArrowLeft,
@@ -18,6 +16,8 @@ import {
   Terminal,
   X,
 } from "lucide-react"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -29,7 +29,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Table,
   TableBody,
@@ -38,6 +37,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import PublicLayout from "@/layouts/public-layout"
 
 interface LibraryDetail {
@@ -159,14 +159,14 @@ export default function LibraryShow({
   const slug = `${library.namespace}/${library.name}`
 
   const selectedVersionData = versions.find(
-    (v) => v.version === selectedVersion,
+    (v) => v.version === selectedVersion
   )
 
   function switchVersion(version: string) {
     router.get(
       `/libraries/${slug}`,
       { version },
-      { preserveState: true, preserveScroll: true },
+      { preserveState: true, preserveScroll: true }
     )
   }
 
@@ -189,7 +189,7 @@ export default function LibraryShow({
       searchQuery
         ? { version: selectedVersion, search: searchQuery }
         : { version: selectedVersion },
-      { preserveState: true, preserveScroll: true },
+      { preserveState: true, preserveScroll: true }
     )
   }
 
@@ -198,7 +198,7 @@ export default function LibraryShow({
     router.get(
       `/libraries/${slug}`,
       { version: selectedVersion },
-      { preserveState: true, preserveScroll: true },
+      { preserveState: true, preserveScroll: true }
     )
   }
 
@@ -285,9 +285,7 @@ install_docs({ library: "${slug}" })`
           </Card>
           <Card>
             <CardContent className="pt-6">
-              <div className="text-2xl font-bold">
-                {library.aliases.length}
-              </div>
+              <div className="text-2xl font-bold">{library.aliases.length}</div>
               <div className="text-sm text-muted-foreground">Aliases</div>
             </CardContent>
           </Card>
@@ -426,7 +424,7 @@ install_docs({ library: "${slug}" })`
                               className="cursor-pointer"
                               onClick={() =>
                                 setExpandedPage(
-                                  isExpanded ? null : page.pageUid,
+                                  isExpanded ? null : page.pageUid
                                 )
                               }
                             >
@@ -448,10 +446,7 @@ install_docs({ library: "${slug}" })`
                                       >
                                         {h}
                                         {i <
-                                        Math.min(
-                                          page.headings.length - 2,
-                                          2,
-                                        )
+                                        Math.min(page.headings.length - 2, 2)
                                           ? " · "
                                           : ""}
                                       </span>
@@ -480,7 +475,7 @@ install_docs({ library: "${slug}" })`
                                   <div className="relative">
                                     <CopyButton text={page.content} />
                                     <div className="max-h-[500px] overflow-y-auto border-t border-b border-border/50 p-4 pr-12 shadow-inner">
-                                      <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:scroll-mt-4 prose-pre:bg-zinc-950 prose-pre:text-zinc-100 prose-code:before:content-none prose-code:after:content-none">
+                                      <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:scroll-mt-4 prose-code:before:content-none prose-code:after:content-none prose-pre:bg-zinc-950 prose-pre:text-zinc-100">
                                         <ReactMarkdown
                                           remarkPlugins={[remarkGfm]}
                                           components={{
@@ -515,7 +510,8 @@ install_docs({ library: "${slug}" })`
                       Previous
                     </Button>
                     <span className="text-sm text-muted-foreground">
-                      Page {pagination.page} of {pagination.pages} ({pagination.total} pages)
+                      Page {pagination.page} of {pagination.pages} (
+                      {pagination.total} pages)
                     </span>
                     <Button
                       variant="outline"
@@ -556,10 +552,7 @@ install_docs({ library: "${slug}" })`
                         <TableCell className="font-medium">
                           {v.version}
                           {v.version === selectedVersion && (
-                            <Badge
-                              variant="secondary"
-                              className="ml-2 text-xs"
-                            >
+                            <Badge variant="secondary" className="ml-2 text-xs">
                               viewing
                             </Badge>
                           )}

@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react"
+import { useState, type FormEvent } from "react"
 import { Link, router } from "@inertiajs/react"
 import {
   ArrowRight,
@@ -157,11 +157,7 @@ function LibraryTable({ libraries }: { libraries: LibraryItem[] }) {
   )
 }
 
-export default function Home({
-  libraryCount,
-  libraries,
-  crawlPending,
-}: Props) {
+export default function Home({ libraryCount, libraries, crawlPending }: Props) {
   const [search, setSearch] = useState("")
 
   const handleSearch = (e: FormEvent) => {
@@ -173,18 +169,20 @@ export default function Home({
 
   // Popular: sort by page count desc (libraries with content first)
   const sortedByPopular = [...libraries].sort(
-    (a, b) => b.pageCount - a.pageCount || b.versionCount - a.versionCount,
+    (a, b) => b.pageCount - a.pageCount || b.versionCount - a.versionCount
   )
 
   const sortedByRecent = [...libraries].sort(
-    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
   )
 
   // Trending: libraries with most recent activity AND content
   const sortedByTrending = [...libraries]
     .filter((lib) => lib.pageCount > 0)
     .sort(
-      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime() || b.pageCount - a.pageCount,
+      (a, b) =>
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime() ||
+        b.pageCount - a.pageCount
     )
 
   return (
@@ -281,7 +279,10 @@ export default function Home({
         <div className="mt-3 flex items-center justify-between text-sm text-muted-foreground">
           <span>{libraryCount.toLocaleString()} LIBRARIES</span>
           {crawlPending > 0 && (
-            <Link href="/crawl" className="flex items-center gap-1 hover:text-foreground">
+            <Link
+              href="/crawl"
+              className="flex items-center gap-1 hover:text-foreground"
+            >
               SEE TASKS IN PROGRESS
               <ArrowRight className="size-3" />
             </Link>
@@ -309,9 +310,7 @@ export default function Home({
                   <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                     1
                   </div>
-                  <span>
-                    Add the MCP server config to your editor settings
-                  </span>
+                  <span>Add the MCP server config to your editor settings</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">

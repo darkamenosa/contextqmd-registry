@@ -19,9 +19,9 @@ export default function Terms() {
               1. Acceptance of Terms
             </h2>
             <p className="mt-3">
-              By accessing or using ContextQMD, you agree to be bound by
-              these Terms of Service. If you do not agree to these terms, please
-              do not use our platform.
+              By accessing or using ContextQMD, you agree to be bound by these
+              Terms of Service. If you do not agree to these terms, please do
+              not use our platform.
             </p>
           </div>
           <div>

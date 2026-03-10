@@ -4,6 +4,7 @@ import type { AdminLibrary, PaginationData } from "@/types"
 
 import { formatDateShort } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -12,7 +13,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
 import {
   IndexFilters,
   IndexTable,
@@ -57,7 +57,7 @@ export default function AdminLibrariesIndex({
     ids: (string | number)[]
   } | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
+    undefined
   )
   const { mode, setMode } = useSetIndexFiltersMode("default")
 
@@ -71,7 +71,7 @@ export default function AdminLibrariesIndex({
         preserveScroll: true,
       })
     },
-    [filters],
+    [filters]
   )
 
   useEffect(() => {

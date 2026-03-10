@@ -27,17 +27,20 @@ const techStack = [
   {
     icon: Server,
     title: "Registry",
-    description: "Rails 8 + Inertia.js + React. REST API with cursor pagination. PostgreSQL with full-text search.",
+    description:
+      "Rails 8 + Inertia.js + React. REST API with cursor pagination. PostgreSQL with full-text search.",
   },
   {
     icon: Code2,
     title: "MCP Server",
-    description: "TypeScript MCP server. Install via npx. Works with Claude, Cursor, Windsurf, and any MCP client.",
+    description:
+      "TypeScript MCP server. Install via npx. Works with Claude, Cursor, Windsurf, and any MCP client.",
   },
   {
     icon: BookOpen,
     title: "QMD Engine",
-    description: "Local hybrid search engine. BM25 + vector retrieval. SQLite-backed for zero-config setup.",
+    description:
+      "Local hybrid search engine. BM25 + vector retrieval. SQLite-backed for zero-config setup.",
   },
 ]
 
@@ -54,16 +57,16 @@ export default function About() {
           </h1>
           <div className="mt-8 space-y-6 text-lg/relaxed text-muted-foreground">
             <p>
-              ContextQMD is a documentation package system built for
-              MCP-enabled AI coding tools. Instead of hitting APIs for every
-              query, you install documentation packages locally and search them
-              with QMD — a hybrid search engine that combines full-text and
-              semantic retrieval.
+              ContextQMD is a documentation package system built for MCP-enabled
+              AI coding tools. Instead of hitting APIs for every query, you
+              install documentation packages locally and search them with QMD —
+              a hybrid search engine that combines full-text and semantic
+              retrieval.
             </p>
             <p>
-              The registry is free and open. The MCP server runs locally.
-              Your docs stay on your machine, version-pinned and
-              always available — even offline.
+              The registry is free and open. The MCP server runs locally. Your
+              docs stay on your machine, version-pinned and always available —
+              even offline.
             </p>
           </div>
         </div>
