@@ -11,7 +11,7 @@ export default function Terms() {
           Terms of Service
         </h1>
         <p className="mt-4 text-sm text-muted-foreground">
-          Last updated: January 1, 2026
+          Last updated: March 2026
         </p>
         <div className="mt-12 space-y-8 text-sm/relaxed text-muted-foreground">
           <div>
@@ -19,7 +19,7 @@ export default function Terms() {
               1. Acceptance of Terms
             </h2>
             <p className="mt-3">
-              By accessing or using ContextqmdRegistry, you agree to be bound by
+              By accessing or using ContextQMD, you agree to be bound by
               these Terms of Service. If you do not agree to these terms, please
               do not use our platform.
             </p>
@@ -50,7 +50,7 @@ export default function Terms() {
             </h2>
             <p className="mt-3">
               The service and its original content, features, and functionality
-              are owned by ContextqmdRegistry and are protected by international
+              are owned by ContextQMD and are protected by international
               copyright, trademark, and other intellectual property laws.
             </p>
           </div>
@@ -59,7 +59,7 @@ export default function Terms() {
               5. Limitation of Liability
             </h2>
             <p className="mt-3">
-              In no event shall ContextqmdRegistry be liable for any indirect,
+              In no event shall ContextQMD be liable for any indirect,
               incidental, special, consequential, or punitive damages arising
               out of or related to your use of the service.
             </p>
@@ -70,7 +70,7 @@ export default function Terms() {
             </h2>
             <p className="mt-3">
               If you have any questions about these Terms, please contact us at
-              legal@contextqmd_registry.app.
+              legal@contextqmd.com.
             </p>
           </div>
         </div>

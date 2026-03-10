@@ -1,0 +1,17 @@
+nextjs:
+  account: personal
+  namespace: vercel
+  name: nextjs
+  display_name: "Next.js"
+  aliases: <%= ["next", "next.js"].to_json %>
+  homepage_url: "https://nextjs.org"
+  default_version: "16.1.6"
+
+rails:
+  account: organization
+  namespace: rails
+  name: rails
+  display_name: "Ruby on Rails"
+  aliases: <%= ["ror", "rubyonrails"].to_json %>
+  homepage_url: "https://rubyonrails.org"
+  default_version: "8.1.0"

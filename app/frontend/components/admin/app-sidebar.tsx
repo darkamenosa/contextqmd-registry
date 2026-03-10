@@ -1,6 +1,7 @@
 import {
   Activity,
   BarChart3,
+  BookOpen,
   LayoutDashboard,
   Settings2,
   Users,
@@ -24,6 +25,11 @@ const navOverview = [
     title: "Dashboard",
     url: "/admin/dashboard",
     icon: LayoutDashboard,
+  },
+  {
+    title: "Libraries",
+    url: "/admin/libraries",
+    icon: BookOpen,
   },
   {
     title: "Customers",
@@ -64,7 +70,6 @@ const navSystem = [
     items: [
       { title: "General", url: "/admin/settings" },
       { title: "Team", url: "/admin/settings/team" },
-      { title: "Billing", url: "/admin/settings/billing" },
     ],
   },
 ]

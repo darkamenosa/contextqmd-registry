@@ -12,10 +12,10 @@ import {
 } from "@/components/ui/sheet"
 
 const navLinks = [
-  { href: "/", label: "Home" },
+  { href: "/libraries", label: "Libraries" },
+  { href: "/rankings", label: "Rankings" },
+  { href: "/crawl", label: "Add Docs" },
   { href: "/about", label: "About" },
-  { href: "/pricing", label: "Pricing" },
-  { href: "/contact", label: "Contact" },
 ]
 
 export function SiteHeader() {
@@ -37,7 +37,7 @@ export function SiteHeader() {
             <Command className="size-4" />
           </div>
           <span className="font-semibold tracking-tight">
-            ContextqmdRegistry
+            ContextQMD
           </span>
         </Link>
 
@@ -113,7 +113,7 @@ export function SiteHeader() {
                     <Command className="size-3.5" />
                   </div>
                   <span className="text-sm font-semibold tracking-tight">
-                    ContextqmdRegistry
+                    ContextQMD
                   </span>
                 </Link>
               </div>

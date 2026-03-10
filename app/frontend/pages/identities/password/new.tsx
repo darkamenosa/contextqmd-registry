@@ -48,7 +48,7 @@ export default function ForgotPasswordPage() {
           <div className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <Command className="size-4" />
           </div>
-          ContextqmdRegistry
+          ContextQMD
         </Link>
 
         <Card>

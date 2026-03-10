@@ -13,9 +13,8 @@ Rails.application.routes.draw do
   scope "app/:account_id", constraints: { account_id: /\d+/ } do
     namespace :app, path: "" do
       resource :dashboard, only: :show
-      resources :projects, only: [ :index ]
+      resources :crawl_requests, only: [ :new, :create ], path: "crawl"
       resource :settings, only: [ :show, :update, :destroy ]
-      resource :billing, only: :show
     end
     get "access_tokens", to: "app/access_tokens#index", as: :scoped_app_access_tokens
     post "access_tokens", to: "app/access_tokens#create"
@@ -43,6 +42,7 @@ Rails.application.routes.draw do
       namespace :customers do
         resource :bulk_suspension, only: [ :create, :destroy ]
       end
+      resources :libraries, only: [ :index, :show, :edit, :update, :destroy ]
       resources :webhooks, only: [ :index ]
 
       namespace :analytics do
@@ -53,7 +53,6 @@ Rails.application.routes.draw do
       resource :settings, only: :show
       namespace :settings do
         resource :team, only: :show
-        resource :billing, only: :show
       end
     end
     mount MissionControl::Jobs::Engine, at: "/admin/jobs" if defined?(MissionControl::Jobs::Engine)
@@ -65,16 +64,46 @@ Rails.application.routes.draw do
     get "(*path)", to: redirect { |params, req| "#{req.protocol}localhost:#{req.port}/#{params[:path]}" }
   end
 
+  # Library browsing (public) + submission (authenticated)
+  resources :libraries, only: [ :index, :new, :create ], param: :slug do
+    collection do
+      get ":namespace/:name", action: :show, as: :detail, constraints: { namespace: /[a-z0-9-]+/, name: /[a-z0-9-]+/ }
+    end
+  end
+
+  # Crawl requests: index is public, new redirects to app layout
+  resources :crawl_requests, only: [ :index, :new ], path: "crawl"
+
+  # Rankings
+  get "rankings", to: "rankings#index"
+
   # Public pages
   root "pages#home"
   get "about", to: "pages#about"
-  get "pricing", to: "pages#pricing"
   get "privacy", to: "pages#privacy"
   get "terms", to: "pages#terms"
   get "contact", to: "pages#contact"
 
   # Error pages
   get "errors/:status", to: "errors#show", as: :error
+
+  # API v1 (token-authenticated, JSON-only)
+  namespace :api do
+    namespace :v1 do
+      get "health", to: "health#show"
+      get "capabilities", to: "capabilities#show"
+      resources :libraries, only: [ :index ], param: :slug
+      get "libraries/:namespace/:name", to: "libraries#show", as: :library_detail
+      get "libraries/:namespace/:name/versions", to: "versions#index"
+      get "libraries/:namespace/:name/versions/:version/manifest", to: "manifests#show", version: /[^\/]+/
+      get "libraries/:namespace/:name/versions/:version/page-index", to: "page_index#index", version: /[^\/]+/
+      get "libraries/:namespace/:name/versions/:version/pages/:page_uid", to: "page_index#show", version: /[^\/]+/
+      get "libraries/:namespace/:name/versions/:version/bundles/:profile", to: "bundles#show", version: /[^\/]+/
+      post "libraries/:namespace/:name/versions/:version/query", to: "query_docs#create", version: /[^\/]+/
+      post "resolve", to: "resolve#create"
+      post "crawl", to: "crawl_requests#create"
+    end
+  end
 
   get "up" => "rails/health#show", as: :rails_health_check
 end

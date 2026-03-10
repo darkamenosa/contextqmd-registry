@@ -1,7 +1,6 @@
 import { router, usePage } from "@inertiajs/react"
 import type { SharedProps } from "@/types"
 import {
-  CreditCard,
   EllipsisVertical,
   KeyRound,
   LogOut,
@@ -33,10 +32,8 @@ export function NavUser() {
   const { currentUser, currentIdentity } = page.props
   const { isMobile } = useSidebar()
   const accountId = currentUser?.accountId ?? currentIdentity?.defaultAccountId
-  const role = currentUser?.role ?? currentIdentity?.defaultAccountRole
   const scopedPath = (path: string) =>
     withAccountScope(page.url, path, accountId)
-  const canManageAccount = role === "admin" || role === "owner"
 
   const displayName = currentUser?.name ?? currentIdentity?.name
   const name = displayName ?? "User"
@@ -96,14 +93,6 @@ export function NavUser() {
                 <UserCircle />
                 Settings
               </DropdownMenuItem>
-              {canManageAccount && (
-                <DropdownMenuItem
-                  onClick={() => router.visit(scopedPath("/app/billing"))}
-                >
-                  <CreditCard />
-                  Billing
-                </DropdownMenuItem>
-              )}
               <DropdownMenuItem
                 onClick={() =>
                   router.visit(

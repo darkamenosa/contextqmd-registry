@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_09_052642) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_10_050821) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -46,6 +46,51 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_09_052642) do
     t.index ["external_account_id"], name: "index_accounts_on_external_account_id", unique: true
   end
 
+  create_table "bundles", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "format"
+    t.string "profile"
+    t.string "sha256"
+    t.bigint "size_bytes"
+    t.datetime "updated_at", null: false
+    t.string "url"
+    t.bigint "version_id", null: false
+    t.index ["version_id", "profile"], name: "index_bundles_on_version_id_and_profile", unique: true
+    t.index ["version_id"], name: "index_bundles_on_version_id"
+  end
+
+  create_table "crawl_requests", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.text "error_message"
+    t.bigint "identity_id", null: false
+    t.bigint "library_id"
+    t.jsonb "metadata", default: {}
+    t.string "source_type", default: "website", null: false
+    t.string "status", default: "pending", null: false
+    t.datetime "updated_at", null: false
+    t.string "url", null: false
+    t.index ["identity_id"], name: "index_crawl_requests_on_identity_id"
+    t.index ["library_id"], name: "index_crawl_requests_on_library_id"
+    t.index ["status"], name: "index_crawl_requests_on_status"
+  end
+
+  create_table "fetch_recipes", force: :cascade do |t|
+    t.jsonb "allowed_hosts"
+    t.jsonb "content_types"
+    t.datetime "created_at", null: false
+    t.string "expected_etag"
+    t.string "expected_last_modified"
+    t.bigint "max_bytes"
+    t.string "normalizer_version"
+    t.text "signature"
+    t.string "source_type"
+    t.string "splitter_version"
+    t.datetime "updated_at", null: false
+    t.string "url"
+    t.bigint "version_id", null: false
+    t.index ["version_id"], name: "index_fetch_recipes_on_version_id", unique: true
+  end
+
   create_table "identities", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.datetime "current_sign_in_at"
@@ -69,6 +114,54 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_09_052642) do
     t.index ["reset_password_token"], name: "index_identities_on_reset_password_token", unique: true
   end
 
+  create_table "libraries", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.jsonb "aliases", default: []
+    t.datetime "created_at", null: false
+    t.string "default_version"
+    t.string "display_name", null: false
+    t.string "homepage_url"
+    t.string "name", null: false
+    t.string "namespace", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id"], name: "index_libraries_on_account_id"
+    t.index ["aliases"], name: "index_libraries_on_aliases", using: :gin
+    t.index ["namespace", "name"], name: "index_libraries_on_namespace_and_name", unique: true
+  end
+
+  create_table "pages", force: :cascade do |t|
+    t.integer "bytes"
+    t.string "checksum"
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.jsonb "headings"
+    t.string "page_uid"
+    t.string "path"
+    t.jsonb "previous_paths"
+    t.string "source_ref"
+    t.string "title"
+    t.datetime "updated_at", null: false
+    t.string "url"
+    t.bigint "version_id", null: false
+    t.index "(((setweight(to_tsvector('english'::regconfig, (COALESCE(title, ''::character varying))::text), 'A'::\"char\") || setweight(to_tsvector('english'::regconfig, COALESCE(description, ''::text)), 'B'::\"char\")) || setweight(to_tsvector('english'::regconfig, (COALESCE(path, ''::character varying))::text), 'C'::\"char\")))", name: "index_pages_on_search", using: :gin
+    t.index ["version_id", "page_uid"], name: "index_pages_on_version_id_and_page_uid", unique: true
+    t.index ["version_id"], name: "index_pages_on_version_id"
+  end
+
+  create_table "source_policies", force: :cascade do |t|
+    t.boolean "attribution_required"
+    t.datetime "created_at", null: false
+    t.bigint "library_id", null: false
+    t.string "license_name"
+    t.string "license_status"
+    t.string "license_url"
+    t.boolean "mirror_allowed"
+    t.text "notes"
+    t.boolean "origin_fetch_allowed"
+    t.datetime "updated_at", null: false
+    t.index ["library_id"], name: "index_source_policies_on_library_id", unique: true
+  end
+
   create_table "users", force: :cascade do |t|
     t.bigint "account_id", null: false
     t.boolean "active", default: true, null: false
@@ -86,9 +179,32 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_09_052642) do
     t.check_constraint "role::text <> 'system'::text OR identity_id IS NULL", name: "users_system_role_requires_no_identity"
   end
 
+  create_table "versions", force: :cascade do |t|
+    t.string "channel"
+    t.datetime "created_at", null: false
+    t.datetime "generated_at"
+    t.bigint "library_id", null: false
+    t.string "manifest_checksum"
+    t.string "source_etag"
+    t.string "source_last_modified"
+    t.string "source_url"
+    t.datetime "updated_at", null: false
+    t.string "version"
+    t.index ["library_id", "version"], name: "index_versions_on_library_id_and_version", unique: true
+    t.index ["library_id"], name: "index_versions_on_library_id"
+  end
+
   add_foreign_key "access_tokens", "identities"
   add_foreign_key "account_cancellations", "accounts", on_delete: :cascade
   add_foreign_key "account_cancellations", "users", column: "initiated_by_id", on_delete: :nullify
+  add_foreign_key "bundles", "versions"
+  add_foreign_key "crawl_requests", "identities"
+  add_foreign_key "crawl_requests", "libraries"
+  add_foreign_key "fetch_recipes", "versions"
+  add_foreign_key "libraries", "accounts"
+  add_foreign_key "pages", "versions"
+  add_foreign_key "source_policies", "libraries"
   add_foreign_key "users", "accounts"
   add_foreign_key "users", "identities", on_delete: :nullify
+  add_foreign_key "versions", "libraries"
 end

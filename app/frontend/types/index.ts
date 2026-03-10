@@ -57,6 +57,56 @@ export type AccessToken = {
   lastUsedAt: string | null
 }
 
+// Admin library types
+export type AdminLibrary = {
+  id: number
+  namespace: string
+  name: string
+  displayName: string
+  homepageUrl: string | null
+  defaultVersion: string | null
+  licenseStatus: string | null
+  versionCount: number
+  pageCount: number
+  accountName: string
+  updatedAt: string
+  createdAt: string
+}
+
+export type AdminLibraryDetail = {
+  id: number
+  namespace: string
+  name: string
+  displayName: string
+  homepageUrl: string | null
+  defaultVersion: string | null
+  aliases: string[]
+  licenseStatus: string | null
+  accountName: string
+  versionCount: number
+  pageCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export type AdminLibraryVersion = {
+  id: number
+  version: string
+  channel: string
+  generatedAt: string | null
+  pageCount: number
+  createdAt: string
+}
+
+export type AdminCrawlItem = {
+  id: number
+  url: string
+  sourceType: string
+  status: string
+  errorMessage: string | null
+  createdAt: string
+}
+
 // Admin customer types
 export type AdminCustomer = {
   id: number

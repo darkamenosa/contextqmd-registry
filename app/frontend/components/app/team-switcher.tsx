@@ -27,7 +27,7 @@ export function TeamSwitcher() {
             <Command className="size-4" />
           </div>
           <div className="grid flex-1 text-left text-sm leading-tight">
-            <span className="truncate font-medium">ContextqmdRegistry</span>
+            <span className="truncate font-medium">ContextQMD</span>
             <span className="truncate text-xs">Workspace</span>
           </div>
         </SidebarMenuButton>

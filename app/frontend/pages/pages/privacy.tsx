@@ -11,7 +11,7 @@ export default function Privacy() {
           Privacy Policy
         </h1>
         <p className="mt-4 text-sm text-muted-foreground">
-          Last updated: January 1, 2026
+          Last updated: March 2026
         </p>
         <div className="mt-12 space-y-8 text-sm/relaxed text-muted-foreground">
           <div>
@@ -61,7 +61,7 @@ export default function Privacy() {
             </h2>
             <p className="mt-3">
               If you have any questions about this Privacy Policy, please
-              contact us at privacy@contextqmd_registry.app.
+              contact us at privacy@contextqmd.com.
             </p>
           </div>
         </div>

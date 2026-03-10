@@ -1,0 +1,295 @@
+# frozen_string_literal: true
+
+require "test_helper"
+
+class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
+  include ActiveJob::TestHelper
+
+  setup do
+    identity, @account, _user = create_tenant
+    @identity = identity
+
+    @crawl_request = CrawlRequest.create!(
+      identity: @identity,
+      url: "https://example.com/llms.txt",
+      source_type: "llms_txt",
+      status: "pending"
+    )
+  end
+
+  test "creates library, version, and pages from fetcher result" do
+    ns = "example-#{SecureRandom.hex(4)}"
+    lib_name = "my-lib-#{SecureRandom.hex(4)}"
+
+    result = DocsFetcher::Result.new(
+      namespace: ns,
+      name: lib_name,
+      display_name: "My Library",
+      homepage_url: "https://example.com",
+      aliases: [ "my-lib" ],
+      version: nil,
+      pages: [
+        {
+          page_uid: "getting-started",
+          path: "getting-started.md",
+          title: "Getting Started",
+          url: "https://example.com/llms.txt#getting-started",
+          content: "Install with npm install my-lib",
+          headings: [ "Prerequisites", "Steps" ]
+        },
+        {
+          page_uid: "api-reference",
+          path: "api-reference.md",
+          title: "API Reference",
+          url: "https://example.com/llms.txt#api-reference",
+          content: "## Functions\n\n### create()\n\nCreates a thing.",
+          headings: [ "Functions" ]
+        }
+      ]
+    )
+
+    stub_fetcher = stub_docs_fetcher(result)
+
+    original_for = DocsFetcher.method(:for)
+    DocsFetcher.define_singleton_method(:for) { |_source_type| stub_fetcher }
+
+    begin
+      assert_difference -> { Library.count }, 1 do
+        assert_difference -> { Version.count }, 1 do
+          assert_difference -> { Page.count }, 2 do
+            ProcessCrawlRequestJob.perform_now(@crawl_request)
+          end
+        end
+      end
+    ensure
+      DocsFetcher.define_singleton_method(:for, original_for)
+    end
+
+    @crawl_request.reload
+    assert_equal "completed", @crawl_request.status
+    assert_not_nil @crawl_request.library
+
+    library = @crawl_request.library
+    assert_equal ns, library.namespace
+    assert_equal lib_name, library.name
+    assert_equal "My Library", library.display_name
+    assert_equal "https://example.com", library.homepage_url
+
+    version = library.versions.first
+    assert_equal "latest", version.version
+    assert_equal "latest", version.channel
+    assert_equal 2, version.pages.count
+
+    page = version.pages.find_by(page_uid: "getting-started")
+    assert_equal "Getting Started", page.title
+    assert_equal "Install with npm install my-lib", page.description
+    assert_equal [ "Prerequisites", "Steps" ], page.headings
+  end
+
+  test "sets default_version on library when blank" do
+    result = DocsFetcher::Result.new(
+      namespace: "ns-#{SecureRandom.hex(4)}",
+      name: "lib-#{SecureRandom.hex(4)}",
+      display_name: "Lib",
+      homepage_url: "https://example.com",
+      aliases: [],
+      version: "2.0.0",
+      pages: [
+        { page_uid: "index", path: "index.md", title: "Index",
+          url: "https://example.com", content: "Hello", headings: [] }
+      ]
+    )
+
+    with_stub_fetcher(result) do
+      ProcessCrawlRequestJob.perform_now(@crawl_request)
+    end
+
+    library = @crawl_request.reload.library
+    assert_equal "2.0.0", library.default_version
+
+    version = library.versions.first
+    assert_equal "2.0.0", version.version
+    assert_equal "stable", version.channel
+  end
+
+  test "marks crawl request as failed on error after retries exhausted" do
+    error_fetcher = Object.new
+    error_fetcher.define_singleton_method(:fetch) { |_url| raise "Network error" }
+
+    original_for = DocsFetcher.method(:for)
+    DocsFetcher.define_singleton_method(:for) { |_source_type| error_fetcher }
+
+    # Use perform_enqueued_jobs to trigger retry_on's exhaustion handler
+    perform_enqueued_jobs do
+      ProcessCrawlRequestJob.perform_later(@crawl_request)
+    end
+
+    DocsFetcher.define_singleton_method(:for, original_for)
+
+    @crawl_request.reload
+    assert_equal "failed", @crawl_request.status
+    assert_includes @crawl_request.error_message, "Network error"
+  end
+
+  test "skips processing when crawl request is not pending" do
+    @crawl_request.update!(status: "completed")
+
+    assert_no_difference -> { Library.count } do
+      ProcessCrawlRequestJob.perform_now(@crawl_request)
+    end
+  end
+
+  test "transitions status to processing then completed" do
+    statuses = []
+
+    result = DocsFetcher::Result.new(
+      namespace: "ns-#{SecureRandom.hex(4)}",
+      name: "lib-#{SecureRandom.hex(4)}",
+      display_name: "Lib",
+      homepage_url: "https://example.com",
+      aliases: [],
+      version: nil,
+      pages: [
+        { page_uid: "index", path: "index.md", title: "Index",
+          url: "https://example.com", content: "Content", headings: [] }
+      ]
+    )
+
+    # Track status transitions
+    @crawl_request.define_singleton_method(:start_processing!) do
+      statuses << "processing"
+      super()
+    end
+
+    with_stub_fetcher(result) do
+      ProcessCrawlRequestJob.perform_now(@crawl_request)
+    end
+
+    assert_includes statuses, "processing"
+    assert_equal "completed", @crawl_request.reload.status
+  end
+
+  test "reuses existing library when namespace and name match" do
+    ns = "ns-#{SecureRandom.hex(4)}"
+    lib_name = "lib-#{SecureRandom.hex(4)}"
+
+    system_account = Account.find_or_create_by!(name: "ContextQMD System") { |a| a.personal = false }
+    existing = Library.create!(
+      account: system_account,
+      namespace: ns,
+      name: lib_name,
+      display_name: "Existing Lib"
+    )
+
+    result = DocsFetcher::Result.new(
+      namespace: ns,
+      name: lib_name,
+      display_name: "Updated Lib",
+      homepage_url: "https://example.com",
+      aliases: [],
+      version: nil,
+      pages: [
+        { page_uid: "index", path: "index.md", title: "Index",
+          url: "https://example.com", content: "Content", headings: [] }
+      ]
+    )
+
+    with_stub_fetcher(result) do
+      assert_no_difference -> { Library.count } do
+        ProcessCrawlRequestJob.perform_now(@crawl_request)
+      end
+    end
+
+    @crawl_request.reload
+    assert_equal existing.id, @crawl_request.library_id
+  end
+
+  test "skips saving unchanged pages on re-crawl (deduplication)" do
+    ns = "ns-#{SecureRandom.hex(4)}"
+    lib_name = "lib-#{SecureRandom.hex(4)}"
+
+    result = DocsFetcher::Result.new(
+      namespace: ns, name: lib_name, display_name: "Lib",
+      homepage_url: "https://example.com", aliases: [],
+      version: nil,
+      pages: [
+        { page_uid: "intro", path: "intro.md", title: "Intro",
+          url: "https://example.com", content: "Hello world", headings: [] }
+      ]
+    )
+
+    # First crawl
+    with_stub_fetcher(result) { ProcessCrawlRequestJob.perform_now(@crawl_request) }
+    library = @crawl_request.reload.library
+    version = library.versions.first
+    page = version.pages.find_by(page_uid: "intro")
+    original_updated_at = page.updated_at
+
+    # Re-crawl with same content — page should NOT be re-saved
+    cr2 = CrawlRequest.create!(identity: @identity, url: "https://example.com/llms.txt", source_type: "llms_txt", status: "pending")
+    travel 1.minute do
+      with_stub_fetcher(result) { ProcessCrawlRequestJob.perform_now(cr2) }
+    end
+
+    page.reload
+    assert_equal original_updated_at, page.updated_at, "Unchanged page should not be re-saved"
+  end
+
+  test "removes stale pages on re-crawl" do
+    ns = "ns-#{SecureRandom.hex(4)}"
+    lib_name = "lib-#{SecureRandom.hex(4)}"
+
+    result_v1 = DocsFetcher::Result.new(
+      namespace: ns, name: lib_name, display_name: "Lib",
+      homepage_url: "https://example.com", aliases: [],
+      version: nil,
+      pages: [
+        { page_uid: "intro", path: "intro.md", title: "Intro",
+          url: "https://example.com/intro", content: "Hello", headings: [] },
+        { page_uid: "old-page", path: "old-page.md", title: "Old",
+          url: "https://example.com/old", content: "Stale content", headings: [] }
+      ]
+    )
+
+    with_stub_fetcher(result_v1) { ProcessCrawlRequestJob.perform_now(@crawl_request) }
+    library = @crawl_request.reload.library
+    version = library.versions.first
+    assert_equal 2, version.pages.count
+
+    # Re-crawl without old-page
+    result_v2 = DocsFetcher::Result.new(
+      namespace: ns, name: lib_name, display_name: "Lib",
+      homepage_url: "https://example.com", aliases: [],
+      version: nil,
+      pages: [
+        { page_uid: "intro", path: "intro.md", title: "Intro",
+          url: "https://example.com/intro", content: "Hello updated", headings: [] }
+      ]
+    )
+
+    cr2 = CrawlRequest.create!(identity: @identity, url: "https://example.com/llms.txt", source_type: "llms_txt", status: "pending")
+    with_stub_fetcher(result_v2) { ProcessCrawlRequestJob.perform_now(cr2) }
+
+    version.reload
+    assert_equal 1, version.pages.count
+    assert_nil version.pages.find_by(page_uid: "old-page"), "Stale page should be removed"
+    assert_not_nil version.pages.find_by(page_uid: "intro")
+  end
+
+  private
+
+    def stub_docs_fetcher(result)
+      fetcher = Object.new
+      fetcher.define_singleton_method(:fetch) { |_url| result }
+      fetcher
+    end
+
+    def with_stub_fetcher(result)
+      stub = stub_docs_fetcher(result)
+      original_for = DocsFetcher.method(:for)
+      DocsFetcher.define_singleton_method(:for) { |_source_type| stub }
+      yield
+    ensure
+      DocsFetcher.define_singleton_method(:for, original_for)
+    end
+end

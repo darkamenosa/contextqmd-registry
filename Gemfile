@@ -82,3 +82,5 @@ gem "omniauth-google-oauth2", "~> 1.2"
 gem "omniauth-rails_csrf_protection", "~> 2.0"
 
 gem "pg_search", "~> 2.3"
+
+gem "reverse_markdown", "~> 3.0"

@@ -1,0 +1,21 @@
+installation:
+  version: nextjs_stable
+  page_uid: "pg_install_001"
+  path: "app/getting-started/installation.md"
+  title: "Installation"
+  url: "https://nextjs.org/docs/app/getting-started/installation"
+  checksum: "sha256:install_page_checksum"
+  bytes: 9123
+  headings: <%= ["Installation", "Quick start"].to_json %>
+  previous_paths: <%= [].to_json %>
+
+routing:
+  version: nextjs_stable
+  page_uid: "pg_routing_001"
+  path: "app/building-your-application/routing.md"
+  title: "Routing"
+  url: "https://nextjs.org/docs/app/building-your-application/routing"
+  checksum: "sha256:routing_page_checksum"
+  bytes: 15432
+  headings: <%= ["Routing", "Defining Routes", "Nested Routes"].to_json %>
+  previous_paths: <%= [].to_json %>

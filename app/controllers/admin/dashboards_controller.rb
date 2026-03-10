@@ -3,7 +3,33 @@
 module Admin
   class DashboardsController < BaseController
     def show
-      render inertia: "admin/dashboard/show"
+      render inertia: "admin/dashboard/show", props: {
+        stats: {
+          library_count: Library.count,
+          version_count: Version.count,
+          page_count: Page.count,
+          identity_count: Identity.count,
+          crawl_pending: CrawlRequest.pending.count,
+          crawl_processing: CrawlRequest.processing.count,
+          crawl_completed: CrawlRequest.completed.count,
+          crawl_failed: CrawlRequest.failed.count
+        },
+        recent_crawls: CrawlRequest.includes(:identity).recent.limit(10).map { |cr| crawl_props(cr) }
+      }
     end
+
+    private
+
+      def crawl_props(cr)
+        {
+          id: cr.id,
+          url: cr.url,
+          source_type: cr.source_type,
+          status: cr.status,
+          error_message: cr.error_message,
+          submitted_by: cr.identity.email,
+          created_at: cr.created_at.iso8601
+        }
+      end
   end
 end

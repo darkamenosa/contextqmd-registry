@@ -1,0 +1,57 @@
+# frozen_string_literal: true
+
+module Api
+  module V1
+    class PageIndexController < BaseController
+      skip_before_action :authenticate_api_token!
+      include Concerns::LibraryVersionLookup
+      include Concerns::CursorPaginatable
+
+      before_action :find_library_and_version!
+
+      def index
+        result = paginate(@version.pages)
+
+        render_data(
+          result[:records].map { |p| page_summary_json(p) },
+          cursor: result[:next_cursor]
+        )
+      end
+
+      def show
+        page = @version.pages.find_by!(page_uid: params[:page_uid])
+
+        cache_key = "page:#{page.id}:#{page.checksum}"
+        data = Rails.cache.fetch(cache_key, expires_in: 6.hours) { page_detail_json(page) }
+        render_data(data)
+      rescue ActiveRecord::RecordNotFound
+        render_error(code: "not_found", message: "Page not found", status: :not_found)
+      end
+
+      private
+
+        def page_summary_json(page)
+          {
+            page_uid: page.page_uid,
+            path: page.path,
+            title: page.title,
+            url: page.url,
+            checksum: page.checksum,
+            bytes: page.bytes,
+            headings: page.headings,
+            updated_at: page.updated_at&.iso8601
+          }
+        end
+
+        def page_detail_json(page)
+          {
+            page_uid: page.page_uid,
+            path: page.path,
+            title: page.title,
+            url: page.url,
+            content_md: page.description
+          }
+        end
+    end
+  end
+end

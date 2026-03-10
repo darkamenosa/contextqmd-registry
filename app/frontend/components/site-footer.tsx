@@ -5,13 +5,23 @@ export function SiteFooter() {
   return (
     <footer className="border-t bg-background">
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-2 gap-8 md:grid-cols-3">
+        <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
           <div>
-            <h3 className="text-sm font-semibold">Product</h3>
+            <h3 className="text-sm font-semibold">Registry</h3>
             <ul className="mt-4 flex flex-col gap-2 text-sm text-muted-foreground">
               <li>
-                <Link href="/pricing" className="hover:text-foreground">
-                  Pricing
+                <Link href="/libraries" className="hover:text-foreground">
+                  Libraries
+                </Link>
+              </li>
+              <li>
+                <Link href="/rankings" className="hover:text-foreground">
+                  Rankings
+                </Link>
+              </li>
+              <li>
+                <Link href="/crawl" className="hover:text-foreground">
+                  Add Docs
                 </Link>
               </li>
             </ul>
@@ -52,10 +62,10 @@ export function SiteFooter() {
             <div className="flex size-6 items-center justify-center rounded-lg bg-foreground text-background">
               <Command className="size-3" />
             </div>
-            <span className="font-medium">ContextqmdRegistry</span>
+            <span className="font-medium">ContextQMD</span>
           </Link>
           <span>
-            &copy; {new Date().getFullYear()} ContextqmdRegistry. All rights
+            &copy; {new Date().getFullYear()} ContextQMD. All rights
             reserved.
           </span>
         </div>

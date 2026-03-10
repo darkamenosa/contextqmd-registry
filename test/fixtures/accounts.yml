@@ -1,0 +1,7 @@
+personal:
+  name: "Test's Account"
+  personal: true
+
+organization:
+  name: "ACME Corp"
+  personal: false

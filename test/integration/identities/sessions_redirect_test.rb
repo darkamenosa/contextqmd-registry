@@ -95,4 +95,31 @@ class Identities::SessionsRedirectTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to app_path
   end
+
+  test "inertia sign out redirects to login to avoid host redirect issues" do
+    identity, = create_tenant(
+      email: "session-inertia-sign-out-#{SecureRandom.hex(4)}@example.com",
+      name: "Session Inertia Sign Out"
+    )
+
+    host! "127.0.0.1"
+
+    post identity_session_path, params: {
+      identity: {
+        email: identity.email,
+        password: "password123"
+      }
+    }
+
+    assert_redirected_to app_path
+
+    delete destroy_identity_session_path, headers: {
+      "X-Inertia" => "true",
+      "X-Requested-With" => "XMLHttpRequest"
+    }
+
+    assert_redirected_to new_identity_session_path
+  ensure
+    host! "www.example.com"
+  end
 end
