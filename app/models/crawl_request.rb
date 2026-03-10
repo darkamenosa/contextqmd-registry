@@ -29,14 +29,17 @@ class CrawlRequest < ApplicationRecord
   end
 
   def complete!(library)
+    raise "Cannot complete from #{status}" unless processing?
     update!(status: "completed", library: library, error_message: nil)
   end
 
   def fail!(message)
+    raise "Cannot fail from #{status}" if completed?
     update!(status: "failed", error_message: message)
   end
 
   def start_processing!
+    raise "Cannot start processing from #{status}" unless pending?
     update!(status: "processing")
   end
 
