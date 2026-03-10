@@ -29,7 +29,6 @@ interface CrawlRequestItem {
   errorMessage: string | null
   libraryName: string | null
   librarySlug: string | null
-  submittedBy: string
   createdAt: string
   updatedAt: string
 }

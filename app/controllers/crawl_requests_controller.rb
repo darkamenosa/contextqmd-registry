@@ -6,7 +6,7 @@ class CrawlRequestsController < InertiaController
   before_action :authenticate_identity!, only: :new
 
   def index
-    crawl_requests = CrawlRequest.includes(:identity, :library).recent.limit(50)
+    crawl_requests = CrawlRequest.includes(:library).recent.limit(50)
 
     render inertia: "crawl-requests/index", props: {
       crawl_requests: crawl_requests.map { |cr| crawl_request_props(cr) },
@@ -36,10 +36,9 @@ class CrawlRequestsController < InertiaController
         url: cr.url,
         source_type: cr.source_type,
         status: cr.status,
-        error_message: cr.error_message,
+        error_message: cr.error_message&.truncate(200),
         library_name: cr.library&.display_name,
         library_slug: cr.library ? "#{cr.library.namespace}/#{cr.library.name}" : nil,
-        submitted_by: cr.identity.email,
         created_at: cr.created_at.iso8601,
         updated_at: cr.updated_at.iso8601
       }
