@@ -28,10 +28,8 @@ interface RankedLibrary {
   displayName: string
   pageCount: number
   versionCount: number
-  daysSinceUpdate: number
   freshnessPct: number
   score: number
-  licenseStatus: string | null
   updatedAt: string
 }
 

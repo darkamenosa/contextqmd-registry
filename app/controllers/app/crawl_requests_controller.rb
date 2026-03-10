@@ -20,7 +20,7 @@ module App
     private
 
       def crawl_request_params
-        params.expect(crawl_request: [ :url, :source_type ])
+        params.expect(crawl_request: [ :url ])
       end
   end
 end

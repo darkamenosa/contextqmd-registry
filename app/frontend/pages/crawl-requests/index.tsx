@@ -160,7 +160,9 @@ function TaskTable({ tasks }: { tasks: CrawlRequestItem[] }) {
               </TableCell>
               <TableCell>{stateDisplay(cr)}</TableCell>
               <TableCell className="text-right text-sm text-muted-foreground">
-                {formatElapsed(cr.createdAt)}
+                {cr.status === "completed" || cr.status === "failed"
+                  ? `${formatElapsed(cr.updatedAt)} ago`
+                  : formatElapsed(cr.createdAt)}
               </TableCell>
             </TableRow>
           ))}

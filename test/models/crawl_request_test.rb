@@ -31,7 +31,7 @@ class CrawlRequestTest < ActiveSupport::TestCase
     assert_equal "website", cr.source_type
   end
 
-  test "auto-detect overrides source_type based on URL" do
+  test "auto-detect overrides explicit source_type from URL" do
     cr = CrawlRequest.new(url: "https://github.com/rails/rails", source_type: "website", identity: @identity, status: "pending")
     cr.valid?
     assert_equal "github", cr.source_type
@@ -51,10 +51,9 @@ class CrawlRequestTest < ActiveSupport::TestCase
     assert_includes cr.errors[:url], "can't be blank"
   end
 
-  test "auto-detect always runs so invalid source_type gets corrected" do
+  test "auto-detect corrects invalid source_type from URL" do
     cr = CrawlRequest.new(url: "https://example.com", source_type: "invalid", identity: @identity, status: "pending")
     cr.valid?
-    # Auto-detect corrects the invalid source_type based on URL
     assert_equal "website", cr.source_type
   end
 end

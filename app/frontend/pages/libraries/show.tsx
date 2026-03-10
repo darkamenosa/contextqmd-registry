@@ -48,6 +48,7 @@ interface LibraryDetail {
   homepageUrl: string | null
   defaultVersion: string | null
   licenseStatus: string | null
+  sourceType: string | null
   versionCount: number
 }
 
@@ -323,7 +324,7 @@ install_docs({ library: "${slug}" })`
                       <Button variant="outline" size="sm" className="gap-1" />
                     }
                   >
-                    {selectedVersion || "latest"}
+                    {selectedVersion || versions[0]?.version || "—"}
                     <ChevronDown className="size-3" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start">
@@ -343,9 +344,9 @@ install_docs({ library: "${slug}" })`
                     ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
-                <ChannelBadge
-                  channel={selectedVersionData?.channel || "latest"}
-                />
+                {selectedVersionData && (
+                  <ChannelBadge channel={selectedVersionData.channel} />
+                )}
               </div>
             )}
 

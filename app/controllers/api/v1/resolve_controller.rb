@@ -4,6 +4,7 @@ module Api
   module V1
     class ResolveController < BaseController
       skip_before_action :authenticate_api_token!
+      include Concerns::LibraryVersionLookup
       rate_limit to: 120, within: 1.minute, by: -> { request.remote_ip }, only: :create
 
       def create
@@ -17,8 +18,8 @@ module Api
         return render_error(code: "not_found", message: "No matching version found", status: :not_found) unless version
 
         render_data({
-          library: serialize_library(library),
-          version: serialize_version(version)
+          library: serialize_library_summary(library),
+          version: serialize_version_summary(version)
         })
       end
 
@@ -62,26 +63,6 @@ module Api
           else
             library.versions.ordered.first
           end
-        end
-
-        def serialize_library(library)
-          {
-            namespace: library.namespace,
-            name: library.name,
-            display_name: library.display_name,
-            aliases: library.aliases,
-            homepage_url: library.homepage_url,
-            default_version: library.default_version
-          }
-        end
-
-        def serialize_version(version)
-          {
-            version: version.version,
-            channel: version.channel,
-            generated_at: version.generated_at&.iso8601,
-            manifest_checksum: version.manifest_checksum
-          }
         end
     end
   end

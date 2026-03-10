@@ -22,7 +22,7 @@ class LibrariesController < InertiaController
   end
 
   def show
-    library = Library.includes(versions: :pages, source_policy: []).find_by!(namespace: params[:namespace], name: params[:name])
+    library = Library.includes(versions: [ :pages, :fetch_recipe ], source_policy: []).find_by!(namespace: params[:namespace], name: params[:name])
     versions = library.versions.ordered
 
     # Pick the best version: requested > version with most pages > default > first

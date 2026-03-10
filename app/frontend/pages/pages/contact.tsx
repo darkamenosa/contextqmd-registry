@@ -1,4 +1,4 @@
-import { ExternalLink, Github } from "lucide-react"
+import { Github, Mail } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import PublicLayout from "@/layouts/public-layout"
@@ -16,24 +16,23 @@ export default function Contact() {
           </h1>
           <p className="mt-6 text-lg text-muted-foreground">
             ContextQMD is an open-source project. For questions, bug reports,
-            and feedback, please open an issue on GitHub.
+            and feedback, reach out via email. GitHub repository coming soon.
           </p>
-          <div className="mt-8">
+          <div className="mt-8 flex flex-col items-center gap-4">
             <Button
               size="lg"
               nativeButton={false}
               render={
-                <a
-                  href="https://github.com/contextqmd/contextqmd-registry/issues"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                />
+                <a href="mailto:contextqmd@example.com" />
               }
             >
-              <Github className="size-5" />
-              Open an Issue on GitHub
-              <ExternalLink className="size-4" />
+              <Mail className="size-5" />
+              Send us an Email
             </Button>
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Github className="size-4" />
+              GitHub (coming soon)
+            </p>
           </div>
         </div>
       </section>

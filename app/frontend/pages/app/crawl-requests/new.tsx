@@ -82,7 +82,6 @@ export default function AppCrawlRequestsNew() {
     transform((data) => ({
       crawl_request: {
         url: data.url,
-        source_type: data.sourceType,
       },
     }))
     post(createPath)
@@ -105,7 +104,7 @@ export default function AppCrawlRequestsNew() {
 
         {/* Source Type Selection */}
         <div>
-          <h2 className="mb-3 text-sm font-semibold">Choose source type</h2>
+          <h2 className="mb-3 text-sm font-semibold">What kind of URL?</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             {sourceTypes.map((source) => (
               <button

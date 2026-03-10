@@ -35,18 +35,6 @@ module Api
         assert_equal "queued", body["meta"]["status"]
       end
 
-      test "creates crawl request with explicit source_type" do
-        assert_difference -> { CrawlRequest.count }, 1 do
-          post "/api/v1/crawl",
-            params: { url: "https://docs.example.com/guide", source_type: "website" },
-            headers: auth_headers
-        end
-
-        assert_response :ok
-        body = response.parsed_body
-        assert_equal "website", body["data"]["source_type"]
-      end
-
       test "returns validation error for missing URL" do
         post "/api/v1/crawl",
           params: {},

@@ -4,18 +4,11 @@ module Api
   module V1
     class CrawlRequestsController < BaseController
       # POST /api/v1/crawl
-      # Requires API token authentication.
       #
       # Params:
-      #   url         - URL to crawl (required)
-      #   source_type - optional, auto-detected from URL if omitted
-      #
-      # Returns the created crawl request with its status.
+      #   url - URL to crawl (required). source_type is auto-detected.
       def create
-        crawl_request = Current.identity.crawl_requests.new(
-          url: params[:url],
-          source_type: params[:source_type]
-        )
+        crawl_request = Current.identity.crawl_requests.new(url: params[:url])
 
         if crawl_request.save
           render_data(crawl_request_json(crawl_request), meta: { status: "queued" })

@@ -34,6 +34,7 @@ interface LibraryItem {
   name: string
   displayName: string
   defaultVersion: string | null
+  version: string | null
   versionCount: number
   pageCount: number
   licenseStatus: string | null
@@ -118,7 +119,7 @@ function LibraryTable({ libraries }: { libraries: LibraryItem[] }) {
         <TableRow>
           <TableHead>SOURCE</TableHead>
           <TableHead className="text-right">PAGES</TableHead>
-          <TableHead className="text-right">VERSIONS</TableHead>
+          <TableHead className="text-right">VERSION</TableHead>
           <TableHead className="text-right">UPDATE</TableHead>
         </TableRow>
       </TableHeader>
@@ -143,8 +144,8 @@ function LibraryTable({ libraries }: { libraries: LibraryItem[] }) {
             <TableCell className="text-right font-mono text-sm">
               {formatCount(lib.pageCount)}
             </TableCell>
-            <TableCell className="text-right font-mono text-sm">
-              {lib.versionCount}
+            <TableCell className="text-right font-mono text-sm text-muted-foreground">
+              {lib.version || "—"}
             </TableCell>
             <TableCell className="text-right text-sm text-muted-foreground">
               {formatTimeAgo(lib.updatedAt)}

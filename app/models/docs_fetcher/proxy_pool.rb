@@ -45,8 +45,10 @@ module DocsFetcher
 
       # Reset the rotation index (useful for testing).
       def reset!
-        @mutex.synchronize { @index = 0 }
-        @parsed_proxies = nil
+        @mutex.synchronize do
+          @index = 0
+          @parsed_proxies = nil
+        end
       end
 
       private

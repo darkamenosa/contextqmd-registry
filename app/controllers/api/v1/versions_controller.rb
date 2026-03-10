@@ -16,21 +16,10 @@ module Api
         result = paginate(versions)
 
         render_data(
-          result[:records].map { |v| version_json(v) },
+          result[:records].map { |v| serialize_version_summary(v) },
           cursor: result[:next_cursor]
         )
       end
-
-      private
-
-        def version_json(version)
-          {
-            version: version.version,
-            channel: version.channel,
-            generated_at: version.generated_at&.iso8601,
-            manifest_checksum: version.manifest_checksum
-          }
-        end
     end
   end
 end

@@ -11,11 +11,12 @@ module Api
           name: "Query Test"
         )
 
+        @hex = SecureRandom.hex(4)
         system_account = Account.find_or_create_by!(name: "QueryTest System") { |a| a.personal = false }
         @library = Library.create!(
           account: system_account,
-          namespace: "test-ns",
-          name: "test-lib",
+          namespace: "qns-#{@hex}",
+          name: "qlib-#{@hex}",
           display_name: "Test Library"
         )
         @version = @library.versions.create!(version: "1.0.0", channel: "stable", generated_at: Time.current)
@@ -47,7 +48,7 @@ module Api
       end
 
       test "returns matching pages for a query" do
-        post "/api/v1/libraries/test-ns/test-lib/versions/1.0.0/query",
+        post "/api/v1/libraries/#{@library.namespace}/#{@library.name}/versions/1.0.0/query",
           params: { query: "install configure", max_tokens: 50_000 },
           as: :json
 
@@ -66,7 +67,7 @@ module Api
       end
 
       test "returns error when query is blank" do
-        post "/api/v1/libraries/test-ns/test-lib/versions/1.0.0/query",
+        post "/api/v1/libraries/#{@library.namespace}/#{@library.name}/versions/1.0.0/query",
           params: { query: "" },
           as: :json
 
@@ -77,7 +78,7 @@ module Api
       end
 
       test "respects max_tokens budget" do
-        post "/api/v1/libraries/test-ns/test-lib/versions/1.0.0/query",
+        post "/api/v1/libraries/#{@library.namespace}/#{@library.name}/versions/1.0.0/query",
           params: { query: "library", max_tokens: 500 },
           as: :json
 
@@ -96,7 +97,7 @@ module Api
       end
 
       test "clamps max_tokens to valid range" do
-        post "/api/v1/libraries/test-ns/test-lib/versions/1.0.0/query",
+        post "/api/v1/libraries/#{@library.namespace}/#{@library.name}/versions/1.0.0/query",
           params: { query: "install", max_tokens: 1 },
           as: :json
 
@@ -105,7 +106,7 @@ module Api
       end
 
       test "fast mode returns whole pages without chunk splitting" do
-        post "/api/v1/libraries/test-ns/test-lib/versions/1.0.0/query",
+        post "/api/v1/libraries/#{@library.namespace}/#{@library.name}/versions/1.0.0/query",
           params: { query: "install configure", max_tokens: 50_000, mode: "fast" },
           as: :json
 
@@ -120,7 +121,7 @@ module Api
       end
 
       test "full mode is the default" do
-        post "/api/v1/libraries/test-ns/test-lib/versions/1.0.0/query",
+        post "/api/v1/libraries/#{@library.namespace}/#{@library.name}/versions/1.0.0/query",
           params: { query: "install", max_tokens: 50_000 },
           as: :json
 

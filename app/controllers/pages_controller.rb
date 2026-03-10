@@ -43,6 +43,7 @@ class PagesController < InertiaController
         name: library.name,
         display_name: library.display_name,
         default_version: library.default_version,
+        version: best_version&.version || latest_version&.version,
         version_count: library.versions.size,
         page_count: best_version&.pages&.size || 0,
         license_status: library.source_policy&.license_status,
