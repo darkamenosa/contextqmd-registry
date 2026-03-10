@@ -26,7 +26,7 @@ class Identities::OmniauthCallbacksRedirectTest < ActionDispatch::IntegrationTes
       name: "OAuth Suspended"
     )
 
-    identity.deactivate_customer_access
+    identity.deactivate_user_access
 
     assert_predicate identity.reload, :suspended?
     assert_empty identity.users

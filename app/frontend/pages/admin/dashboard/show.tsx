@@ -42,6 +42,8 @@ interface CrawlItem {
   status: string
   errorMessage: string | null
   submittedBy: string
+  libraryName: string | null
+  librarySlug: string | null
   createdAt: string
 }
 
@@ -102,107 +104,122 @@ export default function AdminDashboard({ stats, recentCrawls }: Props) {
       <Head title="Admin Dashboard" />
 
       {/* Registry Stats */}
-      <h2 className="text-lg font-semibold">Registry</h2>
-      <div className="mt-3 grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <BookOpen className="size-5 text-muted-foreground" />
-              <div>
-                <div className="text-2xl font-bold">{stats.libraryCount}</div>
-                <div className="text-xs text-muted-foreground">Libraries</div>
+      <div>
+        <h1 className="text-lg font-semibold">Dashboard</h1>
+        <h2 className="mt-4 mb-3 text-sm font-medium text-muted-foreground">
+          Registry
+        </h2>
+        <div className="grid gap-4 md:grid-cols-4">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <BookOpen className="size-5 text-muted-foreground" />
+                <div>
+                  <div className="text-2xl font-bold">{stats.libraryCount}</div>
+                  <div className="text-xs text-muted-foreground">Libraries</div>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <Layers className="size-5 text-muted-foreground" />
-              <div>
-                <div className="text-2xl font-bold">{stats.versionCount}</div>
-                <div className="text-xs text-muted-foreground">Versions</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <Layers className="size-5 text-muted-foreground" />
+                <div>
+                  <div className="text-2xl font-bold">{stats.versionCount}</div>
+                  <div className="text-xs text-muted-foreground">Versions</div>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <FileText className="size-5 text-muted-foreground" />
-              <div>
-                <div className="text-2xl font-bold">{stats.pageCount}</div>
-                <div className="text-xs text-muted-foreground">Doc Pages</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <FileText className="size-5 text-muted-foreground" />
+                <div>
+                  <div className="text-2xl font-bold">{stats.pageCount}</div>
+                  <div className="text-xs text-muted-foreground">Doc Pages</div>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <Users className="size-5 text-muted-foreground" />
-              <div>
-                <div className="text-2xl font-bold">{stats.identityCount}</div>
-                <div className="text-xs text-muted-foreground">Users</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <Users className="size-5 text-muted-foreground" />
+                <div>
+                  <div className="text-2xl font-bold">
+                    {stats.identityCount}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Users</div>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* Crawl Queue Stats */}
-      <h2 className="mt-8 text-lg font-semibold">Crawl Queue</h2>
-      <div className="mt-3 grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <Clock className="size-5 text-orange-500" />
-              <div>
-                <div className="text-2xl font-bold">{stats.crawlPending}</div>
-                <div className="text-xs text-muted-foreground">Pending</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <Loader2 className="size-5 text-blue-500" />
-              <div>
-                <div className="text-2xl font-bold">
-                  {stats.crawlProcessing}
+      <div>
+        <h2 className="mb-3 text-sm font-medium text-muted-foreground">
+          Crawl Queue
+        </h2>
+        <div className="grid gap-4 md:grid-cols-4">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <Clock className="size-5 text-orange-500" />
+                <div>
+                  <div className="text-2xl font-bold">{stats.crawlPending}</div>
+                  <div className="text-xs text-muted-foreground">Pending</div>
                 </div>
-                <div className="text-xs text-muted-foreground">Processing</div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <CheckCircle className="size-5 text-green-500" />
-              <div>
-                <div className="text-2xl font-bold">{stats.crawlCompleted}</div>
-                <div className="text-xs text-muted-foreground">Completed</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <Loader2 className="size-5 text-blue-500" />
+                <div>
+                  <div className="text-2xl font-bold">
+                    {stats.crawlProcessing}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Processing
+                  </div>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <XCircle className="size-5 text-red-500" />
-              <div>
-                <div className="text-2xl font-bold">{stats.crawlFailed}</div>
-                <div className="text-xs text-muted-foreground">Failed</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <CheckCircle className="size-5 text-green-500" />
+                <div>
+                  <div className="text-2xl font-bold">
+                    {stats.crawlCompleted}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Completed</div>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <XCircle className="size-5 text-red-500" />
+                <div>
+                  <div className="text-2xl font-bold">{stats.crawlFailed}</div>
+                  <div className="text-xs text-muted-foreground">Failed</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* Recent Crawl Requests */}
-      <Card className="mt-8">
+      <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">Recent Crawl Requests</CardTitle>
           <Button
@@ -223,7 +240,8 @@ export default function AdminDashboard({ stats, recentCrawls }: Props) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>URL</TableHead>
+                  <TableHead>Library</TableHead>
+                  <TableHead>Source</TableHead>
                   <TableHead>Submitted By</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">When</TableHead>
@@ -233,11 +251,23 @@ export default function AdminDashboard({ stats, recentCrawls }: Props) {
                 {recentCrawls.map((cr) => (
                   <TableRow key={cr.id}>
                     <TableCell>
+                      {cr.librarySlug ? (
+                        <Link
+                          href={`/libraries/${cr.librarySlug}`}
+                          className="font-medium text-foreground hover:underline"
+                        >
+                          {cr.libraryName}
+                        </Link>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
                       <a
                         href={cr.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-sm hover:underline"
+                        className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
                       >
                         <span className="max-w-xs truncate">{cr.url}</span>
                         <ExternalLink className="size-3 shrink-0" />

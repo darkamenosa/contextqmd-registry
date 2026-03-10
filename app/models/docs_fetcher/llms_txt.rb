@@ -23,13 +23,15 @@ module DocsFetcher
     MAX_PAGES = 500
     MAX_LINK_FETCHES = 200      # max linked pages to fetch from an index
 
-    def fetch(url)
+    def fetch(crawl_request, on_progress: nil)
+      url = crawl_request.url
       uri = URI.parse(url.strip)
       content = nil
       used_full = false
 
       # Try llms-full.txt first if URL points to llms.txt (but NOT llms-small.txt)
       if uri.path.end_with?("/llms.txt")
+        on_progress&.call("Trying llms-full.txt")
         full_uri = uri.dup
         full_uri.path = uri.path.sub(/\/llms\.txt\z/, "/llms-full.txt")
         full_content = http_get(full_uri)
@@ -41,30 +43,35 @@ module DocsFetcher
       end
       # llms-small.txt and llms-full.txt are used directly — no upgrade/downgrade
 
-      content ||= http_get(uri)
-      raise "Failed to fetch #{url}" unless content
+      on_progress&.call("Fetching #{File.basename(uri.path)}")
+      content ||= http_get(uri, raise_on_error: true)
+      raise DocsFetcher::TransientFetchError, "Failed to fetch #{url}" unless content
 
       metadata = extract_metadata(uri, content)
 
       # Decide strategy: index with links or inline content?
       if !used_full && index_style?(content)
-        pages = fetch_linked_pages(uri, content)
+        on_progress&.call("Following linked pages")
+        pages, complete = fetch_linked_pages(uri, content, on_progress: on_progress)
       else
+        on_progress&.call("Splitting into sections")
         pages = split_into_sections(content, url)
+        complete = true # section splitting processes all content, never truncated
       end
 
       if pages.empty?
         pages = [ fallback_single_page(content, url, metadata[:display_name]) ]
       end
 
-      Result.new(
+      CrawlResult.new(
         namespace: metadata[:namespace],
         name: metadata[:name],
         display_name: metadata[:display_name],
         homepage_url: url.sub(%r{/llms(?:-full|-small)?\.txt$}, ""),
         aliases: metadata[:aliases],
         version: nil,
-        pages: pages
+        pages: pages,
+        complete: complete
       )
     end
 
@@ -72,10 +79,10 @@ module DocsFetcher
 
       # --- HTTP ---
 
-      def http_get(uri, redirect_limit: 5)
-        raise "Too many redirects" if redirect_limit <= 0
+      def http_get(uri, redirect_limit: 5, raise_on_error: false)
+        raise DocsFetcher::TransientFetchError, "Too many redirects for #{uri}" if redirect_limit <= 0
 
-        proxy = ProxyPool.next_proxy
+        proxy = ::ProxyPool.next_proxy
         http = Net::HTTP.new(uri.hostname, uri.port,
           proxy&.host, proxy&.port, proxy&.user, proxy&.password)
         http.use_ssl = uri.scheme == "https"
@@ -85,13 +92,35 @@ module DocsFetcher
         response = http.request(Net::HTTP::Get.new(uri))
 
         if response.is_a?(Net::HTTPRedirection) && response["location"]
-          return http_get(URI.join(uri, response["location"]), redirect_limit: redirect_limit - 1)
+          redirect_uri = URI.join(uri, response["location"])
+          unless SsrfGuard.safe_uri?(redirect_uri)
+            raise_on_error ? raise(DocsFetcher::PermanentFetchError, "Redirect to private address: #{redirect_uri.host}") : return
+          end
+          return http_get(redirect_uri, redirect_limit: redirect_limit - 1, raise_on_error: raise_on_error)
         end
 
-        return nil unless response.is_a?(Net::HTTPSuccess)
+        unless response.is_a?(Net::HTTPSuccess)
+          return nil unless raise_on_error
+
+          code = response.code.to_i
+          case code
+          when 429
+            raise DocsFetcher::RateLimitError, "Rate limited (429) fetching #{uri}"
+          when 404, 410
+            raise DocsFetcher::PermanentFetchError, "Not found (#{code}) fetching #{uri}"
+          when 500..599
+            raise DocsFetcher::TransientFetchError, "Server error (#{code}) fetching #{uri}"
+          else
+            raise DocsFetcher::PermanentFetchError, "HTTP #{code} fetching #{uri}"
+          end
+        end
 
         body = response.body.force_encoding("UTF-8")
         body.bytesize > MAX_SIZE ? body.byteslice(0, MAX_SIZE) : body
+      rescue Net::OpenTimeout, Net::ReadTimeout, Errno::ECONNREFUSED,
+             Errno::ECONNRESET, SocketError, OpenSSL::SSL::SSLError => e
+        raise DocsFetcher::TransientFetchError, "Network error fetching #{uri}: #{e.message}" if raise_on_error
+        nil
       end
 
       # --- Index detection ---
@@ -125,15 +154,28 @@ module DocsFetcher
 
       # --- Link following ---
 
-      def fetch_linked_pages(base_uri, index_content)
+      # Returns [pages, complete] where complete is false if any cap was hit.
+      def fetch_linked_pages(base_uri, index_content, on_progress: nil)
         links = extract_doc_links(index_content)
         pages = []
         total_bytes = 0
         slug_counts = Hash.new(0)
+        total_links = [ links.size, MAX_LINK_FETCHES ].min
+        hit_cap = false
 
-        links.first(MAX_LINK_FETCHES).each do |link|
-          break if total_bytes >= MAX_TOTAL_BYTES
-          break if pages.size >= MAX_PAGES
+        links.first(MAX_LINK_FETCHES).each_with_index do |link, index|
+          if total_bytes >= MAX_TOTAL_BYTES
+            hit_cap = true
+            break
+          end
+          if pages.size >= MAX_PAGES
+            hit_cap = true
+            break
+          end
+
+          if (index + 1) % 5 == 0 || index + 1 == total_links
+            on_progress&.call("Fetching linked pages", current: index + 1, total: total_links)
+          end
 
           resolved_uri = resolve_link(base_uri, link[:path])
           next unless resolved_uri
@@ -147,7 +189,10 @@ module DocsFetcher
           next if content.strip.empty?
 
           total_bytes += content.bytesize
-          break if total_bytes > MAX_TOTAL_BYTES && pages.any?
+          if total_bytes > MAX_TOTAL_BYTES && pages.any?
+            hit_cap = true
+            break
+          end
 
           headings = content.scan(/^\#{2,4}\s+(.+)$/).flatten.map(&:strip)
           slug = make_slug(link[:title], slug_counts)
@@ -162,7 +207,9 @@ module DocsFetcher
           }
         end
 
-        pages
+        hit_cap = true if links.size > MAX_LINK_FETCHES
+
+        [ pages, !hit_cap ]
       end
 
       def resolve_link(base_uri, path)

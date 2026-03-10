@@ -82,7 +82,7 @@ Important behavior:
 - `has_many :users, dependent: :nullify`
 - `has_many :accounts, through: :users`
 - `has_many :access_tokens, dependent: :destroy`
-- `pg_search_scope :search` indexes email plus associated user names for admin customer search (prefix matching enabled).
+- `pg_search_scope :search` indexes email plus associated user names for admin user search (prefix matching enabled).
 
 Identity scopes for admin:
 
@@ -309,12 +309,12 @@ When tenant access fails:
 | `/app/:account_id/access_tokens` | personal access tokens (scoped) | authenticated active membership for that account |
 | `/admin` | redirects to `/admin/dashboard` | staff identity |
 | `/admin/dashboard` | admin dashboard | staff identity |
-| `/admin/customers` | identity-level customer admin | staff identity |
-| `/admin/customers/:id` | customer detail | staff identity |
-| `/admin/customers/:customer_id/suspension` | suspend or unsuspend a customer identity | staff identity |
-| `/admin/customers/:customer_id/staff_access` | grant or revoke staff access | staff identity |
-| `/admin/customers/:customer_id/account_reactivation` | reactivate a cancelled account from the selected membership | staff identity |
-| `/admin/customers/bulk_suspension` | bulk suspend or unsuspend customers | staff identity |
+| `/admin/users` | identity-level user admin | staff identity |
+| `/admin/users/:id` | user detail | staff identity |
+| `/admin/users/:user_id/suspension` | suspend or unsuspend a user identity | staff identity |
+| `/admin/users/:user_id/staff_access` | grant or revoke staff access | staff identity |
+| `/admin/users/:user_id/account_reactivation` | reactivate a cancelled account from the selected membership | staff identity |
+| `/admin/users/bulk_suspension` | bulk suspend or unsuspend users | staff identity |
 | `/admin/jobs` | Mission Control Jobs | staff identity |
 | `/` and marketing pages | public site | public |
 
@@ -474,14 +474,14 @@ Two paths for reactivating cancelled accounts:
 - Calls `account.reactivate`
 - Redirects to the account dashboard
 
-### Admin-facing: `Admin::Customers::AccountReactivationsController`
+### Admin-facing: `Admin::Users::AccountReactivationsController`
 
-- Route: `POST /admin/customers/:customer_id/account_reactivation`
+- Route: `POST /admin/users/:user_id/account_reactivation`
 - Requires staff identity
-- Finds the selected membership for the customer identity from `params[:membership_id]`
+- Finds the selected membership for the user identity from `params[:membership_id]`
 - Validates the account is cancelled
 - Calls `account.reactivate`
-- Redirects to the customer detail page
+- Redirects to the user detail page
 
 ## Account Lifecycle
 
@@ -536,9 +536,9 @@ After either action, if the identity still has accessible memberships, redirects
 
 Two identity flows can remove memberships and accounts:
 
-#### `Identity#deactivate_customer_access`
+#### `Identity#deactivate_user_access`
 
-Used by admin customer management.
+Used by admin user management.
 
 It (inside a lock):
 
@@ -567,9 +567,9 @@ This is why `initiated_by_id` is nullable and why every account has a system use
 
 System admin is identity-centric, not membership-centric.
 
-### `/admin/customers`
+### `/admin/users`
 
-`Admin::CustomersController` works on `Identity` records, not tenant `User` rows.
+`Admin::UsersController` works on `Identity` records, not tenant `User` rows.
 
 Features:
 
@@ -578,16 +578,16 @@ Features:
 - sort by `email` or `created_at`
 - paginated with Pagy (25 per page)
 - index view shows identity-level props (`email`, `name`, `auth_method`, `staff`, `status`, `accounts_count`)
-- customer `status` in both index and show is `Identity#status` (login/suspension state), not cancelled-account state
+- user `status` in both index and show is `Identity#status` (login/suspension state), not cancelled-account state
 - cancelled-account state is surfaced separately through the `cancelled` filter and membership props like `account_cancelled`, `days_until_deletion`, and `can_reactivate`
 - show view includes all memberships with account details, cancellation status, and days until deletion
 
-Nested REST controllers handle customer actions:
+Nested REST controllers handle user actions:
 
-- `Admin::Customers::SuspensionsController` — suspend/unsuspend
-- `Admin::Customers::StaffAccessesController` — grant/revoke staff access
-- `Admin::Customers::BulkSuspensionsController` — bulk suspend/unsuspend (self-excluded)
-- `Admin::Customers::AccountReactivationsController` — reactivate cancelled accounts
+- `Admin::Users::SuspensionsController` — suspend/unsuspend
+- `Admin::Users::StaffAccessesController` — grant/revoke staff access
+- `Admin::Users::BulkSuspensionsController` — bulk suspend/unsuspend (self-excluded)
+- `Admin::Users::AccountReactivationsController` — reactivate cancelled accounts
 
 Self-protection rules:
 

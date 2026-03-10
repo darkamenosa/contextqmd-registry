@@ -7,22 +7,22 @@ class CrawlRequestTest < ActiveSupport::TestCase
 
   # --- Auto-detect source_type ---
 
-  test "auto-detects git source_type from GitHub URL" do
+  test "auto-detects github source_type from GitHub URL" do
     cr = CrawlRequest.new(url: "https://github.com/rails/rails", identity: @identity, status: "pending")
     cr.valid?
-    assert_equal "git", cr.source_type
+    assert_equal "github", cr.source_type
   end
 
-  test "auto-detects git source_type from GitLab URL" do
+  test "auto-detects gitlab source_type from GitLab URL" do
     cr = CrawlRequest.new(url: "https://gitlab.com/group/project", identity: @identity, status: "pending")
     cr.valid?
-    assert_equal "git", cr.source_type
+    assert_equal "gitlab", cr.source_type
   end
 
-  test "auto-detects git source_type from Bitbucket URL" do
+  test "auto-detects bitbucket source_type from Bitbucket URL" do
     cr = CrawlRequest.new(url: "https://bitbucket.org/owner/repo", identity: @identity, status: "pending")
     cr.valid?
-    assert_equal "git", cr.source_type
+    assert_equal "bitbucket", cr.source_type
   end
 
   test "auto-detects llms_txt source_type from URL" do
@@ -40,7 +40,7 @@ class CrawlRequestTest < ActiveSupport::TestCase
   test "auto-detect overrides explicit source_type from URL" do
     cr = CrawlRequest.new(url: "https://github.com/rails/rails", source_type: "website", identity: @identity, status: "pending")
     cr.valid?
-    assert_equal "git", cr.source_type
+    assert_equal "github", cr.source_type
   end
 
   test "auto-detects openapi source_type" do

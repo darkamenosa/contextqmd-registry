@@ -1,85 +1,56 @@
 # frozen_string_literal: true
 
+require "find"
 require "json"
+require "open3"
 require "tmpdir"
 
 module DocsFetcher
-  # Fetches documentation from any git repository using `git clone --depth 1`.
-  # Replaces the separate Github and Gitlab fetchers with a unified approach
-  # that works with GitHub, GitLab, Bitbucket, and any git-accessible repo.
-  #
-  # Strategy:
-  # 1. Shallow clone the repo into a tmpdir
-  # 2. Walk the filesystem to discover doc files (.md, .mdx, .html, .rst, .ipynb)
-  # 3. Score and rank files by documentation relevance
-  # 4. Read content from disk (no API calls needed)
-  # 5. Convert non-markdown formats (.html, .ipynb) to markdown
-  # 6. Return structured Result
+  # Base class for git-based doc fetchers. Uses `git clone --depth 1`.
+  # Host-specific subclasses (GitHub, GitLab, Bitbucket) override URL parsing.
+  # Also serves as the fallback for unknown git hosts (source_type="git").
   class Git
-    MAX_PAGES = 500
-    MAX_FILE_SIZE = 500_000       # 500KB per file
-    MAX_TOTAL_BYTES = 20_000_000  # 20MB total content budget
-    CLONE_TIMEOUT = 120           # seconds
-
     DOC_EXTENSIONS = %w[.md .mdx .html .rst .ipynb].freeze
 
-    # Directories that almost always contain documentation
-    HIGH_VALUE_DIRS = %w[
-      docs doc documentation guide guides guides/source
-      content content/docs content/guide
-      website/docs website/content
-      pages/docs manual reference wiki
+    # Default directory prefixes to exclude (relative path segments).
+    # Per-library config adds to these (union). Include prefixes override excludes.
+    DEFAULT_EXCLUDE_PREFIXES = %w[
+      dist build out _build _site .next .nuxt target
+      vendor node_modules .bundle bower_components
+      .github .gitlab .circleci .husky .devcontainer .vscode .claude .codex
+      test tests spec specs __tests__ __mocks__ fixtures testdata
+      archive archived deprecated legacy obsolete outdated superseded old previous
+      examples example demo demos sample samples
+      i18n l10n locales translations zh-cn zh-tw zh-hk zh-mo zh-sg
     ].freeze
 
-    # Directories to always skip
-    SKIP_DIRS = %w[
-      archive archived old obsolete deprecated legacy previous outdated superseded
-      test tests spec __tests__ fixtures __fixtures__ benchmark benchmarks
-      .github .git node_modules vendor
-      dist build out target _build coverage .cache
-      __pycache__ .next .nuxt
-      examples/node_modules
-    ].freeze
-
-    # Multi-segment directory patterns to skip
-    SKIP_DIR_PATTERNS = %w[
-      lib/cjs lib/esm lib/umd lib/es lib/dist lib/build
-      lib/out lib/output lib/js lib/ts lib/src lib/pkg
-    ].freeze
-
-    # Locale directories to skip (non-English content)
-    SKIP_LOCALE_DIRS = %w[zh-cn zh-tw zh-hk zh-mo zh-sg].freeze
-
-    # Files that are NOT documentation (even if they're markdown)
-    SKIP_FILES = %w[
-      CHANGELOG.md CHANGES.md HISTORY.md changelog.md changelog.mdx
-      LICENSE.md LICENSE-MIT.md LICENSE-APACHE.md license.md
-      CODE_OF_CONDUCT.md code_of_conduct.md SECURITY.md
-      CODEOWNERS CONTRIBUTING.md RELEASING.md
+    # Default basenames to exclude (matched against filename only).
+    DEFAULT_EXCLUDE_BASENAMES = %w[
+      CHANGELOG.md changelog.md CHANGELOG.mdx changelog.mdx
+      LICENSE.md license.md LICENSE.txt license.txt
+      CODE_OF_CONDUCT.md code_of_conduct.md
+      CONTRIBUTING.md contributing.md
+      SECURITY.md security.md
       NEWS.md
     ].freeze
 
-    # Root-level files worth including alongside docs
-    ROOT_DOC_FILES = %w[
-      README.md UPGRADING.md MIGRATION.md
-      GETTING_STARTED.md QUICKSTART.md
-      ARCHITECTURE.md DESIGN.md
-    ].freeze
-
-    def fetch(url)
+    def fetch(crawl_request, on_progress: nil)
+      url = crawl_request.url
       repo_url = normalize_git_url(url)
-      branch_or_tag = extract_branch_from_url(url)
+      explicit_ref = extract_branch_from_url(url)
+      branch_or_tag = explicit_ref.presence || resolve_latest_tag(repo_url)
+      @crawl_rules = load_crawl_rules(crawl_request)
 
       Dir.mktmpdir("contextqmd-git-") do |tmpdir|
+        on_progress&.call("Cloning repository")
         clone!(repo_url, tmpdir, branch_or_tag: branch_or_tag)
-        head_sha = read_head_sha(tmpdir)
 
-        candidates = discover_doc_files(tmpdir)
-        raise "No documentation found in #{repo_url}" if candidates.empty?
+        files = discover_doc_files(tmpdir)
+        raise DocsFetcher::PermanentFetchError, "No documentation found in #{repo_url}" if files.empty?
 
-        ranked = score_and_rank(candidates, tmpdir)
-        pages = build_pages(ranked, tmpdir, url, branch_or_tag)
-        raise "No documentation content fetched from #{repo_url}" if pages.empty?
+        on_progress&.call("Discovered #{files.size} doc files")
+        pages = build_pages(files, tmpdir, url, branch_or_tag)
+        raise DocsFetcher::PermanentFetchError, "No documentation content fetched from #{repo_url}" if pages.empty?
 
         owner, repo_name = extract_owner_repo(url)
         version = extract_version(branch_or_tag)
@@ -98,285 +69,147 @@ module DocsFetcher
         args += [ repo_url, tmpdir ]
 
         success = system(*args, out: File::NULL, err: File::NULL)
-        raise "git clone failed for #{repo_url}" unless success
+        raise DocsFetcher::TransientFetchError, "git clone failed for #{repo_url}" unless success
       end
 
-      def read_head_sha(tmpdir)
-        head_file = File.join(tmpdir, ".git", "HEAD")
-        return nil unless File.exist?(head_file)
-
-        ref = File.read(head_file).strip
-        if ref.start_with?("ref: ")
-          ref_path = File.join(tmpdir, ".git", ref.sub("ref: ", ""))
-          File.exist?(ref_path) ? File.read(ref_path).strip : nil
-        else
-          ref # detached HEAD — already a SHA
-        end
-      end
-
-      # --- URL parsing ---
+      # --- URL parsing (template methods — override in subclasses) ---
 
       def normalize_git_url(url)
         uri = URI.parse(url.strip)
-        host = uri.host&.downcase || ""
-        path = uri.path || ""
-
-        # Strip tree/branch/blob paths for GitHub/GitLab/Bitbucket
-        # e.g., /rails/rails/tree/v8.1.2 → /rails/rails
-        parts = path.delete_prefix("/").split("/")
-
-        if github_host?(host)
-          # GitHub: owner/repo[/tree|blob/...]
-          clean_parts = parts.first(2)
-        elsif gitlab_host?(host)
-          # GitLab: group[/subgroup]/project[/-/tree/...]
-          separator_idx = parts.index("-")
-          clean_parts = separator_idx ? parts[0...separator_idx] : parts
-        elsif bitbucket_host?(host)
-          # Bitbucket: owner/repo[/src/...]
-          clean_parts = parts.first(2)
-        else
-          clean_parts = parts
-        end
-
-        clean_path = clean_parts.join("/").delete_suffix(".git")
-        "https://#{host}/#{clean_path}.git"
+        clean_path = uri.path.to_s.delete_prefix("/").delete_suffix(".git")
+        "https://#{uri.host&.downcase}/#{clean_path}.git"
       end
 
-      def extract_branch_from_url(url)
-        uri = URI.parse(url.strip)
-        host = uri.host&.downcase || ""
-        parts = uri.path.delete_prefix("/").split("/")
-
-        if github_host?(host)
-          # /owner/repo/tree/branch-name
-          parts[3] if parts[2] == "tree"
-        elsif gitlab_host?(host)
-          # /group/project/-/tree/branch-name
-          separator_idx = parts.index("-")
-          if separator_idx && parts[separator_idx + 1] == "tree"
-            parts[separator_idx + 2]
-          end
-        elsif bitbucket_host?(host)
-          # /owner/repo/src/branch-name
-          parts[3] if parts[2] == "src"
-        end
-      rescue URI::InvalidURIError
+      def extract_branch_from_url(_url)
         nil
       end
 
       def extract_owner_repo(url)
         uri = URI.parse(url.strip)
         parts = uri.path.delete_prefix("/").split("/")
-
-        if gitlab_host?(uri.host&.downcase || "")
-          separator_idx = parts.index("-")
-          project_parts = separator_idx ? parts[0...separator_idx] : parts
-          owner = project_parts[0...-1].join("/")
-          repo_name = project_parts.last
-        else
-          owner = parts[0]
-          repo_name = parts[1]
-        end
-
-        repo_name = repo_name&.delete_suffix(".git")
+        owner = parts[0]
+        repo_name = parts[1]&.delete_suffix(".git")
         raise ArgumentError, "Invalid git URL: #{url}" unless owner.present? && repo_name.present?
-
         [ owner.downcase, repo_name.downcase ]
       end
 
-      def github_host?(host)
-        host == "github.com"
+      def build_file_url(source_url, rel_path, branch_or_tag)
+        uri = URI.parse(source_url.strip)
+        parts = uri.path.delete_prefix("/").split("/")
+        ref = branch_or_tag || "main"
+        "#{uri.scheme}://#{uri.host&.downcase}/#{parts.first(2).join('/')}/blob/#{ref}/#{rel_path}"
       end
 
-      def gitlab_host?(host)
-        host == "gitlab.com" || host.include?("gitlab")
+      def normalize_homepage_url(source_url)
+        source_url.strip
       end
 
-      def bitbucket_host?(host)
-        host == "bitbucket.org"
+      # --- Crawl rules ---
+
+      def load_crawl_rules(crawl_request)
+        return {} unless crawl_request.library_id.present?
+
+        crawl_request.library&.crawl_rules || {}
+      end
+
+      def effective_exclude_prefixes
+        rules = @crawl_rules || {}
+        DEFAULT_EXCLUDE_PREFIXES + Array(rules["git_exclude_prefixes"])
+      end
+
+      def effective_exclude_basenames
+        rules = @crawl_rules || {}
+        DEFAULT_EXCLUDE_BASENAMES + Array(rules["git_exclude_basenames"])
+      end
+
+      def effective_include_prefixes
+        rules = @crawl_rules || {}
+        Array(rules["git_include_prefixes"])
       end
 
       # --- File discovery ---
 
+      # Uses Find.find + Find.prune to skip excluded directories entirely
+      # (not scanned then post-filtered). This matters for large repos with
+      # deep node_modules or vendor trees.
       def discover_doc_files(tmpdir)
-        Dir.glob(File.join(tmpdir, "**", "*")).select do |path|
-          next false if path.include?("/.git/")
+        exclude_prefixes = effective_exclude_prefixes.map(&:downcase)
+        exclude_basenames = Set.new(effective_exclude_basenames)
+        include_prefixes = effective_include_prefixes.map(&:downcase)
 
-          ext = File.extname(path).downcase
-          rel = relative_path(path, tmpdir)
+        files = []
+        Find.find(tmpdir) do |path|
+          rel = path.sub("#{tmpdir}/", "")
 
-          DOC_EXTENSIONS.include?(ext) &&
-            !skip_path?(rel) &&
-            File.file?(path) &&
-            File.size(path) > 0 &&
-            File.size(path) < MAX_FILE_SIZE
-        end
-      end
+          # Prune excluded directories early
+          if File.directory?(path) && path != tmpdir
+            dirname = File.basename(path).downcase
+            rel_lower = rel.downcase
 
-      def relative_path(full_path, tmpdir)
-        full_path.sub("#{tmpdir}/", "")
-      end
+            # .git is always pruned
+            if dirname == ".git"
+              Find.prune
+              next
+            end
 
-      def skip_path?(path)
-        parts = path.split("/")
-        dir_path = parts[0...-1].join("/").downcase
+            # Check if directory matches an include prefix (overrides excludes)
+            unless include_prefixes.any? { |ip| rel_lower.start_with?(ip) || ip.start_with?(rel_lower) }
+              # Check if any path segment matches an exclude prefix
+              if exclude_prefixes.include?(dirname) ||
+                 exclude_prefixes.any? { |ep| rel_lower.start_with?(ep) || rel_lower.start_with?("#{ep}/") }
+                Find.prune
+                next
+              end
+            end
 
-        # Skip files in excluded directories
-        return true if SKIP_DIRS.any? { |d|
-          if d.include?("/")
-            dir_path.start_with?(d) || dir_path.include?("/#{d}")
-          else
-            parts.any? { |p| p.downcase == d }
+            next
           end
-        }
 
-        # Skip multi-segment dir patterns
-        return true if SKIP_DIR_PATTERNS.any? { |pattern|
-          dir_path.start_with?(pattern) || dir_path.include?("/#{pattern}")
-        }
+          next unless File.file?(path)
+          next unless File.size(path) > 0
+          next unless DOC_EXTENSIONS.include?(File.extname(path).downcase)
 
-        # Skip locale directories
-        return true if SKIP_LOCALE_DIRS.any? { |locale|
-          parts.any? { |p| p.downcase == locale }
-        }
+          basename = File.basename(path)
+          next if exclude_basenames.include?(basename)
 
-        # Skip blacklisted filenames (case-insensitive)
-        filename = parts.last
-        return true if SKIP_FILES.any? { |f| filename.casecmp(f).zero? }
-
-        false
-      end
-
-      # --- Scoring ---
-
-      def score_and_rank(candidates, tmpdir)
-        scored = candidates.map do |full_path|
-          rel = relative_path(full_path, tmpdir)
-          size = File.size(full_path)
-          { path: full_path, rel: rel, score: score_file(rel, size) }
-        end
-
-        scored
-          .sort_by { |s| -s[:score] }
-          .first(MAX_PAGES)
-      end
-
-      def score_file(path, size)
-        score = 0.0
-        parts = path.split("/")
-        filename = parts.last
-        dir_path = parts[0...-1].join("/").downcase
-
-        # Root-level documentation files
-        if parts.length == 1
-          if ROOT_DOC_FILES.any? { |f| filename.casecmp(f).zero? }
-            score += 100
-          elsif filename.casecmp("README.md").zero?
-            score += 80
+          # Include prefixes override basename excludes too
+          rel_lower = rel.downcase
+          if include_prefixes.any? { |ip| rel_lower.start_with?(ip) }
+            files << path
+            next
           end
+
+          files << path
         end
 
-        # Files in high-value documentation directories
-        HIGH_VALUE_DIRS.each do |doc_dir|
-          if dir_path.start_with?(doc_dir) || dir_path == doc_dir
-            score += 90
-            break
-          end
-        end
-
-        # Depth penalty: deeper files are less likely to be primary docs
-        depth = parts.length - 1
-        score -= depth * 2
-
-        # Size signal: very small files (<500b) are likely stubs
-        if size < 500
-          score -= 20
-        elsif size.between?(1000, 200_000)
-          score += 10
-        elsif size > 200_000
-          score -= 5
-        end
-
-        # Filename signals
-        name_lower = filename.downcase
-        score += 15 if name_lower.include?("getting-started") || name_lower.include?("getting_started")
-        score += 10 if name_lower.include?("tutorial") || name_lower.include?("quickstart")
-        score += 10 if name_lower.include?("guide") || name_lower.include?("usage")
-        score += 5 if name_lower.include?("api") || name_lower.include?("reference")
-        score += 5 if name_lower.include?("install") || name_lower.include?("setup")
-        score -= 20 if name_lower.include?("release_notes") || name_lower.include?("release-notes")
-        score -= 30 if name_lower.match?(/\d+_\d+_release/) # e.g. "5_0_release_notes.md"
-
-        # Subdirectory READMEs are less useful as standalone pages
-        score -= 10 if parts.length > 1 && name_lower == "readme.md"
-
-        score
+        files
       end
 
       # --- Page building ---
 
-      def build_pages(ranked, tmpdir, source_url, branch_or_tag)
-        pages = []
-        total_bytes = 0
-        host = URI.parse(source_url.strip).host&.downcase || ""
-
-        ranked.each do |entry|
-          break if total_bytes >= MAX_TOTAL_BYTES
-
-          full_path = entry[:path]
-          rel = entry[:rel]
+      def build_pages(files, tmpdir, source_url, branch_or_tag)
+        files.filter_map do |full_path|
+          rel = full_path.sub("#{tmpdir}/", "")
           raw_content = File.read(full_path, encoding: "UTF-8")
           next if raw_content.strip.empty?
 
-          # Convert non-markdown formats
           ext = File.extname(full_path).downcase
           content, extra_title = convert_content(raw_content, ext)
           next if content.nil? || content.strip.empty?
 
-          total_bytes += content.bytesize
-          break if total_bytes > MAX_TOTAL_BYTES && pages.any?
-
           title = extra_title || extract_title(content, rel)
           content = strip_frontmatter(content) if ext == ".md" || ext == ".mdx"
-          headings = extract_headings(content)
+          headings = content.scan(/^\#{2,4}\s+(.+)$/).flatten.map(&:strip)
           slug = rel.delete_suffix(File.extname(rel)).tr("/", "-").downcase
 
-          page_url = build_file_url(source_url, host, rel, branch_or_tag)
-
-          pages << {
+          {
             page_uid: slug,
             path: rel,
             title: title,
-            url: page_url,
+            url: build_file_url(source_url, rel, branch_or_tag),
             content: content,
             headings: headings
           }
-        end
-
-        pages
-      end
-
-      def build_file_url(source_url, host, rel_path, branch_or_tag)
-        uri = URI.parse(source_url.strip)
-        parts = uri.path.delete_prefix("/").split("/")
-        ref = branch_or_tag || "main"
-
-        if github_host?(host)
-          owner = parts[0]
-          repo = parts[1]&.delete_suffix(".git")
-          "https://github.com/#{owner}/#{repo}/blob/#{ref}/#{rel_path}"
-        elsif gitlab_host?(host)
-          separator_idx = parts.index("-")
-          project_parts = separator_idx ? parts[0...separator_idx] : parts
-          project_path = project_parts.join("/")
-          "https://#{host}/#{project_path}/-/blob/#{ref}/#{rel_path}"
-        elsif bitbucket_host?(host)
-          owner = parts[0]
-          repo = parts[1]&.delete_suffix(".git")
-          "https://bitbucket.org/#{owner}/#{repo}/src/#{ref}/#{rel_path}"
-        else
-          "#{uri.scheme}://#{host}/#{parts.first(2).join('/')}/blob/#{ref}/#{rel_path}"
         end
       end
 
@@ -392,7 +225,6 @@ module DocsFetcher
         when ".ipynb"
           convert_ipynb(raw_content)
         when ".rst"
-          # Read as-is for now — plain text is still useful
           [ raw_content, nil ]
         else
           [ raw_content, nil ]
@@ -415,16 +247,13 @@ module DocsFetcher
             source = Array(cell["source"]).join
             next nil if source.strip.empty?
 
-            # Detect language from notebook metadata
             lang = notebook.dig("metadata", "kernelspec", "language") ||
                    notebook.dig("metadata", "language_info", "name") || ""
-
             "```#{lang}\n#{source}\n```"
           end
         end
 
-        content = parts.join("\n\n")
-        [ content, nil ]
+        [ parts.join("\n\n"), nil ]
       rescue JSON::ParserError => e
         Rails.logger.warn("Failed to parse .ipynb: #{e.message}")
         [ nil, nil ]
@@ -435,7 +264,6 @@ module DocsFetcher
       INSTRUCTION_PREFIXES = /\A(use |you should|if you|install |run |make sure|please |note:|ensure |do not )/i
 
       def extract_title(content, filename)
-        # Try frontmatter title first
         if content.start_with?("---")
           fm = content.split("---", 3)[1]
           if fm && (match = fm.match(/^title:\s*["']?(.+?)["']?\s*$/))
@@ -443,22 +271,11 @@ module DocsFetcher
           end
         end
 
-        # Look only in the first 30 lines
-        header_lines = content.lines.first(30)
-
-        # Try ATX-style headings, skipping instruction-like ones
-        header_lines.each do |line|
+        content.lines.first(30).each do |line|
           next unless (match = line.match(/^#\s+(.+)$/))
           title = clean_title(match[1], filename)
           next if title.match?(INSTRUCTION_PREFIXES)
           return title
-        end
-
-        # Try Setext-style: Title\n====
-        header_region = header_lines.join
-        if (match = header_region.match(/^([^\n#*`<>]{3,})\n={3,}\s*$/))
-          title = clean_title(match[1], filename)
-          return title unless title.match?(INSTRUCTION_PREFIXES)
         end
 
         humanize_filename(filename)
@@ -479,10 +296,6 @@ module DocsFetcher
           .gsub(/\b\w/, &:upcase)
       end
 
-      def extract_headings(content)
-        content.scan(/^\#{2,4}\s+(.+)$/).flatten.map(&:strip)
-      end
-
       def strip_frontmatter(content)
         return content unless content.start_with?("---")
 
@@ -499,28 +312,61 @@ module DocsFetcher
         cleaned.match?(/\A\d/) ? cleaned : nil
       end
 
+      def resolve_latest_tag(repo_url)
+        stable_candidates = []
+        prerelease_candidates = []
+
+        list_remote_tags(repo_url).each do |tag|
+          version = extract_version(tag)
+          next unless version
+
+          parsed = Version.parse(version)
+          next unless parsed
+
+          candidate = { ref: tag, parsed: parsed }
+          if Version.channel_for(version) == "stable"
+            stable_candidates << candidate
+          else
+            prerelease_candidates << candidate
+          end
+        end
+
+        select_highest_tag(stable_candidates) || select_highest_tag(prerelease_candidates)
+      end
+
+      def list_remote_tags(repo_url)
+        output, status = Open3.capture2("git", "ls-remote", "--tags", "--refs", repo_url)
+        unless status.success?
+          Rails.logger.warn("git ls-remote failed for #{repo_url}")
+          return []
+        end
+
+        output.lines.filter_map do |line|
+          _sha, ref = line.split("\t", 2)
+          next unless ref&.start_with?("refs/tags/")
+
+          ref.strip.delete_prefix("refs/tags/")
+        end
+      rescue StandardError => e
+        Rails.logger.warn("Failed to list remote tags for #{repo_url}: #{e.message}")
+        []
+      end
+
+      def select_highest_tag(candidates)
+        candidates.max_by { |candidate| candidate[:parsed] }&.dig(:ref)
+      end
+
       # --- Result building ---
 
       def build_result(owner, repo_name, source_url, pages, version)
         display_name = repo_name.tr("-", " ").split.map(&:capitalize).join(" ")
         aliases = [ repo_name, repo_name.tr("-", ""), repo_name.tr(".", "-") ].map(&:downcase).uniq
 
-        homepage_url = source_url.strip
-        # Clean up tree/branch paths from homepage URL
-        uri = URI.parse(homepage_url)
-        host = uri.host&.downcase || ""
-        parts = uri.path.delete_prefix("/").split("/")
-        if github_host?(host)
-          homepage_url = "https://github.com/#{parts.first(2).join('/')}"
-        elsif bitbucket_host?(host)
-          homepage_url = "https://bitbucket.org/#{parts.first(2).join('/')}"
-        end
-
-        Result.new(
+        CrawlResult.new(
           namespace: owner,
           name: repo_name,
           display_name: display_name,
-          homepage_url: homepage_url,
+          homepage_url: normalize_homepage_url(source_url),
           aliases: aliases,
           version: version,
           pages: pages

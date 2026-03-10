@@ -1,0 +1,292 @@
+# frozen_string_literal: true
+
+require "net/http"
+require "nokogiri"
+require "set"
+
+module DocsFetcher
+  class Website
+    # BFS HTML crawler implemented in pure Ruby.
+    # Discovers and fetches documentation pages by following links from a seed URL.
+    # Converts HTML to clean Markdown via HtmlToMarkdown (reverse_markdown).
+    class RubyRunner
+      MAX_PAGES = 1000
+      MAX_TOTAL_BYTES = 50_000_000   # 50MB total content budget
+      MAX_PAGE_SIZE = 1_000_000      # 1MB per page
+      MAX_REDIRECTS = 3
+      CRAWL_DELAY = 0.25             # 250ms between requests
+
+      USER_AGENT = "ContextQMD-Registry/1.0"
+
+      # URL patterns to skip — not documentation content
+      SKIP_EXTENSIONS = %w[
+        .png .jpg .jpeg .gif .svg .ico .webp
+        .css .js .json .xml .rss .atom
+        .pdf .zip .tar .gz .tgz
+        .woff .woff2 .ttf .eot
+        .mp3 .mp4 .avi .mov
+      ].freeze
+
+      # Query parameters that indicate tracking/non-content URLs
+      SKIP_QUERY_PATTERNS = %w[utm_ ref= source= campaign=].freeze
+
+      # Default URL path prefixes to exclude from website crawls.
+      # Per-library config adds to these (union).
+      DEFAULT_EXCLUDE_PATH_PREFIXES = %w[
+        /blog/ /changelog/ /releases/ /pricing/ /login/ /signup/
+        /account/ /admin/ /tag/ /category/ /author/ /feed/
+      ].freeze
+
+      def fetch(crawl_request, on_progress: nil)
+        url = crawl_request.url
+        seed_uri = URI.parse(url.strip)
+        @domain = seed_uri.host
+        @scheme = seed_uri.scheme
+        @base_path = compute_base_path(seed_uri.path)
+        @crawl_rules = load_crawl_rules(crawl_request)
+
+        on_progress&.call("Crawling #{@domain}")
+        pages = crawl(seed_uri, on_progress: on_progress)
+        raise DocsFetcher::PermanentFetchError, "No content found at #{url}" if pages.empty?
+
+        host = @domain.gsub(/^www\./, "")
+        parts = host.split(".")
+
+        namespace = if %w[docs api www dev].include?(parts.first) && parts.length >= 3
+          parts[1].downcase
+        else
+          parts.first.downcase
+        end
+        name = namespace
+        site_title = pages.first&.dig(:title) || @domain
+
+        CrawlResult.new(
+          namespace: namespace,
+          name: name,
+          display_name: site_title,
+          homepage_url: url,
+          aliases: [ name ],
+          version: nil,
+          pages: pages,
+          complete: false  # website crawl is always bounded/partial
+        )
+      end
+
+      private
+
+        # --- Crawling ---
+
+        def crawl(seed_uri, on_progress: nil)
+          queue = [ seed_uri.to_s ]
+          visited = Set.new
+          pages = []
+          total_bytes = 0
+
+          while queue.any? && pages.size < MAX_PAGES && total_bytes < MAX_TOTAL_BYTES
+            current_url = queue.shift
+            normalized = normalize_url(current_url)
+            next if visited.include?(normalized)
+
+            visited.add(normalized)
+            sleep(CRAWL_DELAY) if pages.any? # polite delay (skip for first request)
+
+            uri = URI.parse(current_url)
+            html = http_get_with_redirects(uri)
+            next unless html
+
+            doc = Nokogiri::HTML(html)
+
+            # Discover new links before content extraction
+            discover_links(doc, uri).each do |link|
+              norm_link = normalize_url(link)
+              queue.push(link) unless visited.include?(norm_link)
+            end
+
+            # Convert HTML to Markdown via shared helper
+            result = HtmlToMarkdown.convert(html)
+            content = result[:content]
+            next if content.nil? || content.strip.empty?
+            next if content.bytesize > MAX_PAGE_SIZE
+
+            total_bytes += content.bytesize
+            page_uid = url_to_page_uid(uri)
+
+            pages << {
+              page_uid: page_uid,
+              path: page_uid + ".md",
+              title: result[:title] || @domain,
+              url: current_url,
+              content: content,
+              headings: result[:headings]
+            }
+
+            if pages.size % 10 == 0
+              on_progress&.call("Discovered #{pages.size} pages so far")
+            end
+          end
+
+          pages
+        end
+
+        # --- Link discovery ---
+
+        def discover_links(doc, current_uri)
+          links = []
+
+          doc.css("a[href]").each do |anchor|
+            href = anchor["href"].to_s.strip
+            next if href.empty?
+
+            resolved = resolve_url(href, current_uri)
+            next unless resolved
+            next unless same_domain?(resolved)
+            next unless within_path_prefix?(resolved)
+            next if skip_url?(resolved)
+
+            links << resolved.to_s
+          end
+
+          links.uniq
+        end
+
+        def resolve_url(href, base_uri)
+          return nil if href.start_with?("#", "javascript:", "mailto:", "tel:", "data:")
+
+          href = href.split("#").first.to_s
+          return nil if href.empty?
+
+          begin
+            resolved = URI.join(base_uri, href)
+            return nil unless %w[http https].include?(resolved.scheme)
+            resolved
+          rescue URI::InvalidURIError, URI::BadURIError
+            nil
+          end
+        end
+
+        def same_domain?(uri)
+          uri.host&.downcase == @domain&.downcase
+        end
+
+        def within_path_prefix?(uri)
+          return true if @base_path == "/"
+
+          path = uri.path.to_s.downcase
+          base = @base_path.downcase
+          path.start_with?(base)
+        end
+
+        def skip_url?(uri)
+          path = uri.path.to_s.downcase
+
+          return true if SKIP_EXTENSIONS.any? { |ext| path.end_with?(ext) }
+
+          query = uri.query.to_s
+          return true if SKIP_QUERY_PATTERNS.any? { |pat| query.include?(pat) }
+
+          return true if path.match?(%r{/(assets|static|images|downloads|uploads|feeds?|api/v\d)/})
+
+          # Check against default + library-specific path prefix excludes
+          return true if effective_exclude_path_prefixes.any? { |prefix| path.start_with?(prefix) }
+
+          false
+        end
+
+        # --- Crawl rules ---
+
+        def load_crawl_rules(crawl_request)
+          return {} unless crawl_request.library_id.present?
+
+          crawl_request.library&.crawl_rules || {}
+        end
+
+        def effective_exclude_path_prefixes
+          rules = @crawl_rules || {}
+          DEFAULT_EXCLUDE_PATH_PREFIXES + Array(rules["website_exclude_path_prefixes"])
+        end
+
+        # --- URL normalization ---
+
+        def normalize_url(url_string)
+          uri = URI.parse(url_string)
+          path = uri.path.to_s.chomp("/")
+          path = "/" if path.empty?
+          "#{uri.scheme}://#{uri.host&.downcase}#{path}"
+        rescue URI::InvalidURIError
+          url_string
+        end
+
+        def compute_base_path(path)
+          clean = path.to_s.chomp("/")
+          return "/" if clean.empty? || clean == "/"
+
+          segments = clean.delete_prefix("/").split("/")
+          return clean if segments.length == 1
+
+          parent = File.dirname(clean)
+          parent == "." ? "/" : parent
+        end
+
+        def url_to_page_uid(uri)
+          path = uri.path.to_s
+            .delete_prefix("/")
+            .delete_suffix("/")
+            .gsub(/\.[a-z]+\z/i, "")
+            .tr("/", "-")
+            .downcase
+            .gsub(/[^a-z0-9-]/, "-")
+            .gsub(/-+/, "-")
+            .delete_prefix("-")
+            .delete_suffix("-")
+
+          path.empty? ? "index" : path
+        end
+
+        # --- HTTP ---
+
+        def http_get_with_redirects(uri, redirects_remaining = MAX_REDIRECTS)
+          response = http_request(uri)
+
+          case response
+          when Net::HTTPSuccess
+            body = response.body.force_encoding("UTF-8")
+            content_type = response["content-type"].to_s
+            return nil unless content_type.include?("text/html") || content_type.empty?
+            body.bytesize > MAX_PAGE_SIZE ? nil : body
+          when Net::HTTPRedirection
+            return nil if redirects_remaining <= 0
+            location = response["location"]
+            return nil unless location
+
+            begin
+              redirect_uri = URI.join(uri, location)
+              return nil unless SsrfGuard.safe_uri?(redirect_uri)
+              http_get_with_redirects(redirect_uri, redirects_remaining - 1)
+            rescue URI::InvalidURIError
+              nil
+            end
+          else
+            nil
+          end
+        rescue Net::OpenTimeout, Net::ReadTimeout, Errno::ECONNREFUSED,
+               Errno::ECONNRESET, SocketError, OpenSSL::SSL::SSLError => e
+          Rails.logger.debug { "Website crawl failed for #{uri}: #{e.message}" }
+          nil
+        end
+
+        def http_request(uri)
+          proxy = ::ProxyPool.next_proxy
+          http = Net::HTTP.new(uri.hostname, uri.port,
+            proxy&.host, proxy&.port, proxy&.user, proxy&.password)
+          http.use_ssl = uri.scheme == "https"
+          http.open_timeout = 10
+          http.read_timeout = 15
+
+          request = Net::HTTP::Get.new(uri)
+          request["User-Agent"] = USER_AGENT
+          request["Accept"] = "text/html"
+          http.request(request)
+        end
+    end
+  end
+end

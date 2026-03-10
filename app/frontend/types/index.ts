@@ -73,6 +73,13 @@ export type AdminLibrary = {
   createdAt: string
 }
 
+export type CrawlRules = {
+  git_include_prefixes?: string[]
+  git_exclude_prefixes?: string[]
+  git_exclude_basenames?: string[]
+  website_exclude_path_prefixes?: string[]
+}
+
 export type AdminLibraryDetail = {
   id: number
   namespace: string
@@ -80,11 +87,14 @@ export type AdminLibraryDetail = {
   displayName: string
   homepageUrl: string | null
   defaultVersion: string | null
+  sourceType: string | null
   aliases: string[]
   licenseStatus: string | null
   accountName: string
   versionCount: number
   pageCount: number
+  lastCrawlUrl: string | null
+  crawlRules: CrawlRules
   createdAt: string
   updatedAt: string
 }
@@ -98,6 +108,15 @@ export type AdminLibraryVersion = {
   createdAt: string
 }
 
+export type AdminPage = {
+  id: number
+  pageUid: string
+  path: string
+  title: string
+  bytes: number
+  createdAt: string
+}
+
 export type AdminCrawlItem = {
   id: number
   url: string
@@ -107,8 +126,8 @@ export type AdminCrawlItem = {
   createdAt: string
 }
 
-// Admin customer types
-export type AdminCustomer = {
+// Admin user types
+export type AdminUser = {
   id: number
   email: string
   name: string | null
@@ -119,7 +138,7 @@ export type AdminCustomer = {
   createdAt: string
 }
 
-export type AdminCustomerDetail = {
+export type AdminUserDetail = {
   id: number
   email: string
   name: string | null
@@ -128,10 +147,10 @@ export type AdminCustomerDetail = {
   status: string
   suspendedAt: string | null
   createdAt: string
-  memberships: AdminCustomerMembership[]
+  memberships: AdminUserMembership[]
 }
 
-export type AdminCustomerMembership = {
+export type AdminUserMembership = {
   id: number
   accountId: number
   accountName: string

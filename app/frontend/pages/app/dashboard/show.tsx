@@ -25,6 +25,8 @@ interface CrawlItem {
   url: string
   sourceType: string
   status: string
+  libraryName: string | null
+  librarySlug: string | null
   createdAt: string
 }
 
@@ -187,10 +189,19 @@ export default function AppDashboard({
                     key={cr.id}
                     className="flex items-center justify-between gap-2 rounded-lg border p-3"
                   >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{cr.url}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatTimeAgo(cr.createdAt)}
+                    <div className="min-w-0 flex-1">
+                      {cr.librarySlug ? (
+                        <Link
+                          href={`/libraries/${cr.librarySlug}`}
+                          className="truncate text-sm font-medium hover:underline"
+                        >
+                          {cr.libraryName}
+                        </Link>
+                      ) : (
+                        <p className="truncate text-sm font-medium">{cr.url}</p>
+                      )}
+                      <p className="truncate text-xs text-muted-foreground">
+                        {cr.url} · {formatTimeAgo(cr.createdAt)}
                       </p>
                     </div>
                     <StatusBadge status={cr.status} />

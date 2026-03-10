@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Head, Link, router } from "@inertiajs/react"
-import type { AdminCustomer, PaginationData } from "@/types"
+import type { AdminUser, PaginationData } from "@/types"
 
 import { formatDateShort } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
@@ -39,7 +39,7 @@ interface Filters {
 }
 
 interface Props {
-  customers: AdminCustomer[]
+  users: AdminUser[]
   pagination: PaginationData
   counts: Counts
   filters: Filters
@@ -58,8 +58,8 @@ function buildParams(filters: Filters, page?: number) {
 
 const STATUS_TABS = ["all", "active", "cancelled", "suspended"]
 
-export default function AdminCustomersIndex({
-  customers,
+export default function AdminUsersIndex({
+  users,
   pagination,
   counts,
   filters,
@@ -86,7 +86,7 @@ export default function AdminCustomersIndex({
   const navigate = useCallback(
     (overrides: Partial<Filters>, page?: number) => {
       const merged = { ...filters, ...overrides }
-      router.get("/admin/customers", buildParams(merged, page), {
+      router.get("/admin/users", buildParams(merged, page), {
         preserveState: true,
         preserveScroll: true,
       })
@@ -120,12 +120,12 @@ export default function AdminCustomersIndex({
 
     if (action === "suspend") {
       router.post(
-        "/admin/customers/bulk_suspension",
+        "/admin/users/bulk_suspension",
         { ids },
         { preserveState: false }
       )
     } else if (action === "reactivate") {
-      router.delete("/admin/customers/bulk_suspension", {
+      router.delete("/admin/users/bulk_suspension", {
         data: { ids },
         preserveState: false,
       })
@@ -135,7 +135,7 @@ export default function AdminCustomersIndex({
   }
 
   const columns: IndexTableColumn[] = [
-    { id: "email", label: "Customer", sortable: true },
+    { id: "email", label: "User", sortable: true },
     { id: "auth_method", label: "Auth" },
     { id: "staff", label: "Staff" },
     { id: "status", label: "Login" },
@@ -161,8 +161,9 @@ export default function AdminCustomersIndex({
 
   return (
     <AdminLayout>
-      <Head title="Customers" />
+      <Head title="Users" />
       <div className="flex flex-col gap-4">
+        <h1 className="text-lg font-semibold">Users</h1>
         <div className="rounded-lg border border-border bg-card">
           <IndexFilters
             tabs={tabs}
@@ -174,36 +175,36 @@ export default function AdminCustomersIndex({
               setQuery("")
               navigate({ query: "" })
             }}
-            queryPlaceholder="Search customers..."
+            queryPlaceholder="Search users..."
             mode={mode}
             setMode={setMode}
           />
           <IndexTable
-            items={customers}
+            items={users}
             columns={columns}
-            itemId={(customer) => customer.id}
-            renderRow={(customer) => [
+            itemId={(user) => user.id}
+            renderRow={(user) => [
               <Link
-                key="customer"
-                href={`/admin/customers/${customer.id}`}
+                key="user"
+                href={`/admin/users/${user.id}`}
                 className="group block"
               >
                 <span className="font-medium group-hover:underline">
-                  {customer.name || "\u2014"}
+                  {user.name || "\u2014"}
                 </span>
                 <span className="block text-xs text-muted-foreground">
-                  {customer.email}
+                  {user.email}
                 </span>
               </Link>,
-              customer.authMethod,
-              customer.staff ? (
+              user.authMethod,
+              user.staff ? (
                 <Badge key="staff" variant="secondary">
                   Staff
                 </Badge>
               ) : null,
-              <StatusBadge key="status" status={customer.status} />,
-              customer.accountsCount,
-              formatDateShort(customer.createdAt),
+              <StatusBadge key="status" status={user.status} />,
+              user.accountsCount,
+              formatDateShort(user.createdAt),
             ]}
             sort={sort}
             pagination={paginationProps}
@@ -221,13 +222,13 @@ export default function AdminCustomersIndex({
             ]}
             emptyState={
               <div>
-                <p className="text-muted-foreground">No customers found</p>
+                <p className="text-muted-foreground">No users found</p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {filters.query
                     ? "Try a different search term."
                     : filters.status !== "all"
-                      ? "No customers match this filter."
-                      : "Customers will appear here once they sign up."}
+                      ? "No users match this filter."
+                      : "Users will appear here once they sign up."}
                 </p>
               </div>
             }
@@ -244,13 +245,13 @@ export default function AdminCustomersIndex({
           <DialogHeader>
             <DialogTitle>
               {bulkDialog?.action === "suspend"
-                ? "Suspend customers?"
-                : "Unsuspend customers?"}
+                ? "Suspend users?"
+                : "Unsuspend users?"}
             </DialogTitle>
             <DialogDescription>
               {bulkDialog?.action === "suspend"
-                ? `This will suspend ${bulkDialog?.ids.length} customer(s). They will not be able to sign in.`
-                : `This will restore sign-in access for ${bulkDialog?.ids.length} suspended customer(s).`}
+                ? `This will suspend ${bulkDialog?.ids.length} user(s). They will not be able to sign in.`
+                : `This will restore sign-in access for ${bulkDialog?.ids.length} suspended user(s).`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

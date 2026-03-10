@@ -5,24 +5,24 @@ require "test_helper"
 class DocsFetcherTest < ActiveSupport::TestCase
   # --- detect_source_type ---
 
-  test "detects github.com as git" do
-    assert_equal "git", DocsFetcher.detect_source_type("https://github.com/rails/rails")
+  test "detects github.com as github" do
+    assert_equal "github", DocsFetcher.detect_source_type("https://github.com/rails/rails")
   end
 
-  test "detects github.com with branch as git" do
-    assert_equal "git", DocsFetcher.detect_source_type("https://github.com/vercel/next.js/tree/canary")
+  test "detects github.com with branch as github" do
+    assert_equal "github", DocsFetcher.detect_source_type("https://github.com/vercel/next.js/tree/canary")
   end
 
-  test "detects gitlab.com as git" do
-    assert_equal "git", DocsFetcher.detect_source_type("https://gitlab.com/group/project")
+  test "detects gitlab.com as gitlab" do
+    assert_equal "gitlab", DocsFetcher.detect_source_type("https://gitlab.com/group/project")
   end
 
-  test "detects self-hosted gitlab as git" do
-    assert_equal "git", DocsFetcher.detect_source_type("https://gitlab.mycompany.com/team/repo")
+  test "detects self-hosted gitlab as gitlab" do
+    assert_equal "gitlab", DocsFetcher.detect_source_type("https://gitlab.mycompany.com/team/repo")
   end
 
-  test "detects bitbucket.org as git" do
-    assert_equal "git", DocsFetcher.detect_source_type("https://bitbucket.org/owner/repo")
+  test "detects bitbucket.org as bitbucket" do
+    assert_equal "bitbucket", DocsFetcher.detect_source_type("https://bitbucket.org/owner/repo")
   end
 
   test "detects llms.txt as llms_txt" do
@@ -57,8 +57,8 @@ class DocsFetcherTest < ActiveSupport::TestCase
     assert_equal "website", DocsFetcher.detect_source_type("not a valid url at all ^^^")
   end
 
-  test "detects github with trailing slash as git" do
-    assert_equal "git", DocsFetcher.detect_source_type("https://github.com/vercel/next.js/")
+  test "detects github with trailing slash as github" do
+    assert_equal "github", DocsFetcher.detect_source_type("https://github.com/vercel/next.js/")
   end
 
   test "detects llms.txt with query params" do
@@ -81,14 +81,26 @@ class DocsFetcherTest < ActiveSupport::TestCase
     assert_equal "website", DocsFetcher.detect_source_type("https://docs.example.com:8080/guide")
   end
 
-  test "detects gitlab with subdomain pattern as git" do
-    assert_equal "git", DocsFetcher.detect_source_type("https://gitlab.internal.corp.com/team/project")
+  test "detects gitlab with subdomain pattern as gitlab" do
+    assert_equal "gitlab", DocsFetcher.detect_source_type("https://gitlab.internal.corp.com/team/project")
   end
 
   # --- for ---
 
-  test "for returns Git fetcher" do
+  test "for returns Git base fetcher" do
     assert_instance_of DocsFetcher::Git, DocsFetcher.for("git")
+  end
+
+  test "for returns GitHub fetcher" do
+    assert_instance_of DocsFetcher::Git::Github, DocsFetcher.for("github")
+  end
+
+  test "for returns GitLab fetcher" do
+    assert_instance_of DocsFetcher::Git::Gitlab, DocsFetcher.for("gitlab")
+  end
+
+  test "for returns Bitbucket fetcher" do
+    assert_instance_of DocsFetcher::Git::Bitbucket, DocsFetcher.for("bitbucket")
   end
 
   test "for returns Website fetcher" do
@@ -105,13 +117,5 @@ class DocsFetcherTest < ActiveSupport::TestCase
 
   test "for raises on unknown source type" do
     assert_raises(ArgumentError) { DocsFetcher.for("unknown") }
-  end
-
-  test "for raises on old github source type" do
-    assert_raises(ArgumentError) { DocsFetcher.for("github") }
-  end
-
-  test "for raises on old gitlab source type" do
-    assert_raises(ArgumentError) { DocsFetcher.for("gitlab") }
   end
 end

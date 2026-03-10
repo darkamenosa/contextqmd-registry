@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { Head, Link, router } from "@inertiajs/react"
-import type { AdminCustomerDetail, AdminCustomerMembership } from "@/types"
+import type { AdminUserDetail, AdminUserMembership } from "@/types"
 import { ChevronLeft } from "lucide-react"
 
 import { formatDateShort } from "@/lib/format-date"
@@ -25,7 +25,7 @@ import { StatusBadge } from "@/components/admin/ui/status-badge"
 import AdminLayout from "@/layouts/admin-layout"
 
 interface Props {
-  customer: AdminCustomerDetail
+  user: AdminUserDetail
   isSelf: boolean
 }
 
@@ -33,37 +33,35 @@ type IdentityAction = "suspend" | "unsuspend" | "grant_staff" | "revoke_staff"
 
 // ─── Overview ───────────────────────────────────────────────────────────────
 
-function OverviewCard({ customer }: { customer: AdminCustomerDetail }) {
+function OverviewCard({ user }: { user: AdminUserDetail }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Customer details</CardTitle>
+        <CardTitle>User details</CardTitle>
       </CardHeader>
       <CardContent>
         <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
           <div className="col-span-2">
             <dt className="text-muted-foreground">Email</dt>
-            <dd className="mt-0.5 font-medium">{customer.email}</dd>
+            <dd className="mt-0.5 font-medium">{user.email}</dd>
           </div>
           <div>
             <dt className="text-muted-foreground">Name</dt>
-            <dd className="mt-0.5 font-medium">{customer.name || "—"}</dd>
+            <dd className="mt-0.5 font-medium">{user.name || "—"}</dd>
           </div>
           <div>
             <dt className="text-muted-foreground">Auth method</dt>
-            <dd className="mt-0.5 font-medium">{customer.authMethod}</dd>
+            <dd className="mt-0.5 font-medium">{user.authMethod}</dd>
           </div>
           <div>
             <dt className="text-muted-foreground">Joined</dt>
             <dd className="mt-0.5 font-medium">
-              {formatDateShort(customer.createdAt)}
+              {formatDateShort(user.createdAt)}
             </dd>
           </div>
           <div>
             <dt className="text-muted-foreground">Accounts</dt>
-            <dd className="mt-0.5 font-medium">
-              {customer.memberships.length}
-            </dd>
+            <dd className="mt-0.5 font-medium">{user.memberships.length}</dd>
           </div>
         </dl>
       </CardContent>
@@ -77,7 +75,7 @@ function MembershipRow({
   membership: m,
   onReactivate,
 }: {
-  membership: AdminCustomerMembership
+  membership: AdminUserMembership
   onReactivate: () => void
 }) {
   return (
@@ -123,13 +121,13 @@ function MembershipRow({
 // ─── Memberships ────────────────────────────────────────────────────────────
 
 function MembershipsCard({
-  customer,
+  user,
   onReactivateAccount,
 }: {
-  customer: AdminCustomerDetail
+  user: AdminUserDetail
   onReactivateAccount: (membershipId: number, accountName: string) => void
 }) {
-  const count = customer.memberships.length
+  const count = user.memberships.length
 
   return (
     <Card>
@@ -165,7 +163,7 @@ function MembershipsCard({
             </thead>
             <tbody>
               {count > 0 ? (
-                customer.memberships.map((m) => (
+                user.memberships.map((m) => (
                   <MembershipRow
                     key={m.id}
                     membership={m}
@@ -195,21 +193,21 @@ function MembershipsCard({
 // ─── Identity Card (sidebar) ────────────────────────────────────────────────
 
 function IdentityCard({
-  customer,
+  user,
   isSelf,
   onSuspend,
   onUnsuspend,
   onGrantStaff,
   onRevokeStaff,
 }: {
-  customer: AdminCustomerDetail
+  user: AdminUserDetail
   isSelf: boolean
   onSuspend: () => void
   onUnsuspend: () => void
   onGrantStaff: () => void
   onRevokeStaff: () => void
 }) {
-  const isSuspended = customer.status === "suspended"
+  const isSuspended = user.status === "suspended"
 
   return (
     <Card>
@@ -221,10 +219,10 @@ function IdentityCard({
         <div className="flex flex-col gap-2 pb-4">
           <span className="text-sm font-medium">Login status</span>
           <div className="flex items-center gap-2">
-            <StatusBadge status={customer.status} />
-            {isSuspended && customer.suspendedAt && (
+            <StatusBadge status={user.status} />
+            {isSuspended && user.suspendedAt && (
               <span className="text-xs text-muted-foreground">
-                since {formatDateShort(customer.suspendedAt)}
+                since {formatDateShort(user.suspendedAt)}
               </span>
             )}
           </div>
@@ -262,19 +260,19 @@ function IdentityCard({
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium">Staff access</span>
             <Badge
-              variant={customer.staff ? "secondary" : "outline"}
+              variant={user.staff ? "secondary" : "outline"}
               className="text-muted-foreground"
             >
-              {customer.staff ? "Staff" : "No access"}
+              {user.staff ? "Staff" : "No access"}
             </Badge>
           </div>
           <p className="text-sm text-muted-foreground">
-            {customer.staff
+            {user.staff
               ? "Has access to the admin panel."
               : "Cannot access the admin panel."}
           </p>
           {!isSelf &&
-            (customer.staff ? (
+            (user.staff ? (
               <Button
                 size="sm"
                 variant="outline"
@@ -301,7 +299,7 @@ function IdentityCard({
 
 // ─── Page ───────────────────────────────────────────────────────────────────
 
-export default function AdminCustomerShow({ customer, isSelf }: Props) {
+export default function AdminUserShow({ user, isSelf }: Props) {
   const [actionOpen, setActionOpen] = useState(false)
   const [pendingAction, setPendingAction] = useState<IdentityAction | null>(
     null
@@ -315,9 +313,9 @@ export default function AdminCustomerShow({ customer, isSelf }: Props) {
   const actionMeta = (() => {
     if (pendingAction === "suspend") {
       return {
-        title: "Suspend this customer?",
+        title: "Suspend this user?",
         description:
-          "This customer will no longer be able to sign in until unsuspended.",
+          "This user will no longer be able to sign in until unsuspended.",
         confirmLabel: "Yes, suspend",
         confirmVariant: "destructive" as const,
       }
@@ -325,8 +323,8 @@ export default function AdminCustomerShow({ customer, isSelf }: Props) {
 
     if (pendingAction === "unsuspend") {
       return {
-        title: "Unsuspend this customer?",
-        description: "This customer will regain sign-in access immediately.",
+        title: "Unsuspend this user?",
+        description: "This user will regain sign-in access immediately.",
         confirmLabel: "Yes, unsuspend",
         confirmVariant: "default" as const,
       }
@@ -336,7 +334,7 @@ export default function AdminCustomerShow({ customer, isSelf }: Props) {
       return {
         title: "Grant staff access?",
         description:
-          "This customer will gain access to the admin panel immediately.",
+          "This user will gain access to the admin panel immediately.",
         confirmLabel: "Yes, grant access",
         confirmVariant: "default" as const,
       }
@@ -345,7 +343,7 @@ export default function AdminCustomerShow({ customer, isSelf }: Props) {
     if (pendingAction === "revoke_staff") {
       return {
         title: "Revoke staff access?",
-        description: "This customer will lose access to the admin panel.",
+        description: "This user will lose access to the admin panel.",
         confirmLabel: "Yes, revoke access",
         confirmVariant: "destructive" as const,
       }
@@ -381,27 +379,13 @@ export default function AdminCustomerShow({ customer, isSelf }: Props) {
     setActionProcessing(true)
 
     if (pendingAction === "suspend") {
-      router.post(
-        `/admin/customers/${customer.id}/suspension`,
-        {},
-        requestOptions
-      )
+      router.post(`/admin/users/${user.id}/suspension`, {}, requestOptions)
     } else if (pendingAction === "unsuspend") {
-      router.delete(
-        `/admin/customers/${customer.id}/suspension`,
-        requestOptions
-      )
+      router.delete(`/admin/users/${user.id}/suspension`, requestOptions)
     } else if (pendingAction === "grant_staff") {
-      router.post(
-        `/admin/customers/${customer.id}/staff_access`,
-        {},
-        requestOptions
-      )
+      router.post(`/admin/users/${user.id}/staff_access`, {}, requestOptions)
     } else {
-      router.delete(
-        `/admin/customers/${customer.id}/staff_access`,
-        requestOptions
-      )
+      router.delete(`/admin/users/${user.id}/staff_access`, requestOptions)
     }
   }
 
@@ -409,7 +393,7 @@ export default function AdminCustomerShow({ customer, isSelf }: Props) {
     if (!reactivateAccount) return
 
     router.post(
-      `/admin/customers/${customer.id}/account_reactivation`,
+      `/admin/users/${user.id}/account_reactivation`,
       { membership_id: reactivateAccount.membershipId },
       {
         onSuccess: () => setReactivateAccount(null),
@@ -419,30 +403,30 @@ export default function AdminCustomerShow({ customer, isSelf }: Props) {
 
   return (
     <AdminLayout>
-      <Head title={customer.name || customer.email} />
+      <Head title={user.name || user.email} />
 
       <div className="flex flex-col gap-4">
         {/* Page header */}
         <div className="flex items-center gap-2.5">
           <Link
-            href="/admin/customers"
-            aria-label="Back to customers"
+            href="/admin/users"
+            aria-label="Back to users"
             className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <ChevronLeft className="size-4" />
           </Link>
           <h1 className="min-w-0 truncate text-lg font-semibold">
-            {customer.name || customer.email}
+            {user.name || user.email}
           </h1>
-          <StatusBadge status={customer.status} />
+          <StatusBadge status={user.status} />
         </div>
 
         {/* Main + sidebar grid */}
         <div className="grid items-start gap-4 lg:grid-cols-5">
           <div className="flex flex-col gap-4 lg:col-span-3">
-            <OverviewCard customer={customer} />
+            <OverviewCard user={user} />
             <MembershipsCard
-              customer={customer}
+              user={user}
               onReactivateAccount={(membershipId, accountName) =>
                 setReactivateAccount({ membershipId, accountName })
               }
@@ -450,7 +434,7 @@ export default function AdminCustomerShow({ customer, isSelf }: Props) {
           </div>
           <div className="lg:col-span-2">
             <IdentityCard
-              customer={customer}
+              user={user}
               isSelf={isSelf}
               onSuspend={() => openActionDialog("suspend")}
               onUnsuspend={() => openActionDialog("unsuspend")}

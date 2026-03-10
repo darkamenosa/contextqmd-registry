@@ -4,7 +4,15 @@ require "test_helper"
 
 class DocsFetcher::WebsiteTest < ActiveSupport::TestCase
   setup do
-    @fetcher = DocsFetcher::Website.new
+    @fetcher = DocsFetcher::Website::RubyRunner.new
+  end
+
+  # --- Delegation ---
+
+  test "Website delegates to RubyRunner" do
+    website = DocsFetcher::Website.new
+    runner = website.send(:select_runner)
+    assert_instance_of DocsFetcher::Website::RubyRunner, runner
   end
 
   # --- URL normalization ---
@@ -105,6 +113,44 @@ class DocsFetcher::WebsiteTest < ActiveSupport::TestCase
   test "skip_url allows normal doc URLs" do
     assert_not @fetcher.send(:skip_url?, URI.parse("https://example.com/docs/getting-started"))
     assert_not @fetcher.send(:skip_url?, URI.parse("https://example.com/guides/intro"))
+  end
+
+  # --- Default website exclude path prefixes ---
+
+  test "skip_url skips default excluded path prefixes" do
+    assert @fetcher.send(:skip_url?, URI.parse("https://example.com/blog/post-1"))
+    assert @fetcher.send(:skip_url?, URI.parse("https://example.com/changelog/v2"))
+    assert @fetcher.send(:skip_url?, URI.parse("https://example.com/pricing/enterprise"))
+    assert @fetcher.send(:skip_url?, URI.parse("https://example.com/login/"))
+    assert @fetcher.send(:skip_url?, URI.parse("https://example.com/signup/step1"))
+    assert @fetcher.send(:skip_url?, URI.parse("https://example.com/admin/dashboard"))
+    assert @fetcher.send(:skip_url?, URI.parse("https://example.com/tag/ruby"))
+    assert @fetcher.send(:skip_url?, URI.parse("https://example.com/category/tutorials"))
+    assert @fetcher.send(:skip_url?, URI.parse("https://example.com/author/john"))
+    assert @fetcher.send(:skip_url?, URI.parse("https://example.com/feed/rss"))
+  end
+
+  # --- Library-specific website exclude path prefixes ---
+
+  test "skip_url applies library-specific exclude path prefixes" do
+    @fetcher.instance_variable_set(:@crawl_rules, {
+      "website_exclude_path_prefixes" => [ "/careers/", "/press/" ]
+    })
+
+    assert @fetcher.send(:skip_url?, URI.parse("https://example.com/careers/engineering"))
+    assert @fetcher.send(:skip_url?, URI.parse("https://example.com/press/release-2024"))
+    # Default excludes still work
+    assert @fetcher.send(:skip_url?, URI.parse("https://example.com/blog/post-1"))
+    # Non-excluded paths still allowed
+    assert_not @fetcher.send(:skip_url?, URI.parse("https://example.com/docs/intro"))
+  end
+
+  # --- load_crawl_rules ---
+
+  test "load_crawl_rules returns empty hash without library_id" do
+    crawl_request = Struct.new(:library_id, :library).new(nil, nil)
+    result = @fetcher.send(:load_crawl_rules, crawl_request)
+    assert_equal({}, result)
   end
 
   # --- URL to page UID ---

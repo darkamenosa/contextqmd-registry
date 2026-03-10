@@ -32,8 +32,8 @@ const navOverview = [
     icon: BookOpen,
   },
   {
-    title: "Customers",
-    url: "/admin/customers",
+    title: "Users",
+    url: "/admin/users",
     icon: Users,
   },
 ]

@@ -21,7 +21,7 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     ns = "example-#{SecureRandom.hex(4)}"
     lib_name = "my-lib-#{SecureRandom.hex(4)}"
 
-    result = DocsFetcher::Result.new(
+    result = CrawlResult.new(
       namespace: ns,
       name: lib_name,
       display_name: "My Library",
@@ -51,7 +51,7 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     stub_fetcher = stub_docs_fetcher(result)
 
     original_for = DocsFetcher.method(:for)
-    DocsFetcher.define_singleton_method(:for) { |_source_type| stub_fetcher }
+    DocsFetcher.define_singleton_method(:for) { |_source_type, **_opts| stub_fetcher }
 
     begin
       assert_difference -> { Library.count }, 1 do
@@ -87,7 +87,7 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
   end
 
   test "sets default_version on library when blank" do
-    result = DocsFetcher::Result.new(
+    result = CrawlResult.new(
       namespace: "ns-#{SecureRandom.hex(4)}",
       name: "lib-#{SecureRandom.hex(4)}",
       display_name: "Lib",
@@ -112,16 +112,16 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     assert_equal "stable", version.channel
   end
 
-  test "marks crawl request as failed on error after retries exhausted" do
+  test "marks crawl request as failed on error" do
     error_fetcher = Object.new
-    error_fetcher.define_singleton_method(:fetch) { |_url| raise "Network error" }
+    error_fetcher.define_singleton_method(:fetch) { |_crawl_request, **_opts| raise "Network error" }
 
     original_for = DocsFetcher.method(:for)
-    DocsFetcher.define_singleton_method(:for) { |_source_type| error_fetcher }
+    DocsFetcher.define_singleton_method(:for) { |_source_type, **_opts| error_fetcher }
 
-    # Use perform_enqueued_jobs to trigger retry_on's exhaustion handler
-    perform_enqueued_jobs do
-      ProcessCrawlRequestJob.perform_later(@crawl_request)
+    # CrawlRequest#process marks itself failed, then re-raises
+    assert_raises(RuntimeError) do
+      ProcessCrawlRequestJob.perform_now(@crawl_request)
     end
 
     DocsFetcher.define_singleton_method(:for, original_for)
@@ -142,7 +142,7 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
   test "transitions status to processing then completed" do
     statuses = []
 
-    result = DocsFetcher::Result.new(
+    result = CrawlResult.new(
       namespace: "ns-#{SecureRandom.hex(4)}",
       name: "lib-#{SecureRandom.hex(4)}",
       display_name: "Lib",
@@ -181,7 +181,7 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
       display_name: "Existing Lib"
     )
 
-    result = DocsFetcher::Result.new(
+    result = CrawlResult.new(
       namespace: ns,
       name: lib_name,
       display_name: "Updated Lib",
@@ -208,7 +208,7 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     ns = "ns-#{SecureRandom.hex(4)}"
     lib_name = "lib-#{SecureRandom.hex(4)}"
 
-    result = DocsFetcher::Result.new(
+    result = CrawlResult.new(
       namespace: ns, name: lib_name, display_name: "Lib",
       homepage_url: "https://example.com", aliases: [],
       version: nil,
@@ -239,7 +239,7 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     ns = "ns-#{SecureRandom.hex(4)}"
     lib_name = "lib-#{SecureRandom.hex(4)}"
 
-    result_v1 = DocsFetcher::Result.new(
+    result_v1 = CrawlResult.new(
       namespace: ns, name: lib_name, display_name: "Lib",
       homepage_url: "https://example.com", aliases: [],
       version: nil,
@@ -257,7 +257,7 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     assert_equal 2, version.pages.count
 
     # Re-crawl without old-page
-    result_v2 = DocsFetcher::Result.new(
+    result_v2 = CrawlResult.new(
       namespace: ns, name: lib_name, display_name: "Lib",
       homepage_url: "https://example.com", aliases: [],
       version: nil,
@@ -276,18 +276,87 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     assert_not_nil version.pages.find_by(page_uid: "intro")
   end
 
+  test "promotes default_version when a newer concrete version is crawled" do
+    ns = "ns-#{SecureRandom.hex(4)}"
+    lib_name = "lib-#{SecureRandom.hex(4)}"
+
+    result_v1 = CrawlResult.new(
+      namespace: ns, name: lib_name, display_name: "Lib",
+      homepage_url: "https://example.com", aliases: [],
+      version: "1.0.0",
+      pages: [
+        { page_uid: "intro", path: "intro.md", title: "Intro",
+          url: "https://example.com/intro", content: "Hello", headings: [] }
+      ]
+    )
+
+    with_stub_fetcher(result_v1) { ProcessCrawlRequestJob.perform_now(@crawl_request) }
+
+    library = @crawl_request.reload.library
+    assert_equal "1.0.0", library.default_version
+
+    result_v2 = CrawlResult.new(
+      namespace: ns, name: lib_name, display_name: "Lib",
+      homepage_url: "https://example.com", aliases: [],
+      version: "1.1.0",
+      pages: [
+        { page_uid: "intro", path: "intro.md", title: "Intro",
+          url: "https://example.com/intro", content: "Hello v1.1", headings: [] }
+      ]
+    )
+
+    cr2 = CrawlRequest.create!(identity: @identity, url: "https://example.com/llms.txt", source_type: "llms_txt", status: "pending")
+
+    with_stub_fetcher(result_v2) do
+      assert_difference -> { library.versions.count }, 1 do
+        ProcessCrawlRequestJob.perform_now(cr2)
+      end
+    end
+
+    library.reload
+    assert_equal "1.1.0", library.default_version
+    assert library.versions.exists?(version: "1.0.0")
+    assert library.versions.exists?(version: "1.1.0")
+  end
+
+  test "normalizes fetched library names into path-safe slugs" do
+    result = CrawlResult.new(
+      namespace: "reactjs",
+      name: "react.dev",
+      display_name: "React.dev",
+      homepage_url: "https://github.com/reactjs/react.dev",
+      aliases: [ "react.dev", "react-dev" ],
+      version: "19.0.0",
+      pages: [
+        { page_uid: "intro", path: "README.md", title: "Intro",
+          url: "https://github.com/reactjs/react.dev", content: "Hello", headings: [] }
+      ]
+    )
+
+    with_stub_fetcher(result) do
+      ProcessCrawlRequestJob.perform_now(@crawl_request)
+    end
+
+    @crawl_request.reload
+    assert_equal "completed", @crawl_request.status
+    assert_not_nil @crawl_request.library
+    assert_equal "reactjs", @crawl_request.library.namespace
+    assert_equal "react-dev", @crawl_request.library.name
+    assert_includes @crawl_request.library.aliases, "react.dev"
+  end
+
   private
 
     def stub_docs_fetcher(result)
       fetcher = Object.new
-      fetcher.define_singleton_method(:fetch) { |_url| result }
+      fetcher.define_singleton_method(:fetch) { |_crawl_request, **_opts| result }
       fetcher
     end
 
     def with_stub_fetcher(result)
       stub = stub_docs_fetcher(result)
       original_for = DocsFetcher.method(:for)
-      DocsFetcher.define_singleton_method(:for) { |_source_type| stub }
+      DocsFetcher.define_singleton_method(:for) { |_source_type, **_opts| stub }
       yield
     ensure
       DocsFetcher.define_singleton_method(:for, original_for)

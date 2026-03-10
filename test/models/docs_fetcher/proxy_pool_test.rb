@@ -2,99 +2,92 @@
 
 require "test_helper"
 
-class DocsFetcher::ProxyPoolTest < ActiveSupport::TestCase
-  teardown do
-    ENV.delete("CRAWL_PROXY_URL")
-    ENV.delete("CRAWL_PROXY_URLS")
-    DocsFetcher::ProxyPool.reset!
-  end
-
+class ProxyPoolTest < ActiveSupport::TestCase # rubocop:disable Minitest/TestFileName
   test "returns nil when no proxies configured" do
-    DocsFetcher::ProxyPool.reset!
-    assert_nil DocsFetcher::ProxyPool.next_proxy
-    assert_equal 0, DocsFetcher::ProxyPool.size
+    assert_nil ProxyPool.next_proxy
+    assert_equal 0, ProxyPool.size
   end
 
-  test "uses single proxy from CRAWL_PROXY_URL" do
-    ENV["CRAWL_PROXY_URL"] = "http://proxy1.example.com:8080"
-    DocsFetcher::ProxyPool.reset!
+  test "returns proxy URI from DB config" do
+    CrawlProxyConfig.create!(
+      name: "test-proxy", scheme: "http", host: "proxy1.example.com", port: 8080
+    )
 
-    proxy = DocsFetcher::ProxyPool.next_proxy
+    proxy = ProxyPool.next_proxy
     assert_equal "proxy1.example.com", proxy.host
     assert_equal 8080, proxy.port
-    assert_equal 1, DocsFetcher::ProxyPool.size
+    assert_equal 1, ProxyPool.size
   end
 
-  test "rotates through multiple proxies from CRAWL_PROXY_URLS" do
-    ENV["CRAWL_PROXY_URLS"] = "http://p1:8080,http://p2:8080,http://p3:8080"
-    DocsFetcher::ProxyPool.reset!
+  test "skips proxies on cooldown" do
+    CrawlProxyConfig.create!(
+      name: "cooled", scheme: "http", host: "cool.example.com", port: 8080,
+      cooldown_until: 1.hour.from_now
+    )
+    CrawlProxyConfig.create!(
+      name: "ready", scheme: "http", host: "ready.example.com", port: 8080
+    )
 
-    assert_equal 3, DocsFetcher::ProxyPool.size
-
-    hosts = 6.times.map { DocsFetcher::ProxyPool.next_proxy.host }
-    assert_equal %w[p1 p2 p3 p1 p2 p3], hosts
+    proxy = ProxyPool.next_proxy
+    assert_equal "ready.example.com", proxy.host
   end
 
-  test "CRAWL_PROXY_URLS takes priority over CRAWL_PROXY_URL" do
-    ENV["CRAWL_PROXY_URL"] = "http://single:8080"
-    ENV["CRAWL_PROXY_URLS"] = "http://pool1:8080,http://pool2:8080"
-    DocsFetcher::ProxyPool.reset!
+  test "skips inactive proxies" do
+    CrawlProxyConfig.create!(
+      name: "inactive", scheme: "http", host: "off.example.com", port: 8080,
+      active: false
+    )
 
-    assert_equal 2, DocsFetcher::ProxyPool.size
-    assert_equal "pool1", DocsFetcher::ProxyPool.next_proxy.host
+    assert_nil ProxyPool.next_proxy
+    assert_equal 0, ProxyPool.size
   end
 
-  test "skips invalid proxy URLs in pool" do
-    ENV["CRAWL_PROXY_URLS"] = "http://valid:8080,not a url,http://also-valid:9090"
-    DocsFetcher::ProxyPool.reset!
+  test "filters by usage scope" do
+    CrawlProxyConfig.create!(
+      name: "website-only", scheme: "http", host: "web.example.com", port: 8080,
+      usage_scope: "website"
+    )
+    CrawlProxyConfig.create!(
+      name: "all-scope", scheme: "http", host: "all.example.com", port: 8080,
+      usage_scope: "all"
+    )
 
-    assert_equal 2, DocsFetcher::ProxyPool.size
+    # "structured" scope should only match "all" scope proxies
+    proxy = ProxyPool.next_proxy(scope: "structured")
+    assert_equal "all.example.com", proxy.host
   end
 
-  test "handles proxy with authentication" do
-    ENV["CRAWL_PROXY_URL"] = "http://user:pass@proxy.example.com:8080"
-    DocsFetcher::ProxyPool.reset!
+  test "prefers higher priority proxies" do
+    CrawlProxyConfig.create!(
+      name: "low", scheme: "http", host: "low.example.com", port: 8080,
+      priority: 1
+    )
+    CrawlProxyConfig.create!(
+      name: "high", scheme: "http", host: "high.example.com", port: 8080,
+      priority: 10
+    )
 
-    proxy = DocsFetcher::ProxyPool.next_proxy
-    assert_equal "proxy.example.com", proxy.host
+    proxy = ProxyPool.next_proxy
+    assert_equal "high.example.com", proxy.host
+  end
+
+  test "all_proxies returns all available proxies" do
+    CrawlProxyConfig.create!(name: "p1", scheme: "http", host: "p1.example.com", port: 8080)
+    CrawlProxyConfig.create!(name: "p2", scheme: "http", host: "p2.example.com", port: 9090)
+
+    proxies = ProxyPool.all_proxies
+    assert_equal 2, proxies.size
+  end
+
+  test "includes proxy credentials in URI" do
+    CrawlProxyConfig.create!(
+      name: "auth-proxy", scheme: "http", host: "auth.example.com", port: 8080,
+      username: "user", password: "pass"
+    )
+
+    proxy = ProxyPool.next_proxy
+    assert_equal "auth.example.com", proxy.host
     assert_equal "user", proxy.user
     assert_equal "pass", proxy.password
-  end
-
-  test "handles empty CRAWL_PROXY_URLS" do
-    ENV["CRAWL_PROXY_URLS"] = ""
-    DocsFetcher::ProxyPool.reset!
-
-    assert_equal 0, DocsFetcher::ProxyPool.size
-    assert_nil DocsFetcher::ProxyPool.next_proxy
-  end
-
-  test "handles whitespace in proxy list" do
-    ENV["CRAWL_PROXY_URLS"] = " http://p1:8080 , http://p2:8080 , "
-    DocsFetcher::ProxyPool.reset!
-
-    assert_equal 2, DocsFetcher::ProxyPool.size
-    assert_equal "p1", DocsFetcher::ProxyPool.next_proxy.host
-  end
-
-  test "reset! clears cached proxies and rotation index" do
-    ENV["CRAWL_PROXY_URLS"] = "http://p1:8080,http://p2:8080"
-    DocsFetcher::ProxyPool.reset!
-
-    DocsFetcher::ProxyPool.next_proxy # advance to p2
-    DocsFetcher::ProxyPool.reset!
-
-    # After reset, starts from the beginning again
-    assert_equal "p1", DocsFetcher::ProxyPool.next_proxy.host
-  end
-
-  test "all_proxies returns full list" do
-    ENV["CRAWL_PROXY_URLS"] = "http://p1:8080,http://p2:8080"
-    DocsFetcher::ProxyPool.reset!
-
-    proxies = DocsFetcher::ProxyPool.all_proxies
-    assert_equal 2, proxies.size
-    assert_equal "p1", proxies[0].host
-    assert_equal "p2", proxies[1].host
   end
 end

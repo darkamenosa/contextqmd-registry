@@ -32,17 +32,26 @@ Rails.application.routes.draw do
   authenticate :identity, ->(identity) { identity.staff? } do
     namespace :admin do
       resource :dashboard, only: :show
-      resources :customers, only: [ :index, :show ], constraints: { id: /\d+/ } do
-        scope module: :customers do
+      resources :users, only: [ :index, :show ], constraints: { id: /\d+/ } do
+        scope module: :users do
           resource :account_reactivation, only: :create
           resource :suspension, only: [ :create, :destroy ]
           resource :staff_access, only: [ :create, :destroy ]
         end
       end
-      namespace :customers do
+      namespace :users do
         resource :bulk_suspension, only: [ :create, :destroy ]
       end
-      resources :libraries, only: [ :index, :show, :edit, :update, :destroy ]
+      resources :libraries, only: [ :index, :show, :edit, :update, :destroy ] do
+        scope module: :libraries do
+          resource :recrawl, only: :create
+          resource :default_version, only: :update
+        end
+      end
+      resources :versions, only: [ :update, :destroy ] do
+        resources :pages, only: :index, module: :libraries, controller: :pages
+      end
+      resources :pages, only: [ :show, :edit, :update, :destroy ]
       resources :webhooks, only: [ :index ]
 
       namespace :analytics do

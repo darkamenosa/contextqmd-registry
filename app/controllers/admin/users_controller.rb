@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Admin
-  class CustomersController < BaseController
+  class UsersController < BaseController
     def index
       base = params[:query].present? ? Identity.search(params[:query]) : Identity.all
       scope = filter_by_status(base)
@@ -11,8 +11,8 @@ module Admin
         limit: 25
       )
 
-      render inertia: "admin/customers/index", props: {
-        customers: identities.map { |i| customer_props(i) },
+      render inertia: "admin/users/index", props: {
+        users: identities.map { |i| user_props(i) },
         pagination: pagination_props(pagy),
         counts: {
           all: base.count,
@@ -32,8 +32,8 @@ module Admin
     def show
       identity = Identity.includes(users: { account: :cancellation }).find(params[:id])
 
-      render inertia: "admin/customers/show", props: {
-        customer: customer_detail_props(identity),
+      render inertia: "admin/users/show", props: {
+        user: user_detail_props(identity),
         is_self: identity == Current.identity
       }
     end
@@ -57,7 +57,7 @@ module Admin
         %w[asc desc].include?(params[:direction]) ? params[:direction] : "desc"
       end
 
-      def customer_props(identity)
+      def user_props(identity)
         {
           id: identity.id,
           email: identity.email,
@@ -70,7 +70,7 @@ module Admin
         }
       end
 
-      def customer_detail_props(identity)
+      def user_detail_props(identity)
         {
           id: identity.id,
           email: identity.email,

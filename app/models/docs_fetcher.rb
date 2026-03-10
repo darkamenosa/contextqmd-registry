@@ -1,19 +1,25 @@
 # frozen_string_literal: true
 
 # Dispatches to the right fetcher based on source_type.
-# Each fetcher returns a DocsFetcher::Result with library metadata and pages.
+# Each fetcher returns a CrawlResult with library metadata and pages.
 module DocsFetcher
-  FETCHERS = {
-    "git" => "DocsFetcher::Git",
-    "website" => "DocsFetcher::Website",
-    "llms_txt" => "DocsFetcher::LlmsTxt",
-    "openapi" => "DocsFetcher::Openapi"
-  }.freeze
+  # Typed errors for retry classification (see crawl-strategy.md).
+  # TransientFetchError → job retries (DNS, timeout, 5xx).
+  # PermanentFetchError → immediate fail (404, parse error).
+  # RateLimitError → job retries with backoff (429, rate-limit 403).
+  class TransientFetchError < StandardError; end
+  class PermanentFetchError < StandardError; end
+  class RateLimitError < TransientFetchError; end
 
-  GITHUB_HOSTS = %w[github.com].freeze
-  GITLAB_HOSTS = %w[gitlab.com].freeze
-  BITBUCKET_HOSTS = %w[bitbucket.org].freeze
-  GIT_HOSTS = (GITHUB_HOSTS + GITLAB_HOSTS + BITBUCKET_HOSTS).freeze
+  FETCHERS = {
+    "github"    => "DocsFetcher::Git::Github",
+    "gitlab"    => "DocsFetcher::Git::Gitlab",
+    "bitbucket" => "DocsFetcher::Git::Bitbucket",
+    "git"       => "DocsFetcher::Git",
+    "website"   => "DocsFetcher::Website",
+    "llms_txt"  => "DocsFetcher::LlmsTxt",
+    "openapi"   => "DocsFetcher::Openapi"
+  }.freeze
 
   def self.for(source_type)
     klass = FETCHERS[source_type]
@@ -22,14 +28,15 @@ module DocsFetcher
   end
 
   # Auto-detect source_type from a URL string.
-  # Returns one of: "git", "llms_txt", "openapi", "website"
+  # Returns one of: "github", "gitlab", "bitbucket", "llms_txt", "openapi", "website"
   def self.detect_source_type(url)
     uri = URI.parse(url.strip)
     host = uri.host&.downcase || ""
     path = uri.path&.downcase || ""
 
-    return "git" if GIT_HOSTS.include?(host)
-    return "git" if gitlab_host?(host)
+    return "github" if host == "github.com"
+    return "gitlab" if gitlab_host?(host)
+    return "bitbucket" if host == "bitbucket.org"
     return "llms_txt" if path.match?(/llms(?:-full|-small)?\.txt\z/)
     return "openapi" if openapi_path?(path)
 
@@ -39,8 +46,7 @@ module DocsFetcher
   end
 
   def self.gitlab_host?(host)
-    # Self-hosted GitLab instances often have "gitlab" in the hostname
-    host.include?("gitlab")
+    host == "gitlab.com" || host.include?("gitlab")
   end
   private_class_method :gitlab_host?
 

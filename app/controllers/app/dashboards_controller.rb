@@ -10,7 +10,7 @@ module App
           page_count: Page.count,
           crawl_pending: CrawlRequest.pending.count
         },
-        recent_crawls: Current.identity.crawl_requests.recent.limit(5).map { |cr| crawl_props(cr) },
+        recent_crawls: Current.identity.crawl_requests.includes(:library).recent.limit(5).map { |cr| crawl_props(cr) },
         recent_libraries: Library.order(created_at: :desc).limit(5).map { |lib| library_props(lib) }
       }
     end
@@ -23,6 +23,8 @@ module App
           url: cr.url,
           source_type: cr.source_type,
           status: cr.status,
+          library_name: cr.library&.display_name,
+          library_slug: cr.library ? "#{cr.library.namespace}/#{cr.library.name}" : nil,
           created_at: cr.created_at.iso8601
         }
       end

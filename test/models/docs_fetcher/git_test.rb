@@ -6,232 +6,121 @@ require "fileutils"
 
 class DocsFetcher::GitTest < ActiveSupport::TestCase
   setup do
-    @fetcher = DocsFetcher::Git.new
+    @github = DocsFetcher::Git::Github.new
+    @gitlab = DocsFetcher::Git::Gitlab.new
+    @bitbucket = DocsFetcher::Git::Bitbucket.new
+    @generic = DocsFetcher::Git.new
   end
 
-  # --- URL normalization ---
+  # --- GitHub URL normalization ---
 
   test "normalizes GitHub URL to .git URL" do
-    result = @fetcher.send(:normalize_git_url, "https://github.com/rails/rails")
+    result = @github.send(:normalize_git_url, "https://github.com/rails/rails")
     assert_equal "https://github.com/rails/rails.git", result
   end
 
   test "normalizes GitHub URL with tree path" do
-    result = @fetcher.send(:normalize_git_url, "https://github.com/rails/rails/tree/v8.1.2")
+    result = @github.send(:normalize_git_url, "https://github.com/rails/rails/tree/v8.1.2")
     assert_equal "https://github.com/rails/rails.git", result
   end
 
   test "normalizes GitHub URL with .git suffix" do
-    result = @fetcher.send(:normalize_git_url, "https://github.com/facebook/react.git")
+    result = @github.send(:normalize_git_url, "https://github.com/facebook/react.git")
     assert_equal "https://github.com/facebook/react.git", result
   end
 
+  # --- GitLab URL normalization ---
+
   test "normalizes GitLab URL" do
-    result = @fetcher.send(:normalize_git_url, "https://gitlab.com/group/project")
+    result = @gitlab.send(:normalize_git_url, "https://gitlab.com/group/project")
     assert_equal "https://gitlab.com/group/project.git", result
   end
 
   test "normalizes GitLab URL with /-/ separator" do
-    result = @fetcher.send(:normalize_git_url, "https://gitlab.com/group/project/-/tree/main")
+    result = @gitlab.send(:normalize_git_url, "https://gitlab.com/group/project/-/tree/main")
     assert_equal "https://gitlab.com/group/project.git", result
   end
 
+  # --- Bitbucket URL normalization ---
+
   test "normalizes Bitbucket URL" do
-    result = @fetcher.send(:normalize_git_url, "https://bitbucket.org/owner/repo")
+    result = @bitbucket.send(:normalize_git_url, "https://bitbucket.org/owner/repo")
     assert_equal "https://bitbucket.org/owner/repo.git", result
   end
 
   test "normalizes Bitbucket URL with src path" do
-    result = @fetcher.send(:normalize_git_url, "https://bitbucket.org/owner/repo/src/main")
+    result = @bitbucket.send(:normalize_git_url, "https://bitbucket.org/owner/repo/src/main")
     assert_equal "https://bitbucket.org/owner/repo.git", result
   end
 
   # --- Branch extraction ---
 
   test "extracts branch from GitHub tree URL" do
-    branch = @fetcher.send(:extract_branch_from_url, "https://github.com/rails/rails/tree/v8.1.2")
+    branch = @github.send(:extract_branch_from_url, "https://github.com/rails/rails/tree/v8.1.2")
     assert_equal "v8.1.2", branch
   end
 
   test "returns nil branch for GitHub URL without tree" do
-    branch = @fetcher.send(:extract_branch_from_url, "https://github.com/rails/rails")
+    branch = @github.send(:extract_branch_from_url, "https://github.com/rails/rails")
     assert_nil branch
   end
 
   test "extracts branch from GitLab URL" do
-    branch = @fetcher.send(:extract_branch_from_url, "https://gitlab.com/group/project/-/tree/develop")
+    branch = @gitlab.send(:extract_branch_from_url, "https://gitlab.com/group/project/-/tree/develop")
     assert_equal "develop", branch
   end
 
   test "extracts branch from Bitbucket URL" do
-    branch = @fetcher.send(:extract_branch_from_url, "https://bitbucket.org/owner/repo/src/main")
+    branch = @bitbucket.send(:extract_branch_from_url, "https://bitbucket.org/owner/repo/src/main")
     assert_equal "main", branch
   end
 
+  test "returns nil branch for generic git URL" do
+    branch = @generic.send(:extract_branch_from_url, "https://git.example.com/owner/repo")
+    assert_nil branch
+  end
+
   test "returns nil for invalid URI" do
-    branch = @fetcher.send(:extract_branch_from_url, "not a url ^^^")
+    branch = @github.send(:extract_branch_from_url, "not a url ^^^")
     assert_nil branch
   end
 
   # --- Owner/repo extraction ---
 
   test "extracts owner and repo from GitHub URL" do
-    owner, repo = @fetcher.send(:extract_owner_repo, "https://github.com/vercel/next.js")
+    owner, repo = @github.send(:extract_owner_repo, "https://github.com/vercel/next.js")
     assert_equal "vercel", owner
     assert_equal "next.js", repo
   end
 
   test "extracts owner and repo from GitHub URL with .git" do
-    owner, repo = @fetcher.send(:extract_owner_repo, "https://github.com/facebook/react.git")
+    owner, repo = @github.send(:extract_owner_repo, "https://github.com/facebook/react.git")
     assert_equal "facebook", owner
     assert_equal "react", repo
   end
 
   test "extracts owner and repo from GitLab URL" do
-    owner, repo = @fetcher.send(:extract_owner_repo, "https://gitlab.com/group/project")
+    owner, repo = @gitlab.send(:extract_owner_repo, "https://gitlab.com/group/project")
     assert_equal "group", owner
     assert_equal "project", repo
   end
 
   test "extracts owner and repo from nested GitLab URL" do
-    owner, repo = @fetcher.send(:extract_owner_repo, "https://gitlab.com/org/subgroup/project")
+    owner, repo = @gitlab.send(:extract_owner_repo, "https://gitlab.com/org/subgroup/project")
     assert_equal "org/subgroup", owner
     assert_equal "project", repo
   end
 
   test "extracts owner and repo from Bitbucket URL" do
-    owner, repo = @fetcher.send(:extract_owner_repo, "https://bitbucket.org/team/repo")
+    owner, repo = @bitbucket.send(:extract_owner_repo, "https://bitbucket.org/team/repo")
     assert_equal "team", owner
     assert_equal "repo", repo
   end
 
   test "raises on URL with only host" do
     assert_raises(ArgumentError) do
-      @fetcher.send(:extract_owner_repo, "https://github.com/")
+      @generic.send(:extract_owner_repo, "https://github.com/")
     end
-  end
-
-  # --- File scoring ---
-
-  test "root README.md gets high score" do
-    score = @fetcher.send(:score_file, "README.md", 5000)
-    assert score >= 100, "Root README.md should score >= 100, got #{score}"
-  end
-
-  test "docs directory files score higher than random files" do
-    doc_score = @fetcher.send(:score_file, "docs/getting-started.md", 5000)
-    random_score = @fetcher.send(:score_file, "lib/internal/utils.md", 5000)
-    assert doc_score > random_score, "docs/ files should score higher"
-  end
-
-  test "getting-started files get bonus score" do
-    score = @fetcher.send(:score_file, "docs/getting-started.md", 5000)
-    plain_score = @fetcher.send(:score_file, "docs/other-page.md", 5000)
-    assert score > plain_score, "Getting started should score higher than plain doc"
-  end
-
-  test "very small files get penalty" do
-    small_score = @fetcher.send(:score_file, "docs/intro.md", 100)
-    normal_score = @fetcher.send(:score_file, "docs/intro.md", 5000)
-    assert normal_score > small_score, "Very small files should be penalized"
-  end
-
-  test "deep paths get depth penalty" do
-    shallow_score = @fetcher.send(:score_file, "docs/guide.md", 5000)
-    deep_score = @fetcher.send(:score_file, "docs/a/b/c/d/guide.md", 5000)
-    assert shallow_score > deep_score, "Deeper files should score lower"
-  end
-
-  test "release notes get penalty" do
-    release_score = @fetcher.send(:score_file, "docs/release-notes.md", 5000)
-    normal_score = @fetcher.send(:score_file, "docs/guide.md", 5000)
-    assert normal_score > release_score, "Release notes should be penalized"
-  end
-
-  test "tutorial files get bonus" do
-    tutorial_score = @fetcher.send(:score_file, "docs/tutorial.md", 5000)
-    plain_score = @fetcher.send(:score_file, "docs/other.md", 5000)
-    assert tutorial_score > plain_score, "Tutorial files should score higher"
-  end
-
-  test "install files get bonus" do
-    install_score = @fetcher.send(:score_file, "docs/install.md", 5000)
-    plain_score = @fetcher.send(:score_file, "docs/other.md", 5000)
-    assert install_score > plain_score, "Install files should score higher"
-  end
-
-  # --- Skip paths ---
-
-  test "skip_path returns true for node_modules" do
-    assert @fetcher.send(:skip_path?, "node_modules/foo/README.md")
-  end
-
-  test "skip_path returns true for test directories" do
-    assert @fetcher.send(:skip_path?, "test/fixtures/README.md")
-  end
-
-  test "skip_path returns true for __tests__ directories" do
-    assert @fetcher.send(:skip_path?, "src/__tests__/README.md")
-  end
-
-  test "skip_path returns true for CHANGELOG" do
-    assert @fetcher.send(:skip_path?, "CHANGELOG.md")
-  end
-
-  test "skip_path returns true for LICENSE" do
-    assert @fetcher.send(:skip_path?, "LICENSE.md")
-  end
-
-  test "skip_path returns true for vendor directory" do
-    assert @fetcher.send(:skip_path?, "vendor/bundle/README.md")
-  end
-
-  test "skip_path returns true for build output" do
-    assert @fetcher.send(:skip_path?, "dist/docs/readme.md")
-  end
-
-  test "skip_path returns true for archived directories" do
-    assert @fetcher.send(:skip_path?, "archive/old-docs/guide.md")
-  end
-
-  test "skip_path returns true for deprecated directories" do
-    assert @fetcher.send(:skip_path?, "deprecated/api.md")
-  end
-
-  test "skip_path returns true for benchmark directories" do
-    assert @fetcher.send(:skip_path?, "benchmarks/results.md")
-  end
-
-  test "skip_path returns true for lib/cjs pattern" do
-    assert @fetcher.send(:skip_path?, "lib/cjs/README.md")
-  end
-
-  test "skip_path returns true for lib/esm pattern" do
-    assert @fetcher.send(:skip_path?, "lib/esm/guide.md")
-  end
-
-  test "skip_path returns true for Chinese locale dirs" do
-    assert @fetcher.send(:skip_path?, "docs/zh-cn/guide.md")
-  end
-
-  test "skip_path returns true for CODE_OF_CONDUCT" do
-    assert @fetcher.send(:skip_path?, "CODE_OF_CONDUCT.md")
-  end
-
-  test "skip_path returns true for NEWS.md" do
-    assert @fetcher.send(:skip_path?, "NEWS.md")
-  end
-
-  test "skip_path returns false for regular doc files" do
-    assert_not @fetcher.send(:skip_path?, "docs/getting-started.md")
-  end
-
-  test "skip_path returns false for root README" do
-    assert_not @fetcher.send(:skip_path?, "README.md")
-  end
-
-  test "skip_path is case-insensitive for filenames" do
-    assert @fetcher.send(:skip_path?, "changelog.md")
   end
 
   # --- Doc extension detection ---
@@ -262,8 +151,8 @@ class DocsFetcher::GitTest < ActiveSupport::TestCase
       File.write(File.join(tmpdir, "docs", "guide.md"), "# Guide\n\nContent here.")
       File.write(File.join(tmpdir, "src", "app.js").tap { |p| FileUtils.mkdir_p(File.dirname(p)) }, "code")
 
-      candidates = @fetcher.send(:discover_doc_files, tmpdir)
-      rel_paths = candidates.map { |c| @fetcher.send(:relative_path, c, tmpdir) }
+      candidates = @generic.send(:discover_doc_files, tmpdir)
+      rel_paths = candidates.map { |c| c.sub("#{tmpdir}/", "") }
 
       assert_includes rel_paths, "README.md"
       assert_includes rel_paths, "docs/guide.md"
@@ -271,21 +160,11 @@ class DocsFetcher::GitTest < ActiveSupport::TestCase
     end
   end
 
-  test "discover_doc_files skips node_modules" do
-    Dir.mktmpdir("test-git-") do |tmpdir|
-      FileUtils.mkdir_p(File.join(tmpdir, "node_modules", "pkg"))
-      File.write(File.join(tmpdir, "node_modules", "pkg", "README.md"), "# Pkg")
-
-      candidates = @fetcher.send(:discover_doc_files, tmpdir)
-      assert_empty candidates
-    end
-  end
-
   test "discover_doc_files skips empty files" do
     Dir.mktmpdir("test-git-") do |tmpdir|
       File.write(File.join(tmpdir, "empty.md"), "")
 
-      candidates = @fetcher.send(:discover_doc_files, tmpdir)
+      candidates = @generic.send(:discover_doc_files, tmpdir)
       assert_empty candidates
     end
   end
@@ -296,8 +175,8 @@ class DocsFetcher::GitTest < ActiveSupport::TestCase
       File.write(File.join(tmpdir, ".git", "description.md"), "content")
       File.write(File.join(tmpdir, "README.md"), "# Hello")
 
-      candidates = @fetcher.send(:discover_doc_files, tmpdir)
-      rel_paths = candidates.map { |c| @fetcher.send(:relative_path, c, tmpdir) }
+      candidates = @generic.send(:discover_doc_files, tmpdir)
+      rel_paths = candidates.map { |c| c.sub("#{tmpdir}/", "") }
 
       assert_includes rel_paths, "README.md"
       assert_not rel_paths.any? { |p| p.start_with?(".git/") }
@@ -310,88 +189,76 @@ class DocsFetcher::GitTest < ActiveSupport::TestCase
       File.write(File.join(tmpdir, "docs", "guide.html"), "<html><body><h1>Guide</h1></body></html>")
       File.write(File.join(tmpdir, "docs", "notebook.ipynb"), '{"cells":[],"metadata":{}}')
 
-      candidates = @fetcher.send(:discover_doc_files, tmpdir)
-      rel_paths = candidates.map { |c| @fetcher.send(:relative_path, c, tmpdir) }
+      candidates = @generic.send(:discover_doc_files, tmpdir)
+      rel_paths = candidates.map { |c| c.sub("#{tmpdir}/", "") }
 
       assert_includes rel_paths, "docs/guide.html"
       assert_includes rel_paths, "docs/notebook.ipynb"
     end
   end
 
-  # --- score_and_rank ---
-
-  test "score_and_rank orders by score descending" do
-    Dir.mktmpdir("test-git-") do |tmpdir|
-      FileUtils.mkdir_p(File.join(tmpdir, "docs"))
-      FileUtils.mkdir_p(File.join(tmpdir, "lib"))
-      File.write(File.join(tmpdir, "README.md"), "# Hello\n\n" + ("content " * 500))
-      File.write(File.join(tmpdir, "docs", "getting-started.md"), "# Getting Started\n\n" + ("content " * 500))
-      File.write(File.join(tmpdir, "lib", "internal.md"), "# Internal\n\n" + ("content " * 500))
-
-      candidates = @fetcher.send(:discover_doc_files, tmpdir)
-      ranked = @fetcher.send(:score_and_rank, candidates, tmpdir)
-      paths = ranked.map { |r| @fetcher.send(:relative_path, r[:path], tmpdir) }
-
-      assert_equal "docs/getting-started.md", paths.first
-      assert_equal "README.md", paths.second
-      assert_equal "lib/internal.md", paths.last
-    end
-  end
-
   # --- Version extraction ---
 
   test "extract_version parses v-prefixed branch" do
-    assert_equal "8.1.2", @fetcher.send(:extract_version, "v8.1.2")
+    assert_equal "8.1.2", @generic.send(:extract_version, "v8.1.2")
   end
 
   test "extract_version parses release branch" do
-    assert_equal "3.0", @fetcher.send(:extract_version, "release/3.0")
+    assert_equal "3.0", @generic.send(:extract_version, "release/3.0")
   end
 
   test "extract_version returns nil for main branch" do
-    assert_nil @fetcher.send(:extract_version, "main")
+    assert_nil @generic.send(:extract_version, "main")
   end
 
   test "extract_version returns nil when branch is nil" do
-    assert_nil @fetcher.send(:extract_version, nil)
+    assert_nil @generic.send(:extract_version, nil)
+  end
+
+  test "resolve_latest_tag prefers the highest stable tag" do
+    @generic.define_singleton_method(:list_remote_tags) do |_repo_url|
+      %w[v1.9.0 v2.0.0-rc1 v1.10.0]
+    end
+
+    assert_equal "v1.10.0", @generic.send(:resolve_latest_tag, "https://example.com/org/repo.git")
   end
 
   # --- Title extraction ---
 
   test "extract_title finds ATX heading" do
     content = "# Getting Started\n\nSome content."
-    title = @fetcher.send(:extract_title, content, "getting-started.md")
+    title = @generic.send(:extract_title, content, "getting-started.md")
     assert_equal "Getting Started", title
   end
 
   test "extract_title finds frontmatter title" do
     content = "---\ntitle: My Guide\n---\n\n# Heading\n\nContent."
-    title = @fetcher.send(:extract_title, content, "guide.md")
+    title = @generic.send(:extract_title, content, "guide.md")
     assert_equal "My Guide", title
   end
 
   test "extract_title humanizes filename when no heading found" do
     content = "Just text, no heading."
-    title = @fetcher.send(:extract_title, content, "getting-started.md")
+    title = @generic.send(:extract_title, content, "getting-started.md")
     assert_equal "Getting Started", title
   end
 
   test "extract_title skips instruction-like headings" do
     content = "# Install the package\n\n## Real Title\n\nContent."
-    title = @fetcher.send(:extract_title, content, "setup.md")
+    title = @generic.send(:extract_title, content, "setup.md")
     assert_equal "Setup", title
   end
 
   # --- Content conversion ---
 
   test "convert_content passes through markdown" do
-    content, title = @fetcher.send(:convert_content, "# Hello\n\nWorld", ".md")
+    content, title = @generic.send(:convert_content, "# Hello\n\nWorld", ".md")
     assert_equal "# Hello\n\nWorld", content
     assert_nil title
   end
 
   test "convert_content passes through rst" do
-    content, title = @fetcher.send(:convert_content, "Hello\n=====\n\nWorld", ".rst")
+    content, title = @generic.send(:convert_content, "Hello\n=====\n\nWorld", ".rst")
     assert_equal "Hello\n=====\n\nWorld", content
     assert_nil title
   end
@@ -407,7 +274,7 @@ class DocsFetcher::GitTest < ActiveSupport::TestCase
       }
     }.to_json
 
-    content, _title = @fetcher.send(:convert_content, notebook, ".ipynb")
+    content, _title = @generic.send(:convert_content, notebook, ".ipynb")
     assert_includes content, "# Notebook Title"
     assert_includes content, "```python"
     assert_includes content, "print('hello')"
@@ -423,85 +290,56 @@ class DocsFetcher::GitTest < ActiveSupport::TestCase
       "metadata" => {}
     }.to_json
 
-    content, _title = @fetcher.send(:convert_content, notebook, ".ipynb")
+    content, _title = @generic.send(:convert_content, notebook, ".ipynb")
     assert_equal "", content.strip
   end
 
   test "convert_content handles invalid ipynb JSON" do
-    content, _title = @fetcher.send(:convert_content, "not json at all", ".ipynb")
+    content, _title = @generic.send(:convert_content, "not json at all", ".ipynb")
     assert_nil content
   end
 
-  # --- HEAD SHA reading ---
-
-  test "read_head_sha returns nil for missing .git directory" do
-    Dir.mktmpdir("test-git-") do |tmpdir|
-      sha = @fetcher.send(:read_head_sha, tmpdir)
-      assert_nil sha
-    end
-  end
-
-  test "read_head_sha reads detached HEAD" do
-    Dir.mktmpdir("test-git-") do |tmpdir|
-      FileUtils.mkdir_p(File.join(tmpdir, ".git"))
-      File.write(File.join(tmpdir, ".git", "HEAD"), "abc123def456")
-
-      sha = @fetcher.send(:read_head_sha, tmpdir)
-      assert_equal "abc123def456", sha
-    end
-  end
-
-  test "read_head_sha follows ref" do
-    Dir.mktmpdir("test-git-") do |tmpdir|
-      FileUtils.mkdir_p(File.join(tmpdir, ".git", "refs", "heads"))
-      File.write(File.join(tmpdir, ".git", "HEAD"), "ref: refs/heads/main")
-      File.write(File.join(tmpdir, ".git", "refs", "heads", "main"), "deadbeef123")
-
-      sha = @fetcher.send(:read_head_sha, tmpdir)
-      assert_equal "deadbeef123", sha
-    end
-  end
 
   # --- Strip frontmatter ---
 
   test "strip_frontmatter removes YAML frontmatter" do
     content = "---\ntitle: Test\n---\n\n# Hello"
-    result = @fetcher.send(:strip_frontmatter, content)
+    result = @generic.send(:strip_frontmatter, content)
     assert_equal "# Hello", result
   end
 
   test "strip_frontmatter leaves non-frontmatter content alone" do
     content = "# Hello\n\nWorld"
-    result = @fetcher.send(:strip_frontmatter, content)
+    result = @generic.send(:strip_frontmatter, content)
     assert_equal content, result
   end
 
   # --- Build file URL ---
 
   test "builds GitHub file URL" do
-    url = @fetcher.send(:build_file_url, "https://github.com/rails/rails", "github.com", "docs/guide.md", "main")
+    url = @github.send(:build_file_url, "https://github.com/rails/rails", "docs/guide.md", "main")
     assert_equal "https://github.com/rails/rails/blob/main/docs/guide.md", url
   end
 
   test "builds GitLab file URL" do
-    url = @fetcher.send(:build_file_url, "https://gitlab.com/group/project", "gitlab.com", "docs/guide.md", "main")
+    url = @gitlab.send(:build_file_url, "https://gitlab.com/group/project", "docs/guide.md", "main")
     assert_equal "https://gitlab.com/group/project/-/blob/main/docs/guide.md", url
   end
 
   test "builds Bitbucket file URL" do
-    url = @fetcher.send(:build_file_url, "https://bitbucket.org/owner/repo", "bitbucket.org", "docs/guide.md", "main")
+    url = @bitbucket.send(:build_file_url, "https://bitbucket.org/owner/repo", "docs/guide.md", "main")
     assert_equal "https://bitbucket.org/owner/repo/src/main/docs/guide.md", url
   end
 
   # --- Result building ---
 
-  test "build_result creates correct Result" do
+  test "build_result creates correct CrawlResult" do
     pages = [
       { page_uid: "readme", path: "README.md", title: "Readme", url: "https://example.com", content: "# Hi", headings: [] }
     ]
-    result = @fetcher.send(:build_result, "owner", "my-lib", "https://github.com/owner/my-lib", pages, "1.0.0")
+    result = @github.send(:build_result, "owner", "my-lib", "https://github.com/owner/my-lib", pages, "1.0.0")
 
-    assert_instance_of DocsFetcher::Result, result
+    assert_instance_of CrawlResult, result
     assert_equal "owner", result.namespace
     assert_equal "my-lib", result.name
     assert_equal "My Lib", result.display_name
@@ -513,8 +351,165 @@ class DocsFetcher::GitTest < ActiveSupport::TestCase
 
   # --- Fetcher dispatch ---
 
-  test "DocsFetcher.for returns Git instance for git source_type" do
+  test "DocsFetcher.for returns GitHub instance for github source_type" do
+    fetcher = DocsFetcher.for("github")
+    assert_instance_of DocsFetcher::Git::Github, fetcher
+  end
+
+  test "DocsFetcher.for returns GitLab instance for gitlab source_type" do
+    fetcher = DocsFetcher.for("gitlab")
+    assert_instance_of DocsFetcher::Git::Gitlab, fetcher
+  end
+
+  test "DocsFetcher.for returns Bitbucket instance for bitbucket source_type" do
+    fetcher = DocsFetcher.for("bitbucket")
+    assert_instance_of DocsFetcher::Git::Bitbucket, fetcher
+  end
+
+  test "DocsFetcher.for returns Git base for git source_type" do
     fetcher = DocsFetcher.for("git")
     assert_instance_of DocsFetcher::Git, fetcher
+  end
+
+  # --- Default exclude: directory prefixes ---
+
+  test "discover_doc_files skips default excluded directories" do
+    Dir.mktmpdir("test-git-") do |tmpdir|
+      # Create files in excluded dirs
+      %w[vendor/lib.md node_modules/readme.md test/helper.md archive/old.md
+         build/output.md .github/ci.md examples/demo.md i18n/fr.md].each do |rel|
+        path = File.join(tmpdir, rel)
+        FileUtils.mkdir_p(File.dirname(path))
+        File.write(path, "# Content")
+      end
+      # Create file in non-excluded dir
+      FileUtils.mkdir_p(File.join(tmpdir, "docs"))
+      File.write(File.join(tmpdir, "docs", "guide.md"), "# Guide")
+      File.write(File.join(tmpdir, "README.md"), "# Hello")
+
+      candidates = @generic.send(:discover_doc_files, tmpdir)
+      rel_paths = candidates.map { |c| c.sub("#{tmpdir}/", "") }
+
+      assert_includes rel_paths, "docs/guide.md"
+      assert_includes rel_paths, "README.md"
+      assert_not rel_paths.any? { |p| p.start_with?("vendor/") }
+      assert_not rel_paths.any? { |p| p.start_with?("node_modules/") }
+      assert_not rel_paths.any? { |p| p.start_with?("test/") }
+      assert_not rel_paths.any? { |p| p.start_with?("archive/") }
+      assert_not rel_paths.any? { |p| p.start_with?("build/") }
+      assert_not rel_paths.any? { |p| p.start_with?(".github/") }
+      assert_not rel_paths.any? { |p| p.start_with?("examples/") }
+      assert_not rel_paths.any? { |p| p.start_with?("i18n/") }
+    end
+  end
+
+  # --- Default exclude: basenames ---
+
+  test "discover_doc_files skips default excluded basenames" do
+    Dir.mktmpdir("test-git-") do |tmpdir|
+      File.write(File.join(tmpdir, "CHANGELOG.md"), "# Changelog")
+      File.write(File.join(tmpdir, "LICENSE.md"), "MIT")
+      File.write(File.join(tmpdir, "CODE_OF_CONDUCT.md"), "Be nice")
+      File.write(File.join(tmpdir, "CONTRIBUTING.md"), "How to contribute")
+      File.write(File.join(tmpdir, "SECURITY.md"), "Report bugs")
+      File.write(File.join(tmpdir, "README.md"), "# Real docs")
+
+      candidates = @generic.send(:discover_doc_files, tmpdir)
+      basenames = candidates.map { |c| File.basename(c) }
+
+      assert_includes basenames, "README.md"
+      assert_not_includes basenames, "CHANGELOG.md"
+      assert_not_includes basenames, "LICENSE.md"
+      assert_not_includes basenames, "CODE_OF_CONDUCT.md"
+      assert_not_includes basenames, "CONTRIBUTING.md"
+      assert_not_includes basenames, "SECURITY.md"
+    end
+  end
+
+  # --- Include prefixes override excludes ---
+
+  test "discover_doc_files respects include prefixes overriding excludes" do
+    Dir.mktmpdir("test-git-") do |tmpdir|
+      # test/ is excluded by default, but include should override
+      FileUtils.mkdir_p(File.join(tmpdir, "test", "docs"))
+      File.write(File.join(tmpdir, "test", "docs", "guide.md"), "# Test Guide")
+      FileUtils.mkdir_p(File.join(tmpdir, "examples"))
+      File.write(File.join(tmpdir, "examples", "tutorial.md"), "# Tutorial")
+
+      # Set crawl_rules with include_prefixes
+      @generic.instance_variable_set(:@crawl_rules, {
+        "git_include_prefixes" => [ "test/docs", "examples" ]
+      })
+
+      candidates = @generic.send(:discover_doc_files, tmpdir)
+      rel_paths = candidates.map { |c| c.sub("#{tmpdir}/", "") }
+
+      assert_includes rel_paths, "test/docs/guide.md"
+      assert_includes rel_paths, "examples/tutorial.md"
+    end
+  end
+
+  # --- Library-specific extra excludes ---
+
+  test "discover_doc_files applies library-specific exclude prefixes" do
+    Dir.mktmpdir("test-git-") do |tmpdir|
+      FileUtils.mkdir_p(File.join(tmpdir, "internal"))
+      File.write(File.join(tmpdir, "internal", "notes.md"), "# Internal notes")
+      FileUtils.mkdir_p(File.join(tmpdir, "docs"))
+      File.write(File.join(tmpdir, "docs", "guide.md"), "# Guide")
+
+      @generic.instance_variable_set(:@crawl_rules, {
+        "git_exclude_prefixes" => [ "internal" ]
+      })
+
+      candidates = @generic.send(:discover_doc_files, tmpdir)
+      rel_paths = candidates.map { |c| c.sub("#{tmpdir}/", "") }
+
+      assert_includes rel_paths, "docs/guide.md"
+      assert_not rel_paths.any? { |p| p.start_with?("internal/") }
+    end
+  end
+
+  test "discover_doc_files applies library-specific exclude basenames" do
+    Dir.mktmpdir("test-git-") do |tmpdir|
+      File.write(File.join(tmpdir, "README.md"), "# Hello")
+      File.write(File.join(tmpdir, "MIGRATION.md"), "# Migration notes")
+
+      @generic.instance_variable_set(:@crawl_rules, {
+        "git_exclude_basenames" => [ "MIGRATION.md" ]
+      })
+
+      candidates = @generic.send(:discover_doc_files, tmpdir)
+      basenames = candidates.map { |c| File.basename(c) }
+
+      assert_includes basenames, "README.md"
+      assert_not_includes basenames, "MIGRATION.md"
+    end
+  end
+
+  # --- First crawl (no library_id) uses defaults only ---
+
+  test "load_crawl_rules returns empty hash without library_id" do
+    crawl_request = Struct.new(:library_id, :library).new(nil, nil)
+    result = @generic.send(:load_crawl_rules, crawl_request)
+    assert_equal({}, result)
+  end
+
+  # --- Source type detection ---
+
+  test "detect_source_type returns github for github.com URLs" do
+    assert_equal "github", DocsFetcher.detect_source_type("https://github.com/rails/rails")
+  end
+
+  test "detect_source_type returns gitlab for gitlab.com URLs" do
+    assert_equal "gitlab", DocsFetcher.detect_source_type("https://gitlab.com/group/project")
+  end
+
+  test "detect_source_type returns bitbucket for bitbucket.org URLs" do
+    assert_equal "bitbucket", DocsFetcher.detect_source_type("https://bitbucket.org/team/repo")
+  end
+
+  test "detect_source_type returns gitlab for self-hosted gitlab" do
+    assert_equal "gitlab", DocsFetcher.detect_source_type("https://gitlab.mycompany.com/team/project")
   end
 end

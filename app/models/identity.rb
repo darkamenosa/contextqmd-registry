@@ -54,7 +54,7 @@ class Identity < ApplicationRecord
     update!(staff: false)
   end
 
-  def deactivate_customer_access
+  def deactivate_user_access
     with_lock do
       memberships = users.lock.includes(:account).to_a
       account_ids = memberships.map(&:account_id).uniq

@@ -5,10 +5,10 @@ require "test_helper"
 class IdentityTest < ActiveSupport::TestCase
   include ActiveJob::TestHelper
 
-  test "deactivate_customer_access suspends identity and deactivates memberships" do
+  test "deactivate_user_access suspends identity and deactivates memberships" do
     identity, account, owner = create_tenant(
-      email: "deactivate-customer-#{SecureRandom.hex(4)}@example.com",
-      name: "Customer Owner"
+      email: "deactivate-user-#{SecureRandom.hex(4)}@example.com",
+      name: "Test Owner"
     )
     remaining_identity = Identity.create!(
       email: "remaining-member-#{SecureRandom.hex(4)}@example.com",
@@ -21,13 +21,13 @@ class IdentityTest < ActiveSupport::TestCase
     second_account.users.create!(name: "System", role: :system)
     second_membership = second_account.users.create!(
       identity: identity,
-      name: "Customer Owner",
+      name: "Test Owner",
       role: :owner
     )
 
     identity.update!(staff: true)
 
-    identity.deactivate_customer_access
+    identity.deactivate_user_access
 
     assert_predicate identity.reload, :suspended?
     assert_not_predicate identity, :staff?

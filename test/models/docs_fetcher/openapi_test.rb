@@ -77,9 +77,9 @@ class DocsFetcher::OpenapiTest < ActiveSupport::TestCase
     fetcher = DocsFetcher::Openapi.new
     fetcher.define_singleton_method(:http_get) { |*_args, **_kw| SAMPLE_SPEC.to_json }
 
-    result = fetcher.fetch("https://api.example.com/openapi.json")
+    result = fetcher.fetch(Struct.new(:url).new("https://api.example.com/openapi.json"))
 
-    assert_instance_of DocsFetcher::Result, result
+    assert_instance_of CrawlResult, result
     assert_equal "api", result.namespace
     assert_equal "pet-store-api", result.name
     assert_equal "Pet Store API", result.display_name
@@ -142,7 +142,8 @@ class DocsFetcher::OpenapiTest < ActiveSupport::TestCase
     fetcher.define_singleton_method(:http_get) { |*_args, **_kw| "just a plain string" }
 
     # parse_spec returns a String (YAML parses anything), but fetch checks is_a?(Hash)
-    assert_raises(RuntimeError, /Invalid OpenAPI spec/) { fetcher.fetch("https://example.com/api.json") }
+    error = assert_raises(DocsFetcher::PermanentFetchError) { fetcher.fetch(Struct.new(:url).new("https://example.com/api.json")) }
+    assert_match(/Invalid OpenAPI spec/, error.message)
   end
 
   test "extract_metadata derives namespace from host" do
@@ -160,14 +161,14 @@ class DocsFetcher::OpenapiTest < ActiveSupport::TestCase
     fetcher = DocsFetcher::Openapi.new
     fetcher.define_singleton_method(:http_get) { |*_args, **_kw| nil }
 
-    assert_raises(RuntimeError) { fetcher.fetch("https://example.com/api.json") }
+    assert_raises(DocsFetcher::TransientFetchError) { fetcher.fetch(Struct.new(:url).new("https://example.com/api.json")) }
   end
 
   test "fetch raises when spec is invalid" do
     fetcher = DocsFetcher::Openapi.new
     fetcher.define_singleton_method(:http_get) { |*_args, **_kw| "not a valid spec" }
 
-    assert_raises(RuntimeError) { fetcher.fetch("https://example.com/api.json") }
+    assert_raises(DocsFetcher::PermanentFetchError) { fetcher.fetch(Struct.new(:url).new("https://example.com/api.json")) }
   end
 
   test "slugify handles special characters" do

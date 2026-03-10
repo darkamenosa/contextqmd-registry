@@ -17,19 +17,23 @@ module DocsFetcher
   class Openapi
     MAX_SIZE = 10_000_000 # 10MB
 
-    def fetch(url)
+    def fetch(crawl_request, on_progress: nil)
+      url = crawl_request.url
       uri = URI.parse(url.strip)
+
+      on_progress&.call("Fetching OpenAPI spec")
       raw = http_get(uri)
-      raise "Failed to fetch #{url}" unless raw
+      raise DocsFetcher::TransientFetchError, "Failed to fetch #{url}" unless raw
 
       spec = parse_spec(raw)
-      raise "Invalid OpenAPI spec at #{url}" unless spec.is_a?(Hash)
+      raise DocsFetcher::PermanentFetchError, "Invalid OpenAPI spec at #{url}" unless spec.is_a?(Hash)
 
       metadata = extract_metadata(spec, uri)
+      on_progress&.call("Generating API documentation pages")
       pages = build_pages(spec, url)
-      raise "No API documentation found in #{url}" if pages.empty?
+      raise DocsFetcher::PermanentFetchError, "No API documentation found in #{url}" if pages.empty?
 
-      Result.new(
+      CrawlResult.new(
         namespace: metadata[:namespace],
         name: metadata[:name],
         display_name: metadata[:display_name],
@@ -279,9 +283,9 @@ module DocsFetcher
       # --- HTTP ---
 
       def http_get(uri, redirect_limit: 5)
-        raise "Too many redirects" if redirect_limit <= 0
+        raise DocsFetcher::TransientFetchError, "Too many redirects for #{uri}" if redirect_limit <= 0
 
-        proxy = ProxyPool.next_proxy
+        proxy = ::ProxyPool.next_proxy
         http = Net::HTTP.new(uri.hostname, uri.port,
           proxy&.host, proxy&.port, proxy&.user, proxy&.password)
         http.use_ssl = uri.scheme == "https"
@@ -294,13 +298,30 @@ module DocsFetcher
         response = http.request(request)
 
         if response.is_a?(Net::HTTPRedirection) && response["location"]
-          return http_get(URI.join(uri, response["location"]), redirect_limit: redirect_limit - 1)
+          redirect_uri = URI.join(uri, response["location"])
+          raise DocsFetcher::PermanentFetchError, "Redirect to private address: #{redirect_uri.host}" unless SsrfGuard.safe_uri?(redirect_uri)
+          return http_get(redirect_uri, redirect_limit: redirect_limit - 1)
         end
 
-        return nil unless response.is_a?(Net::HTTPSuccess)
+        unless response.is_a?(Net::HTTPSuccess)
+          code = response.code.to_i
+          case code
+          when 429
+            raise DocsFetcher::RateLimitError, "Rate limited (429) fetching #{uri}"
+          when 404, 410
+            raise DocsFetcher::PermanentFetchError, "Not found (#{code}) fetching #{uri}"
+          when 500..599
+            raise DocsFetcher::TransientFetchError, "Server error (#{code}) fetching #{uri}"
+          else
+            raise DocsFetcher::PermanentFetchError, "HTTP #{code} fetching #{uri}"
+          end
+        end
 
         body = response.body.force_encoding("UTF-8")
         body.bytesize > MAX_SIZE ? nil : body
+      rescue Net::OpenTimeout, Net::ReadTimeout, Errno::ECONNREFUSED,
+             Errno::ECONNRESET, SocketError, OpenSSL::SSL::SSLError => e
+        raise DocsFetcher::TransientFetchError, "Network error fetching #{uri}: #{e.message}"
       end
   end
 end

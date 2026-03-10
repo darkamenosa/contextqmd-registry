@@ -398,9 +398,9 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
       call_count == 1 ? nil : content # first call is llms-full.txt (nil), second is llms.txt
     end
 
-    result = fetcher.fetch("https://example.com/llms.txt")
+    result = fetcher.fetch(Struct.new(:url).new("https://example.com/llms.txt"))
 
-    assert_instance_of DocsFetcher::Result, result
+    assert_instance_of CrawlResult, result
     assert_equal "example", result.namespace
     assert_equal "example", result.name
     assert_equal 3, result.pages.size
@@ -425,9 +425,9 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
     fetcher = DocsFetcher::LlmsTxt.new
     fetcher.define_singleton_method(:http_get) { |*_args, **_kw| full_content }
 
-    result = fetcher.fetch("https://example.com/llms.txt")
+    result = fetcher.fetch(Struct.new(:url).new("https://example.com/llms.txt"))
 
-    assert_instance_of DocsFetcher::Result, result
+    assert_instance_of CrawlResult, result
     assert_equal "example", result.name
     assert_equal 3, result.pages.size
   end
@@ -462,9 +462,9 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
       end
     end
 
-    result = fetcher.fetch("https://example.com/llms.txt")
+    result = fetcher.fetch(Struct.new(:url).new("https://example.com/llms.txt"))
 
-    assert_instance_of DocsFetcher::Result, result
+    assert_instance_of CrawlResult, result
     assert_equal 7, result.pages.size
     assert_equal "Introduction", result.pages.first[:title]
     assert_includes result.pages.first[:headings], "Overview"
@@ -480,9 +480,9 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
       call_count == 1 ? nil : content
     end
 
-    result = fetcher.fetch("https://example.com/llms.txt")
+    result = fetcher.fetch(Struct.new(:url).new("https://example.com/llms.txt"))
 
-    assert_instance_of DocsFetcher::Result, result
+    assert_instance_of CrawlResult, result
     assert_equal 1, result.pages.size
     assert_equal "llms-txt", result.pages.first[:page_uid]
   end
@@ -491,8 +491,8 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
     fetcher = DocsFetcher::LlmsTxt.new
     fetcher.define_singleton_method(:http_get) { |*_args, **_kw| nil }
 
-    assert_raises(RuntimeError) do
-      fetcher.fetch("https://example.com/llms.txt")
+    assert_raises(DocsFetcher::TransientFetchError) do
+      fetcher.fetch(Struct.new(:url).new("https://example.com/llms.txt"))
     end
   end
 
@@ -520,9 +520,9 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
       content
     end
 
-    result = fetcher.fetch("https://example.com/llms-small.txt")
+    result = fetcher.fetch(Struct.new(:url).new("https://example.com/llms-small.txt"))
 
-    assert_instance_of DocsFetcher::Result, result
+    assert_instance_of CrawlResult, result
     # Should NOT have tried llms-full.txt
     assert_not urls_fetched.any? { |u| u.include?("llms-full.txt") },
       "Should not attempt llms-full.txt when fetching llms-small.txt"
@@ -549,9 +549,9 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
     fetcher = DocsFetcher::LlmsTxt.new
     fetcher.define_singleton_method(:http_get) { |*_args, **_kw| content }
 
-    result = fetcher.fetch("https://example.com/llms-small.txt")
+    result = fetcher.fetch(Struct.new(:url).new("https://example.com/llms-small.txt"))
 
-    assert_instance_of DocsFetcher::Result, result
+    assert_instance_of CrawlResult, result
     assert_equal 3, result.pages.size
     titles = result.pages.map { |p| p[:title] }
     assert_includes titles, "Installation"
@@ -576,7 +576,7 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
     fetcher = DocsFetcher::LlmsTxt.new
     fetcher.define_singleton_method(:http_get) { |*_args, **_kw| content }
 
-    result = fetcher.fetch("https://example.com/llms-small.txt")
+    result = fetcher.fetch(Struct.new(:url).new("https://example.com/llms-small.txt"))
 
     assert_equal "https://example.com", result.homepage_url
   end

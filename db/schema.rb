@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_10_160818) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_11_030001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -59,14 +59,45 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_10_160818) do
     t.index ["version_id"], name: "index_bundles_on_version_id"
   end
 
+  create_table "crawl_proxy_configs", force: :cascade do |t|
+    t.boolean "active", default: true, null: false
+    t.integer "consecutive_failures", default: 0
+    t.datetime "cooldown_until"
+    t.datetime "created_at", null: false
+    t.string "host", null: false
+    t.string "kind", default: "datacenter"
+    t.string "last_error_class"
+    t.datetime "last_failure_at"
+    t.datetime "last_success_at"
+    t.string "last_target_host"
+    t.jsonb "metadata", default: {}
+    t.string "name", null: false
+    t.text "notes"
+    t.string "password"
+    t.integer "port", null: false
+    t.integer "priority", default: 0, null: false
+    t.string "provider"
+    t.string "scheme", default: "http", null: false
+    t.boolean "supports_sticky_sessions", default: false
+    t.datetime "updated_at", null: false
+    t.string "usage_scope", default: "all"
+    t.string "username"
+    t.index ["active", "usage_scope"], name: "index_crawl_proxy_configs_on_active_and_usage_scope"
+    t.index ["active"], name: "index_crawl_proxy_configs_on_active"
+    t.index ["cooldown_until"], name: "index_crawl_proxy_configs_on_cooldown_until"
+  end
+
   create_table "crawl_requests", force: :cascade do |t|
+    t.datetime "completed_at"
     t.datetime "created_at", null: false
     t.text "error_message"
     t.bigint "identity_id", null: false
     t.bigint "library_id"
     t.jsonb "metadata", default: {}
     t.string "source_type", default: "website", null: false
+    t.datetime "started_at"
     t.string "status", default: "pending", null: false
+    t.string "status_message"
     t.datetime "updated_at", null: false
     t.string "url", null: false
     t.index ["identity_id"], name: "index_crawl_requests_on_identity_id"
@@ -78,8 +109,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_10_160818) do
     t.jsonb "allowed_hosts"
     t.jsonb "content_types"
     t.datetime "created_at", null: false
-    t.string "expected_etag"
-    t.string "expected_last_modified"
     t.bigint "max_bytes"
     t.string "normalizer_version"
     t.text "signature"
@@ -117,12 +146,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_10_160818) do
   create_table "libraries", force: :cascade do |t|
     t.bigint "account_id", null: false
     t.jsonb "aliases", default: []
+    t.jsonb "crawl_rules", default: {}
     t.datetime "created_at", null: false
     t.string "default_version"
     t.string "display_name", null: false
     t.string "homepage_url"
     t.string "name", null: false
     t.string "namespace", null: false
+    t.string "source_type"
     t.datetime "updated_at", null: false
     t.index ["account_id"], name: "index_libraries_on_account_id"
     t.index ["aliases"], name: "index_libraries_on_aliases", using: :gin
@@ -185,8 +216,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_10_160818) do
     t.datetime "generated_at"
     t.bigint "library_id", null: false
     t.string "manifest_checksum"
-    t.string "source_etag"
-    t.string "source_last_modified"
     t.string "source_url"
     t.datetime "updated_at", null: false
     t.string "version"

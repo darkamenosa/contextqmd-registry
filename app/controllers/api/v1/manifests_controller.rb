@@ -44,8 +44,7 @@ module Api
 
           {
             type: recipe.source_type,
-            url: recipe.url,
-            etag: @version.source_etag
+            url: recipe.url
           }
         end
 

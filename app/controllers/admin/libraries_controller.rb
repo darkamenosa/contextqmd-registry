@@ -42,10 +42,11 @@ module Admin
     end
 
     def edit
-      library = Library.find(params[:id])
+      library = Library.includes(:versions).find(params[:id])
 
       render inertia: "admin/libraries/edit", props: {
-        library: library_edit_props(library)
+        library: library_edit_props(library),
+        versions: library.versions.ordered.pluck(:version)
       }
     end
 
@@ -81,7 +82,20 @@ module Admin
       end
 
       def library_params
-        params.expect(library: [ :display_name, :homepage_url, :default_version, aliases: [] ])
+        permitted = params.expect(library: [ :display_name, :homepage_url, :default_version, aliases: [] ])
+
+        # Merge crawl_rules from separate form fields (one entry per line, textarea)
+        if params[:library]&.key?(:crawl_rules)
+          rules = {}
+          cr = params[:library][:crawl_rules]
+          %w[git_include_prefixes git_exclude_prefixes git_exclude_basenames website_exclude_path_prefixes].each do |key|
+            next unless cr&.key?(key)
+            rules[key] = cr[key].to_s.split("\n").map(&:strip).reject(&:blank?)
+          end
+          permitted[:crawl_rules] = rules
+        end
+
+        permitted
       end
 
       def library_row_props(library)
@@ -102,6 +116,7 @@ module Admin
       end
 
       def library_detail_props(library)
+        last_crawl = CrawlRequest.where(library: library).completed.recent.first
         {
           id: library.id,
           namespace: library.namespace,
@@ -109,11 +124,14 @@ module Admin
           display_name: library.display_name,
           homepage_url: library.homepage_url,
           default_version: library.default_version,
+          source_type: library.source_type,
           aliases: library.aliases,
           license_status: library.source_policy&.license_status,
           account_name: library.account.name,
           version_count: library.versions.size,
           page_count: library.versions.sum { |v| v.pages.size },
+          last_crawl_url: last_crawl&.url,
+          crawl_rules: library.crawl_rules || {},
           created_at: library.created_at.iso8601,
           updated_at: library.updated_at.iso8601
         }
@@ -127,7 +145,9 @@ module Admin
           display_name: library.display_name,
           homepage_url: library.homepage_url,
           default_version: library.default_version,
-          aliases: library.aliases
+          source_type: library.source_type,
+          aliases: library.aliases,
+          crawl_rules: library.crawl_rules || {}
         }
       end
 

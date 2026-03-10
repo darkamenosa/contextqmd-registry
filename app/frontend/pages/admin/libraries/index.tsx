@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Head, Link, router } from "@inertiajs/react"
 import type { AdminLibrary, PaginationData } from "@/types"
+import { Plus } from "lucide-react"
 
 import { formatDateShort } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
@@ -125,6 +126,17 @@ export default function AdminLibrariesIndex({
     <AdminLayout>
       <Head title="Libraries" />
       <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <h1 className="text-lg font-semibold">Libraries</h1>
+          <Button
+            size="sm"
+            nativeButton={false}
+            render={<Link href="/crawl/new" />}
+          >
+            <Plus className="size-4" />
+            Submit Docs
+          </Button>
+        </div>
         <div className="rounded-lg border border-border bg-card">
           <IndexFilters
             tabs={tabs}

@@ -14,7 +14,7 @@ module Admin
           crawl_completed: CrawlRequest.completed.count,
           crawl_failed: CrawlRequest.failed.count
         },
-        recent_crawls: CrawlRequest.includes(:identity).recent.limit(10).map { |cr| crawl_props(cr) }
+        recent_crawls: CrawlRequest.includes(:identity, :library).recent.limit(10).map { |cr| crawl_props(cr) }
       }
     end
 
@@ -28,6 +28,8 @@ module Admin
           status: cr.status,
           error_message: cr.error_message,
           submitted_by: cr.identity.email,
+          library_name: cr.library&.display_name,
+          library_slug: cr.library ? "#{cr.library.namespace}/#{cr.library.name}" : nil,
           created_at: cr.created_at.iso8601
         }
       end
