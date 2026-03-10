@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_10_045823) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_10_050008) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -55,6 +55,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_10_045823) do
     t.datetime "updated_at", null: false
     t.string "url"
     t.bigint "version_id", null: false
+    t.index ["version_id", "profile"], name: "index_bundles_on_version_id_and_profile", unique: true
     t.index ["version_id"], name: "index_bundles_on_version_id"
   end
 
@@ -158,7 +159,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_10_045823) do
     t.text "notes"
     t.boolean "origin_fetch_allowed"
     t.datetime "updated_at", null: false
-    t.index ["library_id"], name: "index_source_policies_on_library_id"
+    t.index ["library_id"], name: "index_source_policies_on_library_id", unique: true
   end
 
   create_table "users", force: :cascade do |t|
