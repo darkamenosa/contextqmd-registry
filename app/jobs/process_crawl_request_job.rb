@@ -34,15 +34,34 @@ class ProcessCrawlRequestJob < ApplicationJob
     def find_or_create_library(result, crawl_request)
       system_account = Account.find_or_create_by!(name: "ContextQMD System") { |a| a.personal = false }
 
-      library = Library.find_or_create_by!(namespace: result.namespace, name: result.name) do |lib|
-        lib.account = system_account
-        lib.display_name = result.display_name
-        lib.homepage_url = result.homepage_url
-        lib.aliases = result.aliases
+      # 1. Exact namespace/name match
+      library = Library.find_by(namespace: result.namespace, name: result.name)
+
+      # 2. Try matching by name alone (e.g. GitHub "hotwired/stimulus" vs website "stimulus/stimulus")
+      library ||= Library.find_by(name: result.name)
+
+      # 3. Try alias match — same lib crawled from different sources
+      #    (e.g. GitHub aliases=["stimulus"] matches website namespace="stimulus")
+      unless library
+        candidates = (result.aliases || []) + [ result.name ]
+        candidates.each do |candidate|
+          library = Library.where("aliases @> ?", [ candidate ].to_json).first
+          break if library
+        end
       end
 
-      # Always update metadata on re-crawl (find_or_create_by! block only runs for new records)
-      merged_aliases = ((library.aliases || []) + (result.aliases || [])).uniq
+      # 4. Create new library if no match found
+      library ||= Library.create!(
+        account: system_account,
+        namespace: result.namespace,
+        name: result.name,
+        display_name: result.display_name,
+        homepage_url: result.homepage_url,
+        aliases: result.aliases
+      )
+
+      # Always update metadata on re-crawl
+      merged_aliases = ((library.aliases || []) + (result.aliases || []) + [ result.name ]).uniq
       library.update!(
         display_name: result.display_name.presence || library.display_name,
         aliases: merged_aliases,
@@ -65,7 +84,7 @@ class ProcessCrawlRequestJob < ApplicationJob
       incoming_uids = Set.new
 
       pages.each do |page_data|
-        content = page_data[:content].to_s
+        content = sanitize_content(page_data[:content].to_s)
         checksum = Digest::SHA256.hexdigest(content)
         uid = page_data[:page_uid]
         incoming_uids << uid
@@ -83,7 +102,7 @@ class ProcessCrawlRequestJob < ApplicationJob
           bytes: content.bytesize,
           checksum: checksum,
           source_ref: source_type,
-          headings: page_data[:headings] || []
+          headings: sanitize_headings(page_data[:headings] || [])
         )
         page.save!
       end
@@ -101,6 +120,23 @@ class ProcessCrawlRequestJob < ApplicationJob
         splitter_version: "1.0"
       )
       recipe.save!
+    end
+
+    # Strip prompt-injection XML tags that upstream docs sometimes include.
+    # Removes only the tags, preserving text content between them.
+    STRIP_TAGS = %w[SYSTEM system-reminder system_reminder IMPORTANT].freeze
+
+    def sanitize_content(content)
+      STRIP_TAGS.each do |tag|
+        content = content.gsub(%r{</?#{Regexp.escape(tag)}[^>]*>}i, "")
+      end
+      # Strip JSX comment syntax {/*...*/} commonly found in React docs
+      content = content.gsub(/\s*\{\/\*.*?\*\/\}/, "")
+      content.strip
+    end
+
+    def sanitize_headings(headings)
+      headings.map { |h| h.gsub(/\s*\{\/\*.*?\*\/\}/, "").strip }.reject(&:blank?)
     end
 
     def update_manifest_checksum!(version)

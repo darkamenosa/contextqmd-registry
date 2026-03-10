@@ -47,8 +47,18 @@ module DocsFetcher
       pages = crawl(seed_uri)
       raise "No content found at #{url}" if pages.empty?
 
-      namespace = @domain.gsub(/^www\./, "").split(".").first.downcase
-      name = derive_name(seed_uri)
+      host = @domain.gsub(/^www\./, "")
+      parts = host.split(".")
+
+      # Derive library identity from domain:
+      #   docs.example.com → example
+      #   stimulus.hotwired.dev → stimulus
+      namespace = if %w[docs api www dev].include?(parts.first) && parts.length >= 3
+        parts[1].downcase
+      else
+        parts.first.downcase
+      end
+      name = namespace
       site_title = pages.first&.dig(:title) || @domain
 
       Result.new(
@@ -197,19 +207,23 @@ module DocsFetcher
       end
 
       def compute_base_path(path)
-        # For a URL like guides.rubyonrails.org/active_record_basics.html,
-        # the base path is "/"
-        # For docs.example.com/v2/guides/intro, the base path is "/v2/guides"
+        # Derive the base directory from the seed URL:
+        #   /handbook/introduction → /handbook    (strip leaf to find siblings)
+        #   /docs/v2/guide.html   → /docs/v2     (strip file to find siblings)
+        #   /docs                  → /docs        (single segment = section root)
+        #   /docs/                 → /docs        (trailing slash stripped)
+        #   /                      → /
         clean = path.to_s.chomp("/")
         return "/" if clean.empty? || clean == "/"
 
-        # If the path ends with a file-like segment (has extension), go up one level
-        if clean.match?(/\.[a-z]+\z/i)
-          parent = File.dirname(clean)
-          return parent == "." ? "/" : parent
-        end
+        segments = clean.delete_prefix("/").split("/")
 
-        clean
+        # Single segment (e.g. /docs): treat as section root, don't go broader
+        return clean if segments.length == 1
+
+        # Multi-segment: strip the last segment to allow discovering siblings
+        parent = File.dirname(clean)
+        parent == "." ? "/" : parent
       end
 
       def url_to_page_uid(uri)
@@ -225,12 +239,6 @@ module DocsFetcher
           .delete_suffix("-")
 
         path.empty? ? "index" : path
-      end
-
-      def derive_name(uri)
-        path = uri.path.delete_prefix("/").tr("/", "-").presence
-        name = path&.downcase&.gsub(/[^a-z0-9-]/, "-")&.gsub(/-+/, "-")&.delete_suffix("-")
-        name.presence || "docs"
       end
 
       # --- HTTP ---

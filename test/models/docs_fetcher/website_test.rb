@@ -43,12 +43,16 @@ class DocsFetcher::WebsiteTest < ActiveSupport::TestCase
     assert_equal "/docs", @fetcher.send(:compute_base_path, "/docs/intro.html")
   end
 
-  test "compute_base_path keeps directory paths as-is" do
-    assert_equal "/v2/guides", @fetcher.send(:compute_base_path, "/v2/guides")
+  test "compute_base_path strips last segment for multi-segment paths" do
+    assert_equal "/v2", @fetcher.send(:compute_base_path, "/v2/guides")
+  end
+
+  test "compute_base_path keeps single-segment paths as section root" do
+    assert_equal "/docs", @fetcher.send(:compute_base_path, "/docs")
   end
 
   test "compute_base_path handles trailing slash" do
-    assert_equal "/docs/guides", @fetcher.send(:compute_base_path, "/docs/guides/")
+    assert_equal "/docs", @fetcher.send(:compute_base_path, "/docs/guides/")
   end
 
   # --- Link filtering ---
@@ -123,20 +127,6 @@ class DocsFetcher::WebsiteTest < ActiveSupport::TestCase
   test "url_to_page_uid handles special characters" do
     uid = @fetcher.send(:url_to_page_uid, URI.parse("https://example.com/docs/C++_Guide"))
     assert_equal "docs-c-guide", uid
-  end
-
-  # --- Derive name ---
-
-  test "derive_name extracts from URL path" do
-    uri = URI.parse("https://example.com/docs/v2/guide")
-    name = @fetcher.send(:derive_name, uri)
-    assert_equal "docs-v2-guide", name
-  end
-
-  test "derive_name returns docs for root path" do
-    uri = URI.parse("https://example.com/")
-    name = @fetcher.send(:derive_name, uri)
-    assert_equal "docs", name
   end
 
   # --- Resolve URL ---

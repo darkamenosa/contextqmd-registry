@@ -8,7 +8,7 @@ class RankingsController < InertiaController
     libraries = Library.includes(versions: :pages).all
 
     ranked = libraries.map { |lib| ranking_props(lib) }
-      .sort_by { |r| -r[:score] }
+      .sort_by { |r| [ -r[:page_count], -r[:version_count] ] }
       .each_with_index.map { |r, i| r.merge(rank: i + 1) }
 
     render inertia: "rankings/index", props: {
@@ -29,9 +29,7 @@ class RankingsController < InertiaController
         999
       end
 
-      # Score: weighted combination of page count, version count, and freshness
       freshness = [ 1.0 - (days_since_update / 365.0), 0.0 ].max
-      score = (page_count * 1.0) + (version_count * 5.0) + (freshness * 20.0)
 
       {
         namespace: library.namespace,
@@ -40,7 +38,6 @@ class RankingsController < InertiaController
         page_count: page_count,
         version_count: version_count,
         freshness_pct: (freshness * 100).round,
-        score: score.round(1),
         updated_at: (latest_version&.created_at || library.updated_at).iso8601
       }
     end

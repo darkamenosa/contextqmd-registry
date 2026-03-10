@@ -222,6 +222,7 @@ module DocsFetcher
           break if total_bytes > MAX_TOTAL_BYTES && pages.any? # allow first file even if over budget
 
           title = extract_title(content, path)
+          content = strip_frontmatter(content)
           headings = extract_headings(content)
           slug = path.delete_suffix(File.extname(path)).tr("/", "-").downcase
 
@@ -292,6 +293,14 @@ module DocsFetcher
 
       def extract_headings(content)
         content.scan(/^\#{2,4}\s+(.+)$/).flatten.map(&:strip)
+      end
+
+      # Remove YAML frontmatter (--- delimited block at start of file)
+      def strip_frontmatter(content)
+        return content unless content.start_with?("---")
+
+        parts = content.split("---", 3)
+        parts.length >= 3 ? parts[2].lstrip : content
       end
 
       # --- Version extraction ---

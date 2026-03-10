@@ -96,10 +96,10 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
 
     metadata = @fetcher.send(:extract_metadata, uri, content)
 
-    assert_equal "docs", metadata[:namespace]
-    assert_equal "docs-llms-txt", metadata[:name]
+    assert_equal "example", metadata[:namespace]
+    assert_equal "example", metadata[:name]
     assert_equal "My Great Lib", metadata[:display_name]
-    assert_includes metadata[:aliases], "docs"
+    assert_includes metadata[:aliases], "example"
   end
 
   test "extracts metadata with llms-full.txt URL" do
@@ -109,7 +109,7 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
     metadata = @fetcher.send(:extract_metadata, uri, content)
 
     assert_equal "react", metadata[:namespace]
-    assert_equal "react-llms-full-txt", metadata[:name]
+    assert_equal "react", metadata[:name]
     assert_equal "React Documentation", metadata[:display_name]
   end
 
@@ -402,7 +402,7 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
 
     assert_instance_of DocsFetcher::Result, result
     assert_equal "example", result.namespace
-    assert_equal "example-llms-txt", result.name
+    assert_equal "example", result.name
     assert_equal 3, result.pages.size
     assert_equal "https://example.com", result.homepage_url
   end
@@ -428,7 +428,7 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
     result = fetcher.fetch("https://example.com/llms.txt")
 
     assert_instance_of DocsFetcher::Result, result
-    assert_equal "example-llms-full-txt", result.name
+    assert_equal "example", result.name
     assert_equal 3, result.pages.size
   end
 

@@ -29,7 +29,6 @@ interface RankedLibrary {
   pageCount: number
   versionCount: number
   freshnessPct: number
-  score: number
   updatedAt: string
 }
 
@@ -105,7 +104,7 @@ export default function RankingsIndex({ libraries, totalLibraries }: Props) {
       title="Rankings — ContextQMD"
       seo={{
         description:
-          "See the top-ranked documentation libraries on ContextQMD, scored by coverage, versions, and freshness.",
+          "Documentation coverage rankings for libraries on ContextQMD. Sorted by page count, versions, and freshness.",
       }}
     >
       <section className="mx-auto max-w-7xl px-4 pt-16 pb-8 sm:px-6 lg:px-8">
@@ -115,8 +114,8 @@ export default function RankingsIndex({ libraries, totalLibraries }: Props) {
               Rankings
             </h1>
             <p className="mt-4 text-lg text-muted-foreground">
-              Libraries ranked by documentation coverage, version activity, and
-              freshness.
+              Libraries ranked by documentation coverage. More pages, more
+              versions, more freshness.
             </p>
           </div>
           <Badge variant="outline" className="self-start text-sm">
@@ -124,7 +123,6 @@ export default function RankingsIndex({ libraries, totalLibraries }: Props) {
           </Badge>
         </div>
 
-        {/* Scoring explanation */}
         <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Card>
             <CardContent className="flex items-start gap-3 pt-6">
@@ -132,7 +130,7 @@ export default function RankingsIndex({ libraries, totalLibraries }: Props) {
               <div>
                 <div className="font-medium">Pages</div>
                 <div className="text-sm text-muted-foreground">
-                  More doc pages = better coverage
+                  Total doc pages indexed for this library
                 </div>
               </div>
             </CardContent>
@@ -143,7 +141,7 @@ export default function RankingsIndex({ libraries, totalLibraries }: Props) {
               <div>
                 <div className="font-medium">Versions</div>
                 <div className="text-sm text-muted-foreground">
-                  More versions = actively maintained
+                  Number of indexed documentation versions
                 </div>
               </div>
             </CardContent>
@@ -154,7 +152,7 @@ export default function RankingsIndex({ libraries, totalLibraries }: Props) {
               <div>
                 <div className="font-medium">Freshness</div>
                 <div className="text-sm text-muted-foreground">
-                  Recently updated = current docs
+                  How recently the docs were updated
                 </div>
               </div>
             </CardContent>
@@ -184,7 +182,6 @@ export default function RankingsIndex({ libraries, totalLibraries }: Props) {
                   <TableHead className="text-right">PAGES</TableHead>
                   <TableHead className="text-right">VERSIONS</TableHead>
                   <TableHead>FRESHNESS</TableHead>
-                  <TableHead className="text-right">SCORE</TableHead>
                   <TableHead className="text-right">UPDATED</TableHead>
                 </TableRow>
               </TableHeader>
@@ -218,9 +215,6 @@ export default function RankingsIndex({ libraries, totalLibraries }: Props) {
                     </TableCell>
                     <TableCell>
                       <FreshnessBar pct={lib.freshnessPct} />
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-sm font-semibold">
-                      {lib.score}
                     </TableCell>
                     <TableCell className="text-right text-sm text-muted-foreground">
                       {formatTimeAgo(lib.updatedAt)}

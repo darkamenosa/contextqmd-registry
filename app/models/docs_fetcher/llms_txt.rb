@@ -208,14 +208,24 @@ module DocsFetcher
 
       def extract_metadata(uri, content)
         host = uri.host.gsub(/^www\./, "")
-        namespace = host.split(".").first.downcase
+        parts = host.split(".")
+
+        # Derive the library identity from the domain:
+        #   docs.astro.build    → namespace=astro, name=astro
+        #   nextjs.org          → namespace=nextjs, name=nextjs
+        #   inertia-rails.dev   → namespace=inertia-rails, name=inertia-rails
+        #   api.stripe.com      → namespace=stripe, name=stripe
+        namespace = if %w[docs api www dev].include?(parts.first) && parts.length >= 3
+          parts[1].downcase
+        else
+          parts.first.downcase
+        end
+        name = namespace
+
         h1 = extract_first_h1(content)
         title = h1 && library_title?(h1) ? h1 : namespace.tr("-", " ").gsub(/\b\w/, &:upcase)
 
-        name_suffix = uri.path.include?("llms-full") ? "llms-full-txt" : "llms-txt"
-        name = "#{namespace}-#{name_suffix}"
-
-        aliases = [ namespace, host.split(".")[0..1].join(".") ].uniq
+        aliases = [ namespace, name, host ].uniq
 
         {
           namespace: namespace,
@@ -239,12 +249,15 @@ module DocsFetcher
 
       # Returns true if the title looks like a library/project name
       # (rather than a generic section heading like "Asset versioning")
+      GENERIC_TITLES = %w[
+        getting\ started installation overview configuration introduction
+        quick\ start asset\ versioning setup usage guide tutorial documentation
+        table\ of\ contents api\ reference changelog features
+      ].freeze
+
       def library_title?(title)
         return false if title.blank?
-        # Generic section titles are usually 1-3 common words
-        generic = /\A(getting started|installation|overview|configuration|introduction|
-          quick start|asset versioning|setup|usage|guide|tutorial|documentation)\z/ix
-        !title.match?(generic)
+        !GENERIC_TITLES.any? { |g| title.casecmp(g).zero? }
       end
 
       # --- Section splitting (for full-content files) ---
