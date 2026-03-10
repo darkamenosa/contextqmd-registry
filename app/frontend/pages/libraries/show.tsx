@@ -485,6 +485,17 @@ install_docs({ library: "${slug}" })`
                                           {cleanMarkdown(page.content)}
                                         </ReactMarkdown>
                                       </div>
+                                      {selectedVersion && (
+                                        <div className="mt-4 border-t border-border/50 pt-3">
+                                          <Link
+                                            href={`/libraries/${slug}/versions/${selectedVersion}/pages/${page.pageUid}`}
+                                            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                                          >
+                                            <FileText className="size-3.5" />
+                                            View full page
+                                          </Link>
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
                                 </TableCell>
@@ -642,7 +653,9 @@ install_docs({ library: "${slug}" })`
                 <p className="mb-3 text-sm text-muted-foreground">
                   Fetch the page index for{" "}
                   {selectedVersion
-                    ? `v${selectedVersion}`
+                    ? selectedVersion === "latest"
+                      ? "latest"
+                      : `v${selectedVersion}`
                     : "the default version"}
                   :
                 </p>

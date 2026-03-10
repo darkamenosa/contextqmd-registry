@@ -68,6 +68,9 @@ Rails.application.routes.draw do
   resources :libraries, only: [ :index, :new, :create ], param: :slug do
     collection do
       get ":namespace/:name", action: :show, as: :detail, constraints: { namespace: /[a-z0-9-]+/, name: /[a-z0-9-]+/ }
+      get ":namespace/:name/versions/:version/pages/:page_uid",
+        to: "libraries/pages#show", as: :page_detail,
+        constraints: { namespace: /[a-z0-9-]+/, name: /[a-z0-9-]+/, version: /[^\/]+/ }
     end
   end
 

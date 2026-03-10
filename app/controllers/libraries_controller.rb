@@ -144,7 +144,7 @@ class LibrariesController < InertiaController
 
     def truncate_content(content)
       return nil unless content
-      content.length > 1000 ? "#{content[0, 1000]}..." : content
+      content.length > 5000 ? "#{content[0, 5000]}..." : content
     end
 
     def pagination_props(pagy)
