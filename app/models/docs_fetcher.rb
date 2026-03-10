@@ -29,7 +29,7 @@ module DocsFetcher
 
     return "github" if GITHUB_HOSTS.include?(host)
     return "gitlab" if GITLAB_HOSTS.include?(host) || gitlab_host?(host)
-    return "llms_txt" if path.match?(/llms(?:-full)?\.txt\z/)
+    return "llms_txt" if path.match?(/llms(?:-full|-small)?\.txt\z/)
     return "openapi" if openapi_path?(path)
 
     "website"

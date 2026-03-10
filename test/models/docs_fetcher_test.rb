@@ -29,6 +29,10 @@ class DocsFetcherTest < ActiveSupport::TestCase
     assert_equal "llms_txt", DocsFetcher.detect_source_type("https://nextjs.org/docs/llms-full.txt")
   end
 
+  test "detects llms-small.txt as llms_txt" do
+    assert_equal "llms_txt", DocsFetcher.detect_source_type("https://react.dev/llms-small.txt")
+  end
+
   test "detects openapi.json as openapi" do
     assert_equal "openapi", DocsFetcher.detect_source_type("https://api.example.com/openapi.json")
   end

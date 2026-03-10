@@ -28,7 +28,7 @@ module DocsFetcher
       content = nil
       used_full = false
 
-      # Try llms-full.txt first if URL points to llms.txt
+      # Try llms-full.txt first if URL points to llms.txt (but NOT llms-small.txt)
       if uri.path.end_with?("/llms.txt")
         full_uri = uri.dup
         full_uri.path = uri.path.sub(/\/llms\.txt\z/, "/llms-full.txt")
@@ -39,6 +39,7 @@ module DocsFetcher
           used_full = true
         end
       end
+      # llms-small.txt and llms-full.txt are used directly — no upgrade/downgrade
 
       content ||= http_get(uri)
       raise "Failed to fetch #{url}" unless content
@@ -60,7 +61,7 @@ module DocsFetcher
         namespace: metadata[:namespace],
         name: metadata[:name],
         display_name: metadata[:display_name],
-        homepage_url: url.sub(%r{/llms(?:-full)?\.txt$}, ""),
+        homepage_url: url.sub(%r{/llms(?:-full|-small)?\.txt$}, ""),
         aliases: metadata[:aliases],
         version: nil,
         pages: pages

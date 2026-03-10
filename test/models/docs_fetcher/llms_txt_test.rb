@@ -495,4 +495,89 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
       fetcher.fetch("https://example.com/llms.txt")
     end
   end
+
+  # --- llms-small.txt support ---
+
+  test "fetch uses llms-small.txt directly without trying llms-full.txt" do
+    content = <<~MD
+      # My Library (Small)
+
+      Condensed overview.
+
+      ## Quick Start
+
+      Install and run.
+
+      ## API
+
+      Main functions.
+    MD
+
+    fetcher = DocsFetcher::LlmsTxt.new
+    urls_fetched = []
+    fetcher.define_singleton_method(:http_get) do |uri, **_kw|
+      urls_fetched << uri.to_s
+      content
+    end
+
+    result = fetcher.fetch("https://example.com/llms-small.txt")
+
+    assert_instance_of DocsFetcher::Result, result
+    # Should NOT have tried llms-full.txt
+    assert_not urls_fetched.any? { |u| u.include?("llms-full.txt") },
+      "Should not attempt llms-full.txt when fetching llms-small.txt"
+    # Should have fetched only the llms-small.txt URL
+    assert_equal 1, urls_fetched.size
+    assert_includes urls_fetched.first, "llms-small.txt"
+  end
+
+  test "fetch parses llms-small.txt content the same as llms.txt" do
+    content = <<~MD
+      # Condensed Docs
+
+      Overview.
+
+      ## Installation
+
+      Install steps.
+
+      ## Usage
+
+      Usage info.
+    MD
+
+    fetcher = DocsFetcher::LlmsTxt.new
+    fetcher.define_singleton_method(:http_get) { |*_args, **_kw| content }
+
+    result = fetcher.fetch("https://example.com/llms-small.txt")
+
+    assert_instance_of DocsFetcher::Result, result
+    assert_equal 3, result.pages.size
+    titles = result.pages.map { |p| p[:title] }
+    assert_includes titles, "Installation"
+    assert_includes titles, "Usage"
+  end
+
+  test "fetch strips llms-small.txt from homepage_url" do
+    content = <<~MD
+      # Lib
+
+      Overview.
+
+      ## Section A
+
+      Content A.
+
+      ## Section B
+
+      Content B.
+    MD
+
+    fetcher = DocsFetcher::LlmsTxt.new
+    fetcher.define_singleton_method(:http_get) { |*_args, **_kw| content }
+
+    result = fetcher.fetch("https://example.com/llms-small.txt")
+
+    assert_equal "https://example.com", result.homepage_url
+  end
 end
