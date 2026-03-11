@@ -14,8 +14,15 @@ import {
 
 const remarkPlugins = [remarkGfm]
 
+const externalLink: Components["a"] = ({ href, children, ...props }) => (
+  <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+    {children}
+  </a>
+)
+
 const fullComponents: Components = {
   img: () => null,
+  a: externalLink,
   h1: ({ children, ...props }) => (
     <h1 id={slugify(children)} {...props}>
       {children}
@@ -35,6 +42,7 @@ const fullComponents: Components = {
 
 const minimalComponents: Components = {
   img: () => null,
+  a: externalLink,
 }
 
 function MarkdownBlock({
