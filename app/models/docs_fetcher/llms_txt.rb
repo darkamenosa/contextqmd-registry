@@ -20,14 +20,14 @@ module DocsFetcher
 
     MAX_SIZE = 50_000_000       # 50 MB per fetched file
     MAX_TOTAL_BYTES = 20_000_000 # 20 MB total content budget
-    MAX_PAGES = 500
-    MAX_LINK_FETCHES = 200      # max linked pages to fetch from an index
 
     def fetch(crawl_request, on_progress: nil)
       url = crawl_request.url
       uri = URI.parse(url.strip)
       content = nil
       used_full = false
+      metadata_uri = uri
+      metadata_content = nil
 
       # Try llms-full.txt first if URL points to llms.txt (but NOT llms-small.txt)
       if uri.path.end_with?("/llms.txt")
@@ -37,6 +37,7 @@ module DocsFetcher
         full_content = http_get(full_uri)
         if full_content && full_content.strip.length > 100
           content = full_content
+          metadata_content = http_get(uri)
           uri = full_uri
           used_full = true
         end
@@ -47,7 +48,8 @@ module DocsFetcher
       content ||= http_get(uri, raise_on_error: true)
       raise DocsFetcher::TransientFetchError, "Failed to fetch #{url}" unless content
 
-      metadata = extract_metadata(uri, content)
+      metadata = extract_metadata(metadata_uri, metadata_content.presence || content)
+      section_base_url = canonical_llms_source_url(url)
 
       # Decide strategy: index with links or inline content?
       if !used_full && index_style?(content)
@@ -55,12 +57,12 @@ module DocsFetcher
         pages, complete = fetch_linked_pages(uri, content, on_progress: on_progress)
       else
         on_progress&.call("Splitting into sections")
-        pages = split_into_sections(content, url)
+        pages = split_into_sections(content, section_base_url)
         complete = true # section splitting processes all content, never truncated
       end
 
       if pages.empty?
-        pages = [ fallback_single_page(content, url, metadata[:display_name]) ]
+        pages = [ fallback_single_page(content, section_base_url, metadata[:display_name]) ]
       end
 
       CrawlResult.new(
@@ -69,7 +71,7 @@ module DocsFetcher
         display_name: metadata[:display_name],
         homepage_url: url.sub(%r{/llms(?:-full|-small)?\.txt$}, ""),
         aliases: metadata[:aliases],
-        version: nil,
+        version: extract_version(content),
         pages: pages,
         complete: complete
       )
@@ -100,33 +102,33 @@ module DocsFetcher
       # Extract markdown links that point to documentation files.
       # Returns array of { title:, path: } hashes.
       def extract_doc_links(content)
-        links = []
-        content.scan(/\[([^\]]+)\]\(([^)]+)\)/).each do |title, path|
-          # Only follow links to markdown/text files or relative paths
-          next unless path.match?(/\.(?:md|mdx|txt)\z/i) || path.start_with?("/")
-          next if path.start_with?("http") && !path.match?(/\.(?:md|mdx|txt)\z/i)
-          links << { title: title.strip, path: path.strip }
-        end
-        links.uniq { |l| l[:path] }
+        content.lines.filter_map do |line|
+          match = line.match(/\A\s*(?:[-*]|\d+\.)\s+\[([^\]]+)\]\(([^)]+)\)/)
+          next unless match
+
+          path = match[2].strip
+          next unless documentation_link?(path)
+
+          {
+            title: match[1].strip,
+            path: path
+          }
+        end.uniq { |link| link[:path] }
       end
 
       # --- Link following ---
 
-      # Returns [pages, complete] where complete is false if any cap was hit.
+      # Returns [pages, complete] where complete is false if the total bytes budget was hit.
       def fetch_linked_pages(base_uri, index_content, on_progress: nil)
         links = extract_doc_links(index_content)
         pages = []
         total_bytes = 0
         slug_counts = Hash.new(0)
-        total_links = [ links.size, MAX_LINK_FETCHES ].min
+        total_links = links.size
         hit_cap = false
 
-        links.first(MAX_LINK_FETCHES).each_with_index do |link, index|
+        links.each_with_index do |link, index|
           if total_bytes >= MAX_TOTAL_BYTES
-            hit_cap = true
-            break
-          end
-          if pages.size >= MAX_PAGES
             hit_cap = true
             break
           end
@@ -143,8 +145,7 @@ module DocsFetcher
           next unless raw
           next if raw.strip.empty?
 
-          title = extract_title_from_content(raw) || link[:title]
-          content = strip_frontmatter(raw)
+          title, content, headings = normalize_linked_page(raw, link, resolved_uri)
           next if content.strip.empty?
 
           total_bytes += content.bytesize
@@ -153,20 +154,17 @@ module DocsFetcher
             break
           end
 
-          headings = content.scan(/^\#{2,4}\s+(.+)$/).flatten.map(&:strip)
-          slug = make_slug(link[:title], slug_counts)
+          slug = make_slug(title.presence || link[:title], slug_counts)
 
           pages << {
             page_uid: slug,
-            path: link[:path].delete_prefix("/"),
+            path: linked_page_path(resolved_uri, slug),
             title: title,
             url: resolved_uri.to_s,
             content: content,
             headings: headings
           }
         end
-
-        hit_cap = true if links.size > MAX_LINK_FETCHES
 
         [ pages, !hit_cap ]
       end
@@ -189,10 +187,8 @@ module DocsFetcher
       def extract_title_from_content(content)
         # Try frontmatter title first
         if content.start_with?("---")
-          fm = content.split("---", 3)[1]
-          if fm && (match = fm.match(/^title:\s*["']?(.+?)["']?\s*$/))
-            return match[1].strip
-          end
+          metadata = parse_frontmatter(content.split("---", 3)[1])
+          return metadata["title"] if metadata["title"].present?
         end
         # Then try ATX heading
         strip_frontmatter(content).lines.first(20).each do |line|
@@ -229,7 +225,7 @@ module DocsFetcher
         end
         name = namespace
 
-        h1 = extract_first_h1(content)
+        h1 = extract_first_h1(metadata_content(content))
         title = h1 && library_title?(h1) ? h1 : namespace.tr("-", " ").gsub(/\b\w/, &:upcase)
 
         aliases = [ namespace, name, host ].uniq
@@ -248,10 +244,18 @@ module DocsFetcher
             title = match[1]
               .gsub(/<[^>]+>/, "")  # strip inline HTML tags
               .strip
+            title = title.split(/\s+[–—-]\s+/, 2).first.to_s.strip
             return title if title.present?
           end
         end
         nil
+      end
+
+      def metadata_content(content)
+        return "" if content.start_with?("---\n")
+
+        frontmatter_index = content.index("\n---\n")
+        frontmatter_index ? content[0...frontmatter_index] : content
       end
 
       # Returns true if the title looks like a library/project name
@@ -270,6 +274,9 @@ module DocsFetcher
       # --- Section splitting (for full-content files) ---
 
       def split_into_sections(content, base_url)
+        frontmatter_pages = split_on_frontmatter_sections(content, base_url)
+        return frontmatter_pages if frontmatter_pages.any?
+
         heading_level = detect_split_level(content)
         return [] unless heading_level
 
@@ -296,6 +303,37 @@ module DocsFetcher
         end
 
         pages
+      end
+
+      def split_on_frontmatter_sections(content, base_url)
+        matches = content.to_enum(
+          :scan,
+          /^---\n(?<frontmatter>.*?)\n---\n(?<body>.*?)(?=^---\n|\z)/m
+        ).map { Regexp.last_match }
+        return [] if matches.empty?
+
+        slug_counts = Hash.new(0)
+
+        matches.filter_map do |match|
+          metadata = parse_frontmatter(match[:frontmatter])
+          body = match[:body].to_s.lstrip
+          next if body.blank?
+
+          title = metadata["title"].presence || extract_title_from_content(body) || "Overview"
+          slug = make_slug(title, slug_counts)
+          page_url = resolved_section_url(base_url, metadata["url"], slug)
+
+          {
+            page_uid: slug,
+            path: linked_page_path(URI.parse(page_url), slug),
+            title: title,
+            url: page_url,
+            content: body,
+            headings: body.scan(/^\#{2,4}\s+(.+)$/).flatten.map(&:strip)
+          }
+        rescue URI::InvalidURIError
+          nil
+        end
       end
 
       def detect_split_level(content)
@@ -380,6 +418,96 @@ module DocsFetcher
           content: content,
           headings: content.scan(/^\#{2,4}\s+(.+)$/).flatten.map(&:strip)
         }
+      end
+
+      def documentation_link?(path)
+        return false if path.blank?
+
+        lower = path.downcase
+        return false if lower.start_with?("#", "mailto:", "tel:", "javascript:")
+
+        return true if path.start_with?("/")
+        return true unless path.include?(":")
+        return false unless path.match?(/\Ahttps?:\/\//)
+
+        absolute_documentation_link?(path)
+      end
+
+      def normalize_linked_page(raw, link, resolved_uri)
+        if html_content?(raw)
+          html_result = HtmlToMarkdown.convert(raw)
+          content = html_result[:content].to_s.strip
+          title = html_result[:title] || link[:title]
+          headings = html_result[:headings]
+        else
+          title = extract_title_from_content(raw) || link[:title]
+          content = strip_frontmatter(raw).strip
+          headings = content.scan(/^\#{2,4}\s+(.+)$/).flatten.map(&:strip)
+        end
+
+        [ title, content, headings ]
+      end
+
+      def html_content?(raw)
+        trimmed = raw.lstrip
+        trimmed.start_with?("<!DOCTYPE html", "<html", "<body", "<main", "<article")
+      end
+
+      def linked_page_path(uri, fallback_slug)
+        path = uri.path.to_s.delete_prefix("/")
+        path.present? ? path : "#{fallback_slug}.md"
+      end
+
+      def resolved_section_url(base_url, section_url, slug)
+        return "#{base_url}##{slug}" if section_url.blank?
+
+        resolved_uri = resolve_link(URI.parse(base_url), section_url)
+        resolved_uri ? resolved_uri.to_s : "#{base_url}##{slug}"
+      end
+
+      def extract_version(content)
+        versions = content.scan(/^version:\s*["']?([^"'\n]+)["']?\s*$/).flatten
+          .filter_map { |value| normalize_version(value) }
+          .uniq
+        return versions.first if versions.one?
+
+        top_level = content.match(/^@doc-version:\s*(.+)$/)&.captures&.first
+        normalize_version(top_level)
+      end
+
+      def normalize_version(value)
+        text = value.to_s.strip.delete_prefix('"').delete_suffix('"').presence
+        return if text.blank?
+
+        match = text.match(/\A(?:[<>=~^ ]*)v?(\d+(?:\.\d+)*(?:[-+][A-Za-z0-9.-]+)?)\z/)
+        match ? match[1] : text
+      end
+
+      def parse_frontmatter(raw_frontmatter)
+        raw_frontmatter.to_s.each_line.with_object({}) do |line, metadata|
+          stripped = line.strip
+          next if stripped.empty?
+          next unless (match = stripped.match(/\A([A-Za-z0-9_-]+):\s*(.+)\z/))
+
+          metadata[match[1]] = match[2].strip.delete_prefix('"').delete_suffix('"')
+        end
+      end
+
+      def absolute_documentation_link?(path)
+        uri = URI.parse(path)
+        segments = uri.path.to_s.split("/").reject(&:empty?)
+
+        return false if segments.empty?
+        return true if uri.path.match?(/\.(?:md|mdx|txt)\z/i)
+        return true if segments.size > 1
+
+        %w[docs doc guide guides learn reference api tutorial quickstart quick-start].include?(segments.first.downcase)
+      rescue URI::InvalidURIError
+        false
+      end
+
+      def canonical_llms_source_url(url)
+        url.sub(%r{/llms(?:-full|-small)?\.txt$}, "/llms.txt")
       end
   end
 end

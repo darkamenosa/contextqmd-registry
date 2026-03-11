@@ -68,6 +68,48 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
     assert_empty pages
   end
 
+  test "splits frontmatter-delimited llms-full content into pages" do
+    content = <<~MD
+      # Next.js Documentation
+
+      @doc-version: >=v16.1.6
+
+      ---
+      title: Getting Started
+      url: "https://nextjs.org/docs/app/getting-started"
+      version: 16.1.6
+      ---
+
+      # Getting Started
+
+      Welcome to the docs.
+
+      ## Next Steps
+
+      Keep reading.
+
+      ---
+      title: Installation
+      url: "https://nextjs.org/docs/app/getting-started/installation"
+      version: 16.1.6
+      ---
+
+      # Installation
+
+      Install Next.js.
+    MD
+
+    pages = @fetcher.send(:split_into_sections, content, "https://nextjs.org/docs/llms-full.txt")
+
+    assert_equal 2, pages.size
+    assert_equal "Getting Started", pages.first[:title]
+    assert_equal "https://nextjs.org/docs/app/getting-started", pages.first[:url]
+    assert_equal "docs/app/getting-started", pages.first[:path]
+    assert_includes pages.first[:headings], "Next Steps"
+    assert_equal "Installation", pages.second[:title]
+    assert_equal "docs/app/getting-started/installation", pages.second[:path]
+  end
+
   test "ignores H3 headings for splitting" do
     content = <<~MD
       # Title
@@ -129,6 +171,36 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
     metadata = @fetcher.send(:extract_metadata, uri, content)
 
     assert_equal "example", metadata[:namespace]
+  end
+
+  test "extract_metadata trims marketing tagline from library H1" do
+    uri = URI.parse("https://inertia-rails.dev/llms.txt")
+    content = <<~MD
+      # Inertia Rails – Build React/Vue/Svelte SPAs with Rails
+
+      > Summary.
+    MD
+
+    metadata = @fetcher.send(:extract_metadata, uri, content)
+
+    assert_equal "inertia-rails", metadata[:namespace]
+    assert_equal "Inertia Rails", metadata[:display_name]
+  end
+
+  test "extract_metadata ignores first section title when llms-full starts with frontmatter" do
+    uri = URI.parse("https://vite.dev/llms-full.txt")
+    content = <<~MD
+      ---
+      url: /guide/backend-integration.md
+      ---
+
+      # Backend Integration
+    MD
+
+    metadata = @fetcher.send(:extract_metadata, uri, content)
+
+    assert_equal "vite", metadata[:namespace]
+    assert_equal "Vite", metadata[:display_name]
   end
 
   # --- Fallback single page ---
@@ -327,6 +399,26 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
     assert_not_includes paths, "https://react.dev/blog"
   end
 
+  test "extract_doc_links keeps list-item documentation URLs without markdown extension" do
+    content = <<~MD
+      # Next.js Documentation
+
+      > Read [general info](https://www.example.com/llms.txt)
+
+      - [Getting Started](https://example.com/docs/getting-started)
+      - [Installation](https://example.com/docs/installation)
+      - [Routing](/docs/routing)
+    MD
+
+    links = @fetcher.send(:extract_doc_links, content)
+    paths = links.map { |l| l[:path] }
+
+    assert_includes paths, "https://example.com/docs/getting-started"
+    assert_includes paths, "https://example.com/docs/installation"
+    assert_includes paths, "/docs/routing"
+    assert_not_includes paths, "https://www.example.com/llms.txt"
+  end
+
   # --- Frontmatter stripping ---
 
   test "strip_frontmatter removes YAML frontmatter" do
@@ -464,6 +556,86 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
     assert_equal 3, result.pages.size
   end
 
+  test "fetch uses llms.txt metadata when llms-full heading is page-like" do
+    llms_index = <<~MD
+      # Astro
+
+      > Astro is an all-in-one web framework for building websites.
+    MD
+
+    llms_full = <<~MD
+      <SYSTEM>This is the full developer documentation for Astro</SYSTEM>
+
+      # Why Astro?
+
+      ## Features
+
+      Feature details.
+
+      ## Design Principles
+
+      Principle details.
+    MD
+
+    fetcher = DocsFetcher::LlmsTxt.new
+    call_count = 0
+    fetcher.define_singleton_method(:http_get) do |uri, **_kw|
+      call_count += 1
+
+      if uri.path.end_with?("/llms-full.txt")
+        llms_full
+      else
+        llms_index
+      end
+    end
+
+    result = fetcher.fetch(Struct.new(:url).new("https://docs.astro.build/llms.txt"))
+
+    assert_equal "Astro", result.display_name
+    assert_equal 3, result.pages.size
+    assert_equal "Overview", result.pages.first[:title]
+    assert_equal "Features", result.pages.second[:title]
+  end
+
+  test "fetch returns the same normalized pages for llms.txt and llms-full.txt" do
+    llms_index = <<~MD
+      # Inertia Rails
+
+      > Build modern SPAs with Rails.
+    MD
+
+    llms_full = <<~MD
+      # Inertia Rails
+
+      Overview paragraph with enough detail to ensure the fetcher treats this
+      as a real llms-full payload instead of ignoring it as too small.
+
+      ## Installation
+
+      Install steps with some extra explanation so the body is comfortably over
+      the minimum length threshold used when probing llms-full.txt.
+
+      ## Usage
+
+      Usage details with additional prose to keep this fixture realistic.
+    MD
+
+    fetcher = DocsFetcher::LlmsTxt.new
+    fetcher.define_singleton_method(:http_get) do |uri, **_kw|
+      if uri.path.end_with?("/llms-full.txt")
+        llms_full
+      else
+        llms_index
+      end
+    end
+
+    from_index = fetcher.fetch(Struct.new(:url).new("https://inertia-rails.dev/llms.txt"))
+    from_full = fetcher.fetch(Struct.new(:url).new("https://inertia-rails.dev/llms-full.txt"))
+
+    assert_equal from_index.display_name, from_full.display_name
+    assert_equal from_index.pages, from_full.pages
+  end
+
   test "fetch follows links for index-style llms.txt" do
     index_content = <<~MD
       # My Framework
@@ -500,6 +672,108 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
     assert_equal 7, result.pages.size
     assert_equal "Introduction", result.pages.first[:title]
     assert_includes result.pages.first[:headings], "Overview"
+  end
+
+  test "fetch follows HTML doc links from index-style llms.txt" do
+    index_content = <<~MD
+      # Example Docs
+
+      > Read [homepage](https://example.com)
+
+      - [Getting Started](https://example.com/docs/getting-started)
+      - [Installation](https://example.com/docs/installation)
+      - [Routing](https://example.com/docs/routing)
+      - [Forms](https://example.com/docs/forms)
+      - [Validation](https://example.com/docs/validation)
+      - [Testing](https://example.com/docs/testing)
+    MD
+
+    html_page = <<~HTML
+      <html>
+        <body>
+          <article>
+            <h1>Getting Started</h1>
+            <p>This page is rendered as HTML and should still become markdown content in the llms index fetch flow.</p>
+            <h2>Overview</h2>
+            <p>More details.</p>
+          </article>
+        </body>
+      </html>
+    HTML
+
+    fetcher = DocsFetcher::LlmsTxt.new
+    urls_fetched = []
+    call_count = 0
+    fetcher.define_singleton_method(:http_get) do |uri, **_kw|
+      urls_fetched << uri.to_s
+      call_count += 1
+
+      if call_count == 1
+        nil
+      elsif call_count == 2
+        index_content
+      else
+        html_page
+      end
+    end
+
+    result = fetcher.fetch(Struct.new(:url).new("https://example.com/llms.txt"))
+
+    assert_equal 6, result.pages.size
+    assert_equal "Getting Started", result.pages.first[:title]
+    assert_includes result.pages.first[:content], "rendered as HTML"
+    assert_includes result.pages.first[:headings], "Overview"
+    assert_not_includes urls_fetched, "https://example.com"
+  end
+
+  test "fetch_linked_pages does not stop at former page or link caps" do
+    index_content = (1..505).map { |i| "- [Page #{i}](/docs/page-#{i})" }.join("\n")
+
+    fetcher = DocsFetcher::LlmsTxt.new
+    fetcher.define_singleton_method(:http_get) do |_uri, **_kw|
+      "# Page\n\nBody"
+    end
+
+    pages, complete = fetcher.send(
+      :fetch_linked_pages,
+      URI.parse("https://example.com/llms.txt"),
+      index_content
+    )
+
+    assert_equal 505, pages.size
+    assert complete
+    assert_equal "docs/page-1", pages.first[:path]
+    assert_equal "docs/page-505", pages.last[:path]
+  end
+
+  test "fetch resolves version from llms-full metadata" do
+    full_content = <<~MD
+      # Next.js Documentation
+
+      @doc-version: >=v16.1.6
+
+      ---
+      title: Getting Started
+      url: "https://nextjs.org/docs/app/getting-started"
+      version: 16.1.6
+      ---
+
+      # Getting Started
+
+      Welcome to the docs.
+    MD
+
+    fetcher = DocsFetcher::LlmsTxt.new
+    fetcher.define_singleton_method(:http_get) { |*_args, **_kw| full_content }
+
+    result = fetcher.fetch(Struct.new(:url).new("https://nextjs.org/docs/llms-full.txt"))
+
+    assert_equal "nextjs", result.namespace
+    assert_equal "nextjs", result.name
+    assert_equal "Next.js Documentation", result.display_name
+    assert_equal "16.1.6", result.version
+    assert_equal "https://nextjs.org/docs", result.homepage_url
+    assert_equal 1, result.pages.size
   end
 
   test "fetch uses fallback when no sections can be split" do
