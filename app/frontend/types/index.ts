@@ -74,10 +74,10 @@ export type AdminLibrary = {
 }
 
 export type CrawlRules = {
-  git_include_prefixes?: string[]
-  git_exclude_prefixes?: string[]
-  git_exclude_basenames?: string[]
-  website_exclude_path_prefixes?: string[]
+  gitIncludePrefixes?: string[]
+  gitExcludePrefixes?: string[]
+  gitExcludeBasenames?: string[]
+  websiteExcludePathPrefixes?: string[]
 }
 
 export type AdminLibraryDetail = {

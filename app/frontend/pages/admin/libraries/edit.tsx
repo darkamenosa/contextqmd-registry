@@ -206,11 +206,11 @@ export default function AdminLibraryEdit({ library, versions }: Props) {
     homepageUrl: library.homepageUrl || "",
     defaultVersion: library.defaultVersion || "",
     aliases: library.aliases.join(", "),
-    gitIncludePrefixes: (rules.git_include_prefixes || []).join("\n"),
-    gitExcludePrefixes: (rules.git_exclude_prefixes || []).join("\n"),
-    gitExcludeBasenames: (rules.git_exclude_basenames || []).join("\n"),
+    gitIncludePrefixes: (rules.gitIncludePrefixes || []).join("\n"),
+    gitExcludePrefixes: (rules.gitExcludePrefixes || []).join("\n"),
+    gitExcludeBasenames: (rules.gitExcludeBasenames || []).join("\n"),
     websiteExcludePathPrefixes: (
-      rules.website_exclude_path_prefixes || []
+      rules.websiteExcludePathPrefixes || []
     ).join("\n"),
   })
 

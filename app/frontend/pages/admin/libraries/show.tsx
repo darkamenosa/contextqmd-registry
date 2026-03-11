@@ -304,14 +304,14 @@ function VersionRow({
 
 function hasGitRules(rules: CrawlRules): boolean {
   return (
-    (rules.git_include_prefixes?.length ?? 0) > 0 ||
-    (rules.git_exclude_prefixes?.length ?? 0) > 0 ||
-    (rules.git_exclude_basenames?.length ?? 0) > 0
+    (rules.gitIncludePrefixes?.length ?? 0) > 0 ||
+    (rules.gitExcludePrefixes?.length ?? 0) > 0 ||
+    (rules.gitExcludeBasenames?.length ?? 0) > 0
   )
 }
 
 function hasWebsiteRules(rules: CrawlRules): boolean {
-  return (rules.website_exclude_path_prefixes?.length ?? 0) > 0
+  return (rules.websiteExcludePathPrefixes?.length ?? 0) > 0
 }
 
 function RulesList({
@@ -375,15 +375,15 @@ function CrawlRulesCard({
               <dl className="space-y-2 pl-5">
                 <RulesList
                   label="Include folders"
-                  items={rules.git_include_prefixes}
+                  items={rules.gitIncludePrefixes}
                 />
                 <RulesList
                   label="Exclude folders"
-                  items={rules.git_exclude_prefixes}
+                  items={rules.gitExcludePrefixes}
                 />
                 <RulesList
                   label="Exclude files"
-                  items={rules.git_exclude_basenames}
+                  items={rules.gitExcludeBasenames}
                 />
               </dl>
             ) : (
@@ -403,7 +403,7 @@ function CrawlRulesCard({
               <dl className="pl-5">
                 <RulesList
                   label="Exclude URLs"
-                  items={rules.website_exclude_path_prefixes}
+                  items={rules.websiteExcludePathPrefixes}
                 />
               </dl>
             ) : (
