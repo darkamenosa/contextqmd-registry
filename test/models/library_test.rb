@@ -3,7 +3,7 @@
 require "test_helper"
 
 class LibraryTest < ActiveSupport::TestCase
-  fixtures :accounts, :libraries
+  fixtures :accounts, :libraries, :versions, :pages
 
   test "valid library" do
     library = Library.new(
@@ -81,5 +81,82 @@ class LibraryTest < ActiveSupport::TestCase
     results = Library.search_by_query("next")
     assert results.any?
     assert_includes results.map(&:name), "nextjs"
+  end
+
+  # -- Library.resolve --------------------------------------------------------
+
+  test "resolve finds library by alias" do
+    lib = Library.resolve("next.js")
+    assert_equal "nextjs", lib.name
+  end
+
+  test "resolve finds library by alias (short form)" do
+    lib = Library.resolve("next")
+    assert_equal "nextjs", lib.name
+  end
+
+  test "resolve falls back to full-text search" do
+    lib = Library.resolve("nextjs")
+    assert_equal "nextjs", lib.name
+  end
+
+  test "resolve returns nil for unknown query" do
+    assert_nil Library.resolve("nonexistent-library-xyz")
+  end
+
+  # -- Library#best_version ---------------------------------------------------
+
+  test "best_version returns nil for library with no versions" do
+    lib = Library.new(
+      account: accounts(:personal),
+      namespace: "test-bv-#{SecureRandom.hex(4)}",
+      name: "empty",
+      display_name: "Empty"
+    )
+    lib.save!
+    assert_nil lib.best_version
+  end
+
+  test "best_version returns requested version when it exists" do
+    lib = libraries(:nextjs)
+    lib.versions.load # eager load
+    v = lib.best_version(requested: "17.0.0-canary.1")
+    assert_equal "17.0.0-canary.1", v.version
+  end
+
+  test "best_version ignores unknown requested version" do
+    lib = libraries(:nextjs)
+    lib.versions.load
+    v = lib.best_version(requested: "99.0.0")
+    # Falls back to default or richest
+    assert_not_nil v
+    assert_not_equal "99.0.0", v.version
+  end
+
+  test "best_version prefers default version when it has pages" do
+    lib = libraries(:nextjs)
+    lib.versions.includes(:pages).load
+    v = lib.best_version
+    assert_equal "16.1.6", v.version # default_version with pages
+  end
+
+  test "best_version prefers richest version when it has 3x more pages than default" do
+    lib = libraries(:nextjs)
+    rich_version = lib.versions.find_by(version: "17.0.0-canary.1")
+
+    # Add 7 pages to canary to exceed 3x threshold (default has 2, need >6)
+    7.times do |i|
+      rich_version.pages.create!(
+        page_uid: "pg_canary_#{SecureRandom.hex(4)}",
+        path: "canary/page-#{i}.md",
+        title: "Canary Page #{i}",
+        url: "https://nextjs.org/docs/canary/page-#{i}",
+        bytes: 1000
+      )
+    end
+
+    lib.versions.includes(:pages).reload
+    v = lib.best_version
+    assert_equal "17.0.0-canary.1", v.version
   end
 end

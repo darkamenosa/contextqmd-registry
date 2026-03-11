@@ -17,7 +17,7 @@ class DocsFetcher::HttpFetchingTest < ActiveSupport::TestCase
     original_proxy_lookup = ProxyPool.method(:next_proxy_config)
     original_http_new = Net::HTTP.method(:new)
 
-    ProxyPool.define_singleton_method(:next_proxy_config) do |scope: "all"|
+    ProxyPool.define_singleton_method(:next_proxy_config) do |scope: "all", target_host: nil, sticky_session: false|
       scope_seen = scope
       proxy_config
     end
@@ -65,6 +65,35 @@ class DocsFetcher::HttpFetchingTest < ActiveSupport::TestCase
     Net::HTTP.define_singleton_method(:new, original_http_new)
   end
 
+  test "http_get uses a supplied proxy lease instead of looking up another proxy" do
+    fetcher = DummyFetcher.new
+    proxy_lease = build_proxy_lease
+    response = build_success_response(body: "hello")
+    http = build_http(response)
+    original_proxy_lookup = ProxyPool.method(:next_proxy_config)
+    original_http_new = Net::HTTP.method(:new)
+
+    ProxyPool.define_singleton_method(:next_proxy_config) do |**_options|
+      raise "proxy lookup should not run when a lease is supplied"
+    end
+    Net::HTTP.define_singleton_method(:new) { |*_args| http }
+
+    body = fetcher.send(
+      :http_get,
+      URI("https://docs.example.com/guide"),
+      scope: "website",
+      proxy_lease: proxy_lease,
+      raise_on_error: true
+    )
+
+    assert_equal "hello", body
+    assert_equal [ "docs.example.com" ], proxy_lease.successes
+    assert_empty proxy_lease.failures
+  ensure
+    ProxyPool.define_singleton_method(:next_proxy_config, original_proxy_lookup)
+    Net::HTTP.define_singleton_method(:new, original_http_new)
+  end
+
   private
 
     def build_success_response(body:)
@@ -104,5 +133,17 @@ class DocsFetcher::HttpFetchingTest < ActiveSupport::TestCase
           failures << [ error_class, target_host ]
         end
       end.new([], [])
+    end
+
+    def build_proxy_lease
+      Struct.new(:crawl_proxy_config, :successes, :failures) do
+        def record_success(target_host: nil)
+          successes << target_host
+        end
+
+        def record_failure(error_class: nil, target_host: nil)
+          failures << [ error_class, target_host ]
+        end
+      end.new(build_proxy_config, [], [])
     end
 end

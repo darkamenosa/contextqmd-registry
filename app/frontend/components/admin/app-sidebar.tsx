@@ -3,6 +3,7 @@ import {
   BarChart3,
   BookOpen,
   LayoutDashboard,
+  Network,
   Settings2,
   Users,
   Webhook,
@@ -52,6 +53,11 @@ const navAnalytics = [
 ]
 
 const navSystem = [
+  {
+    title: "Proxy Pool",
+    url: "/admin/proxy_configs",
+    icon: Network,
+  },
   {
     title: "Jobs",
     url: "/admin/jobs",

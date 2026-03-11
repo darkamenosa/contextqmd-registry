@@ -25,11 +25,7 @@ class LibrariesController < InertiaController
     library = Library.includes(versions: :pages, source_policy: []).find_by!(namespace: params[:namespace], name: params[:name])
     versions = library.versions.ordered
 
-    # Pick the best version: requested > version with most pages > default > first
-    selected_version = if params[:version].present?
-      versions.find { |v| v.version == params[:version] }
-    end
-    selected_version ||= pick_best_version(versions, library.default_version)
+    selected_version = library.best_version(requested: params[:version])
 
     # Paginate pages for the selected version
     pages_scope = selected_version ? selected_version.pages : Page.none
@@ -75,29 +71,6 @@ class LibrariesController < InertiaController
   end
 
   private
-
-    # Pick the version that gives users the best experience:
-    # 1. The configured default_version if it has pages
-    # 2. The version with the most pages (for crawled content)
-    # 3. The first version
-    def pick_best_version(versions, default_version_name)
-      return nil if versions.empty?
-
-      default_v = versions.find { |v| v.version == default_version_name }
-      best_v = versions.max_by { |v| v.pages.size }
-
-      # If the default has content, use it. Otherwise prefer the richest version.
-      if default_v && default_v.pages.size > 0
-        # But if another version has significantly more pages, prefer it
-        if best_v && best_v.pages.size > default_v.pages.size * 3
-          best_v
-        else
-          default_v
-        end
-      else
-        best_v || versions.first
-      end
-    end
 
     def search_libraries(query)
       by_alias = Library.where("aliases @> ?", [ query ].to_json)

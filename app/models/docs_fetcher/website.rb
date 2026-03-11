@@ -2,21 +2,96 @@
 
 module DocsFetcher
   # Strategy entrypoint for website crawling.
-  # Delegates to RubyRunner (BFS HTML crawler) or NodeRunner (future Node child).
+  # Delegates to RubyRunner (BFS HTML crawler) or NodeRunner (browser-rendered child).
   #
   # This is NOT the crawler itself — it selects the right runner.
   class Website
+    BROWSER_FALLBACK_PATTERNS = [
+      /enable javascript/i,
+      /javascript required/i,
+      /requires javascript/i,
+      /run this app/i,
+      /\Aloading(?:\.\.\.)?\z/i
+    ].freeze
+
     def fetch(crawl_request, on_progress: nil)
-      runner = select_runner
-      runner.fetch(crawl_request, on_progress: on_progress)
+      runner = select_runner(crawl_request)
+      result = runner.fetch(crawl_request, on_progress: on_progress)
+
+      if retry_with_node?(crawl_request, runner, result)
+        fallback_with_node(crawl_request, on_progress: on_progress)
+      else
+        result
+      end
+    rescue DocsFetcher::PermanentFetchError => error
+      if retry_with_node_after_error?(crawl_request, runner, error)
+        fallback_with_node(crawl_request, on_progress: on_progress)
+      else
+        raise
+      end
     end
 
     private
 
-      def select_runner
-        # Future: check if Node runner is available and if crawl needs JS rendering.
-        # For now, always use the Ruby BFS crawler.
-        RubyRunner.new
+      def select_runner(crawl_request)
+        case requested_runner(crawl_request)
+        when "node"
+          if node_runner.ready?
+            node_runner
+          else
+            raise DocsFetcher::TransientFetchError, "Node website runner is not ready on this host"
+          end
+        else
+          ruby_runner
+        end
+      end
+
+      def retry_with_node?(crawl_request, runner, result)
+        auto_runner?(crawl_request) &&
+          runner.equal?(ruby_runner) &&
+          node_runner.ready? &&
+          javascript_shell?(result)
+      end
+
+      def retry_with_node_after_error?(crawl_request, runner, error)
+        auto_runner?(crawl_request) &&
+          runner.equal?(ruby_runner) &&
+          node_runner.ready? &&
+          error.message.match?(/\ANo content found/i)
+      end
+
+      def fallback_with_node(crawl_request, on_progress: nil)
+        on_progress&.call("Retrying with browser-rendered crawl")
+        node_runner.fetch(crawl_request, on_progress: on_progress)
+      end
+
+      def javascript_shell?(result)
+        return false unless result.pages.one?
+
+        page = result.pages.first
+        content = page[:content].to_s.strip
+        return false if content.blank?
+
+        headings = Array(page[:headings])
+        BROWSER_FALLBACK_PATTERNS.any? { |pattern| content.match?(pattern) } &&
+          headings.empty?
+      end
+
+      def requested_runner(crawl_request)
+        metadata = crawl_request.metadata || {}
+        metadata["website_runner"] || metadata[:website_runner] || "auto"
+      end
+
+      def auto_runner?(crawl_request)
+        requested_runner(crawl_request) == "auto"
+      end
+
+      def ruby_runner
+        @ruby_runner ||= RubyRunner.new
+      end
+
+      def node_runner
+        @node_runner ||= NodeRunner.new
       end
   end
 end

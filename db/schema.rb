@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_11_030001) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_11_040000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -61,15 +61,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_11_030001) do
 
   create_table "crawl_proxy_configs", force: :cascade do |t|
     t.boolean "active", default: true, null: false
+    t.string "bypass"
     t.integer "consecutive_failures", default: 0
     t.datetime "cooldown_until"
     t.datetime "created_at", null: false
+    t.string "disabled_reason"
     t.string "host", null: false
     t.string "kind", default: "datacenter"
     t.string "last_error_class"
     t.datetime "last_failure_at"
+    t.integer "last_http_status"
     t.datetime "last_success_at"
     t.string "last_target_host"
+    t.integer "lease_ttl_seconds", default: 900, null: false
+    t.integer "max_concurrency", default: 4, null: false
     t.jsonb "metadata", default: {}
     t.string "name", null: false
     t.text "notes"
@@ -85,6 +90,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_11_030001) do
     t.index ["active", "usage_scope"], name: "index_crawl_proxy_configs_on_active_and_usage_scope"
     t.index ["active"], name: "index_crawl_proxy_configs_on_active"
     t.index ["cooldown_until"], name: "index_crawl_proxy_configs_on_cooldown_until"
+    t.index ["scheme", "host", "port", "username"], name: "index_crawl_proxy_configs_on_identity", unique: true
+  end
+
+  create_table "crawl_proxy_leases", force: :cascade do |t|
+    t.bigint "crawl_proxy_config_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "expires_at", null: false
+    t.datetime "last_seen_at", null: false
+    t.jsonb "metadata", default: {}, null: false
+    t.datetime "released_at"
+    t.string "session_key", null: false
+    t.boolean "sticky_session", default: false, null: false
+    t.string "target_host"
+    t.datetime "updated_at", null: false
+    t.string "usage_scope", default: "all", null: false
+    t.index ["crawl_proxy_config_id", "released_at", "expires_at"], name: "index_crawl_proxy_leases_on_proxy_and_state"
+    t.index ["crawl_proxy_config_id"], name: "index_crawl_proxy_leases_on_crawl_proxy_config_id"
+    t.index ["expires_at"], name: "index_crawl_proxy_leases_on_expires_at"
+    t.index ["usage_scope", "session_key"], name: "index_crawl_proxy_leases_on_scope_and_session_key", unique: true, where: "(released_at IS NULL)"
   end
 
   create_table "crawl_requests", force: :cascade do |t|
@@ -227,6 +251,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_11_030001) do
   add_foreign_key "account_cancellations", "accounts", on_delete: :cascade
   add_foreign_key "account_cancellations", "users", column: "initiated_by_id", on_delete: :nullify
   add_foreign_key "bundles", "versions"
+  add_foreign_key "crawl_proxy_leases", "crawl_proxy_configs"
   add_foreign_key "crawl_requests", "identities"
   add_foreign_key "crawl_requests", "libraries"
   add_foreign_key "fetch_recipes", "versions"

@@ -58,7 +58,7 @@ module Identities
         route = Rails.application.routes.recognize_path(path, method: :get)
 
         case route[:controller]
-        when "pages"
+        when "static_pages"
           true
         when "rankings"
           route[:action] == "index"

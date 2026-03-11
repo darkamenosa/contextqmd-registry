@@ -246,4 +246,70 @@ class DocsFetcher::HtmlToMarkdownTest < ActiveSupport::TestCase
     cleaned = converter.send(:clean_markdown, "Click [here]() for info")
     assert_equal "Click here for info", cleaned
   end
+
+  test "removes decorative images and empty image links" do
+    html = <<~HTML
+      <html>
+        <body>
+          <article>
+            <img src="data:image/svg+xml,abc" alt="">
+            <a href="https://example.com/image"><img src="https://cdn.example.com/photo.jpg" alt=""></a>
+            <p>This is the actual content that should remain after decorative images are stripped from the page.</p>
+          </article>
+        </body>
+      </html>
+    HTML
+
+    result = DocsFetcher::HtmlToMarkdown.convert(html)
+
+    assert_includes result[:content], "actual content"
+    assert_not_includes result[:content], "data:image/svg+xml"
+    assert_not_includes result[:content], "cdn.example.com/photo.jpg"
+    refute_match(/\[\s*\]\(/, result[:content])
+  end
+
+  test "unwraps facebook redirect links and strips tracking query params" do
+    html = <<~HTML
+      <html>
+        <body>
+          <article>
+            <p>
+              Visit
+              <a href="https://l.facebook.com/l.php?u=https%3A%2F%2Fturnedninja.com%2Fpricing%3Futm_source%3Dfacebook%26ref%3Dpage_internal&h=abc123&__tn__=%2CO%2CP-R">
+                turnedninja.com
+              </a>
+              for more information about the service and documentation.
+            </p>
+          </article>
+        </body>
+      </html>
+    HTML
+
+    result = DocsFetcher::HtmlToMarkdown.convert(html)
+
+    assert_includes result[:content], "[turnedninja.com](https://turnedninja.com/pricing)"
+    assert_not_includes result[:content], "l.facebook.com"
+    assert_not_includes result[:content], "utm_source"
+    assert_not_includes result[:content], "__tn__"
+  end
+
+  test "normalizes non-breaking spaces in markdown output" do
+    html = <<~HTML
+      <html>
+        <body>
+          <article>
+            <h1>Title&nbsp;</h1>
+            <p>&nbsp;We turn you into your favorite character&nbsp;and make fan arts.</p>
+          </article>
+        </body>
+      </html>
+    HTML
+
+    result = DocsFetcher::HtmlToMarkdown.convert(html)
+
+    assert_equal "Title", result[:title]
+    assert_includes result[:content], "We turn you into your favorite character and make fan arts."
+    assert_not_includes result[:content], "&nbsp;"
+    assert_not_includes result[:content], "\u00A0"
+  end
 end

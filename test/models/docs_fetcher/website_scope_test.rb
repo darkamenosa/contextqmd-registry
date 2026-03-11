@@ -25,7 +25,7 @@ class DocsFetcher::WebsiteScopeTest < ActiveSupport::TestCase
     original_proxy_lookup = ProxyPool.method(:next_proxy_config)
     original_http_new = Net::HTTP.method(:new)
 
-    ProxyPool.define_singleton_method(:next_proxy_config) do |scope: "all"|
+    ProxyPool.define_singleton_method(:next_proxy_config) do |scope: "all", target_host: nil, sticky_session: false|
       scope_seen = scope
       nil
     end

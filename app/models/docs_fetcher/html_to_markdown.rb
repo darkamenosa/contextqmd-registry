@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
+require "cgi"
 require "nokogiri"
 require "reverse_markdown"
+require "uri"
 
 module DocsFetcher
   # Converts an HTML page to clean Markdown.
@@ -67,6 +69,11 @@ module DocsFetcher
         STRIP_SELECTORS.each do |sel|
           @doc.css(sel).each(&:remove)
         end
+
+        normalize_text_nodes
+        normalize_links
+        strip_decorative_images
+        strip_empty_links
       end
 
       def find_content_node
@@ -88,6 +95,8 @@ module DocsFetcher
 
       def clean_markdown(md)
         md
+          .gsub("\u00A0", " ")
+          .gsub(/&nbsp;/i, " ")
           .gsub(/\n{3,}/, "\n\n")           # collapse excessive blank lines
           .gsub(/^\s+$/, "")                 # strip whitespace-only lines
           .gsub(/\[([^\]]+)\]\(\s*\)/, '\1') # remove links with empty href
@@ -111,6 +120,89 @@ module DocsFetcher
 
       def empty_result
         { title: nil, content: "", headings: [] }
+      end
+
+      def normalize_text_nodes
+        @doc.xpath("//text()").each do |node|
+          node.content = node.text.tr("\u00A0", " ")
+        end
+      end
+
+      def normalize_links
+        @doc.css("a[href]").each do |link|
+          href = normalized_href(link["href"])
+
+          if href.present?
+            link["href"] = href
+          else
+            link.remove_attribute("href")
+          end
+        end
+      end
+
+      def normalized_href(href)
+        href = href.to_s.strip
+        return if href.empty?
+
+        uri = parse_uri(href)
+        return href if uri.nil?
+
+        unwrapped_uri = unwrap_facebook_redirect(uri)
+        stripped_uri = strip_tracking_query_params(unwrapped_uri)
+        stripped_uri.to_s
+      end
+
+      def unwrap_facebook_redirect(uri)
+        if uri.host&.end_with?("facebook.com") && uri.path == "/l.php"
+          query = URI.decode_www_form(uri.query.to_s).to_h
+
+          if query["u"].present?
+            redirected_uri = parse_uri(CGI.unescape(query["u"]))
+            return redirected_uri if redirected_uri
+          end
+        end
+
+        uri
+      end
+
+      def strip_tracking_query_params(uri)
+        query_params = URI.decode_www_form(uri.query.to_s)
+        filtered_params = query_params.reject do |key, _value|
+          key.start_with?("utm_", "__") || %w[ref source campaign fbclid gclid].include?(key)
+        end
+
+        if filtered_params.any?
+          uri.query = URI.encode_www_form(filtered_params)
+        else
+          uri.query = nil
+        end
+
+        uri
+      end
+
+      def strip_decorative_images
+        @doc.css("img").each do |image|
+          image.remove if decorative_image?(image)
+        end
+      end
+
+      def decorative_image?(image)
+        src = image["src"].to_s
+        alt = image["alt"].to_s.strip
+
+        alt.empty? || src.start_with?("data:")
+      end
+
+      def strip_empty_links
+        @doc.css("a").each do |link|
+          link.remove if link.text.strip.empty?
+        end
+      end
+
+      def parse_uri(href)
+        URI.parse(href)
+      rescue URI::InvalidURIError
+        nil
       end
   end
 end

@@ -127,6 +127,68 @@ export type AdminCrawlItem = {
   createdAt: string
 }
 
+// Admin proxy config types
+export type AdminProxyConfig = {
+  id: number
+  name: string
+  scheme: string
+  host: string
+  port: number
+  kind: string | null
+  usageScope: string
+  priority: number
+  active: boolean
+  consecutiveFailures: number
+  cooldownUntil: string | null
+  lastSuccessAt: string | null
+  lastFailureAt: string | null
+  activeLeaseCount: number
+  maxConcurrency: number
+  provider: string | null
+  updatedAt: string
+}
+
+export type AdminProxyConfigDetail = {
+  id: number
+  name: string
+  scheme: string
+  host: string
+  port: number
+  username: string | null
+  kind: string | null
+  usageScope: string
+  priority: number
+  active: boolean
+  maxConcurrency: number
+  leaseTtlSeconds: number
+  supportsStickySessions: boolean
+  consecutiveFailures: number
+  cooldownUntil: string | null
+  lastSuccessAt: string | null
+  lastFailureAt: string | null
+  lastErrorClass: string | null
+  lastTargetHost: string | null
+  disabledReason: string | null
+  provider: string | null
+  notes: string | null
+  activeLeaseCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export type AdminProxyLease = {
+  id: number
+  sessionKey: string
+  usageScope: string
+  targetHost: string | null
+  stickySession: boolean
+  active: boolean
+  expiresAt: string
+  lastSeenAt: string
+  releasedAt: string | null
+  createdAt: string
+}
+
 // Admin user types
 export type AdminUser = {
   id: number

@@ -52,6 +52,7 @@ Rails.application.routes.draw do
         resources :pages, only: :index, module: :libraries, controller: :pages
       end
       resources :pages, only: [ :show, :edit, :update, :destroy ]
+      resources :proxy_configs
       resources :webhooks, only: [ :index ]
 
       namespace :analytics do
@@ -90,11 +91,11 @@ Rails.application.routes.draw do
   get "rankings", to: "rankings#index"
 
   # Public pages
-  root "pages#home"
-  get "about", to: "pages#about"
-  get "privacy", to: "pages#privacy"
-  get "terms", to: "pages#terms"
-  get "contact", to: "pages#contact"
+  root "static_pages#home"
+  get "about", to: "static_pages#about"
+  get "privacy", to: "static_pages#privacy"
+  get "terms", to: "static_pages#terms"
+  get "contact", to: "static_pages#contact"
 
   # Error pages
   get "errors/:status", to: "errors#show", as: :error

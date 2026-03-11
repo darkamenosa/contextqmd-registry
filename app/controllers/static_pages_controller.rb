@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-class PagesController < InertiaController
-  # Public marketing pages: allow guests and reject accidental /app/:account_id scoping.
+class StaticPagesController < InertiaController
+  # Public marketing/static pages: allow guests and reject accidental /app/:account_id scoping.
   allow_unauthenticated_access
   disallow_account_scope
 

@@ -2,6 +2,7 @@
 
 require "nokogiri"
 require "set"
+require "digest"
 
 module DocsFetcher
   class Website
@@ -11,9 +12,6 @@ module DocsFetcher
     class RubyRunner
       include HttpFetching
 
-      MAX_PAGES = 1000
-      MAX_TOTAL_BYTES = 50_000_000 # 50MB total content budget
-      MAX_PAGE_SIZE = 1_000_000 # 1MB per page
       MAX_REDIRECTS = 3
       CRAWL_DELAY = 0.25 # 250ms between requests
 
@@ -45,6 +43,13 @@ module DocsFetcher
         @scheme = seed_uri.scheme
         @base_path = compute_base_path(seed_uri.path)
         @crawl_rules = load_crawl_rules(crawl_request)
+        @max_pages = max_pages_for(crawl_request)
+        @proxy_lease = ProxyPool.checkout(
+          scope: proxy_scope,
+          target_host: @domain,
+          session_key: proxy_session_key(crawl_request),
+          sticky_session: true
+        )
 
         on_progress&.call("Crawling #{@domain}")
         pages = crawl(seed_uri, on_progress: on_progress)
@@ -71,6 +76,9 @@ module DocsFetcher
           pages: pages,
           complete: false  # website crawl is always bounded/partial
         )
+      ensure
+        @proxy_lease&.release!
+        @proxy_lease = nil
       end
 
       private
@@ -81,9 +89,9 @@ module DocsFetcher
           queue = [ seed_uri.to_s ]
           visited = Set.new
           pages = []
-          total_bytes = 0
+          crawled_count = 0
 
-          while queue.any? && pages.size < MAX_PAGES && total_bytes < MAX_TOTAL_BYTES
+          while queue.any? && crawl_more_pages?(crawled_count)
             current_url = queue.shift
             normalized = normalize_url(current_url)
             next if visited.include?(normalized)
@@ -94,22 +102,22 @@ module DocsFetcher
             uri = URI.parse(current_url)
             html = http_get_with_redirects(uri)
             next unless html
+            crawled_count += 1
 
             doc = Nokogiri::HTML(html)
 
             # Discover new links before content extraction
-            discover_links(doc, uri).each do |link|
-              norm_link = normalize_url(link)
-              queue.push(link) unless visited.include?(norm_link)
+            if crawl_more_pages?(crawled_count)
+              discover_links(doc, uri).each do |link|
+                norm_link = normalize_url(link)
+                queue.push(link) unless visited.include?(norm_link)
+              end
             end
 
             # Convert HTML to Markdown via shared helper
             result = HtmlToMarkdown.convert(html)
             content = result[:content]
             next if content.nil? || content.strip.empty?
-            next if content.bytesize > MAX_PAGE_SIZE
-
-            total_bytes += content.bytesize
             page_uid = url_to_page_uid(uri)
 
             pages << {
@@ -206,6 +214,13 @@ module DocsFetcher
           DEFAULT_EXCLUDE_PATH_PREFIXES + Array(rules["website_exclude_path_prefixes"])
         end
 
+        def max_pages_for(crawl_request)
+          metadata = crawl_request.respond_to?(:metadata) ? (crawl_request.metadata || {}) : {}
+          raw_value = metadata["website_max_pages"] || metadata[:website_max_pages]
+          parsed = raw_value.to_i
+          parsed.positive? ? parsed : nil
+        end
+
         # --- URL normalization ---
 
         def normalize_url(url_string)
@@ -250,17 +265,30 @@ module DocsFetcher
             uri,
             redirect_limit: redirects_remaining,
             raise_on_error: false,
+            proxy_lease: @proxy_lease,
             user_agent: USER_AGENT,
             accept: "text/html",
             read_timeout: 15,
-            max_size: MAX_PAGE_SIZE,
-            oversize: :nil,
             allowed_content_types: [ "text/html" ]
           )
         end
 
         def proxy_scope
           "website"
+        end
+
+        def crawl_more_pages?(crawled_count)
+          @max_pages.nil? || crawled_count < @max_pages
+        end
+
+        def proxy_session_key(crawl_request)
+          identifier = if crawl_request.respond_to?(:id) && crawl_request.id.present?
+            crawl_request.id
+          else
+            Digest::SHA256.hexdigest(crawl_request.url.to_s)
+          end
+
+          "website:#{identifier}"
         end
     end
   end

@@ -71,6 +71,84 @@ class ProxyPoolTest < ActiveSupport::TestCase # rubocop:disable Minitest/TestFil
     assert_equal "high.example.com", proxy.host
   end
 
+  test "checkout reuses the same lease for the same session key" do
+    CrawlProxyConfig.create!(
+      name: "sticky", scheme: "http", host: "sticky.example.com", port: 8080,
+      usage_scope: "website", supports_sticky_sessions: true
+    )
+
+    first = ProxyPool.checkout(
+      scope: "website",
+      session_key: "crawl-request-1",
+      target_host: "docs.example.com",
+      sticky_session: true
+    )
+    second = ProxyPool.checkout(
+      scope: "website",
+      session_key: "crawl-request-1",
+      target_host: "docs.example.com",
+      sticky_session: true
+    )
+
+    assert_equal first.id, second.id
+    assert_equal first.crawl_proxy_config_id, second.crawl_proxy_config_id
+    assert_equal 1, CrawlProxyLease.active.count
+  ensure
+    first&.release!
+    second&.release!
+  end
+
+  test "checkout rotates when the highest priority proxy is at max concurrency" do
+    preferred = CrawlProxyConfig.create!(
+      name: "preferred", scheme: "http", host: "preferred.example.com", port: 8080,
+      usage_scope: "website", priority: 10, max_concurrency: 1
+    )
+    fallback = CrawlProxyConfig.create!(
+      name: "fallback", scheme: "http", host: "fallback.example.com", port: 8080,
+      usage_scope: "website", priority: 5, max_concurrency: 2
+    )
+
+    first = ProxyPool.checkout(
+      scope: "website",
+      session_key: "crawl-request-1",
+      target_host: "docs.example.com"
+    )
+    second = ProxyPool.checkout(
+      scope: "website",
+      session_key: "crawl-request-2",
+      target_host: "docs.example.com"
+    )
+
+    assert_equal preferred.id, first.crawl_proxy_config_id
+    assert_equal fallback.id, second.crawl_proxy_config_id
+  ensure
+    first&.release!
+    second&.release!
+  end
+
+  test "checkout prefers sticky-session proxies for browser crawls" do
+    non_sticky = CrawlProxyConfig.create!(
+      name: "non-sticky", scheme: "http", host: "plain.example.com", port: 8080,
+      usage_scope: "website", priority: 5, supports_sticky_sessions: false
+    )
+    sticky = CrawlProxyConfig.create!(
+      name: "sticky", scheme: "http", host: "sticky.example.com", port: 8080,
+      usage_scope: "website", priority: 5, supports_sticky_sessions: true
+    )
+
+    lease = ProxyPool.checkout(
+      scope: "website",
+      session_key: "crawl-request-1",
+      target_host: "docs.example.com",
+      sticky_session: true
+    )
+
+    assert_equal sticky.id, lease.crawl_proxy_config_id
+    assert_not_equal non_sticky.id, lease.crawl_proxy_config_id
+  ensure
+    lease&.release!
+  end
+
   test "all_proxies returns all available proxies" do
     CrawlProxyConfig.create!(name: "p1", scheme: "http", host: "p1.example.com", port: 8080)
     CrawlProxyConfig.create!(name: "p2", scheme: "http", host: "p2.example.com", port: 9090)

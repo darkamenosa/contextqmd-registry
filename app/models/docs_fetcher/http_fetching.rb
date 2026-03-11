@@ -11,6 +11,7 @@ module DocsFetcher
         redirect_limit: 5,
         raise_on_error: false,
         scope: proxy_scope,
+        proxy_lease: nil,
         accept: nil,
         user_agent: nil,
         open_timeout: 10,
@@ -25,7 +26,8 @@ module DocsFetcher
           raise DocsFetcher::TransientFetchError, "Too many redirects for #{uri}"
         end
 
-        proxy_config = ProxyPool.next_proxy_config(scope: scope)
+        proxy_target = proxy_lease || ProxyPool.next_proxy_config(scope: scope, target_host: uri.host)
+        proxy_config = proxy_target&.respond_to?(:crawl_proxy_config) ? proxy_target.crawl_proxy_config : proxy_target
         response = perform_http_get(
           uri,
           proxy_config,
@@ -34,7 +36,7 @@ module DocsFetcher
           open_timeout: open_timeout,
           read_timeout: read_timeout
         )
-        record_proxy_success(proxy_config, uri)
+        record_proxy_success(proxy_target, uri)
 
         if response.is_a?(Net::HTTPRedirection) && response["location"]
           redirect_uri = URI.join(uri, response["location"])
@@ -49,6 +51,7 @@ module DocsFetcher
             redirect_limit: redirect_limit - 1,
             raise_on_error: raise_on_error,
             scope: scope,
+            proxy_lease: proxy_lease,
             accept: accept,
             user_agent: user_agent,
             open_timeout: open_timeout,
@@ -85,7 +88,7 @@ module DocsFetcher
         end
       rescue Net::OpenTimeout, Net::ReadTimeout, Errno::ECONNREFUSED,
              Errno::ECONNRESET, SocketError, OpenSSL::SSL::SSLError => error
-        record_proxy_failure(proxy_config, uri, error)
+        record_proxy_failure(proxy_target, uri, error)
         raise DocsFetcher::TransientFetchError, "Network error fetching #{uri}: #{error.message}" if raise_on_error
 
         nil
