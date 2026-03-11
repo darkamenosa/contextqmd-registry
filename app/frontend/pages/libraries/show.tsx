@@ -15,10 +15,8 @@ import {
   Terminal,
   X,
 } from "lucide-react"
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
-
-import { cleanMarkdown, formatBytes } from "@/lib/format-date"
+import { formatBytes } from "@/lib/format-date"
+import { MarkdownContent } from "@/components/shared/markdown-content"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -503,6 +501,16 @@ install_docs({ library: "${slug}" })`
                             <span className="min-w-12 text-right text-[11px] text-muted-foreground/70 tabular-nums">
                               {formatBytes(page.bytes)}
                             </span>
+                            {selectedVersion && (
+                              <Link
+                                href={`/libraries/${slug}/versions/${selectedVersion}/pages/${page.pageUid}`}
+                                className="inline-flex h-7 items-center gap-1 rounded-md border bg-background px-2.5 text-xs font-medium text-foreground/80 transition-colors hover:bg-muted hover:text-foreground"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <ExternalLink className="size-3" />
+                                Full page
+                              </Link>
+                            )}
                           </div>
                         </button>
                         {isExpanded && page.content && (
@@ -510,32 +518,8 @@ install_docs({ library: "${slug}" })`
                             <CopyButton text={page.content} />
                             <div className="p-4 pr-12">
                               <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:scroll-mt-4 prose-code:before:content-none prose-code:after:content-none prose-pre:overflow-x-auto prose-pre:bg-zinc-950 prose-pre:text-zinc-100">
-                                <ReactMarkdown
-                                  remarkPlugins={[remarkGfm]}
-                                  components={{
-                                    img: () => null,
-                                  }}
-                                >
-                                  {cleanMarkdown(page.content)}
-                                </ReactMarkdown>
+                                <MarkdownContent content={page.content} />
                               </div>
-                              {selectedVersion && (
-                                <div className="mt-4 border-t border-border/40 pt-3">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    nativeButton={false}
-                                    render={
-                                      <Link
-                                        href={`/libraries/${slug}/versions/${selectedVersion}/pages/${page.pageUid}`}
-                                      />
-                                    }
-                                  >
-                                    <FileText className="size-3.5" />
-                                    View full page
-                                  </Button>
-                                </div>
-                              )}
                             </div>
                           </div>
                         )}

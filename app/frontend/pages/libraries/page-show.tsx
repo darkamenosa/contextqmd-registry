@@ -1,13 +1,21 @@
-import type { ReactNode } from "react"
+import { useState } from "react"
 import { Link } from "@inertiajs/react"
-import { ArrowLeft, BookOpen, ExternalLink, FileText, List } from "lucide-react"
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
+import {
+  ArrowLeft,
+  BookOpen,
+  Check,
+  Copy,
+  ExternalLink,
+  FileText,
+  List,
+} from "lucide-react"
 
-import { cleanMarkdown, formatBytes } from "@/lib/format-date"
+import { formatBytes } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { slugify } from "@/lib/heading-slug"
+import { MarkdownContent } from "@/components/shared/markdown-content"
 import PublicLayout from "@/layouts/public-layout"
 
 interface LibrarySummary {
@@ -32,24 +40,30 @@ interface Props {
   page: PageDetail
 }
 
-/** Recursively extract text content from React children for heading IDs */
-function extractText(node: ReactNode): string {
-  if (typeof node === "string") return node
-  if (typeof node === "number") return String(node)
-  if (!node) return ""
-  if (Array.isArray(node)) return node.map(extractText).join("")
-  if (typeof node === "object" && "props" in node) {
-    return extractText(
-      (node as { props: { children?: ReactNode } }).props.children
-    )
-  }
-  return ""
-}
+function CopyMarkdownButton({ content }: { content: string }) {
+  const [copied, setCopied] = useState(false)
 
-function extractTextId(children: ReactNode): string {
-  return extractText(children)
-    .toLowerCase()
-    .replace(/[^\w]+/g, "-")
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(content)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <Button variant="outline" size="sm" onClick={handleCopy}>
+      {copied ? (
+        <>
+          <Check className="size-4 text-green-500" />
+          Copied
+        </>
+      ) : (
+        <>
+          <Copy className="size-4" />
+          Copy Markdown
+        </>
+      )}
+    </Button>
+  )
 }
 
 export default function LibraryPageShow({ library, version, page }: Props) {
@@ -88,6 +102,7 @@ export default function LibraryPageShow({ library, version, page }: Props) {
             </div>
           </div>
           <div className="flex gap-2">
+            {page.content && <CopyMarkdownButton content={page.content} />}
             {page.url && (
               <Button
                 variant="outline"
@@ -126,7 +141,7 @@ export default function LibraryPageShow({ library, version, page }: Props) {
                     {page.headings.map((heading, i) => (
                       <a
                         key={`${heading}-${i}`}
-                        href={`#${heading.toLowerCase().replace(/[^\w]+/g, "-")}`}
+                        href={`#${slugify(heading)}`}
                         className="block truncate text-sm text-muted-foreground transition-colors hover:text-foreground"
                         title={heading}
                       >
@@ -145,29 +160,7 @@ export default function LibraryPageShow({ library, version, page }: Props) {
               <CardContent className="pt-6">
                 {page.content ? (
                   <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:scroll-mt-20 prose-code:before:content-none prose-code:after:content-none prose-pre:bg-zinc-950 prose-pre:text-zinc-100">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      components={{
-                        img: () => null,
-                        h1: ({ children, ...props }) => (
-                          <h1 id={extractTextId(children)} {...props}>
-                            {children}
-                          </h1>
-                        ),
-                        h2: ({ children, ...props }) => (
-                          <h2 id={extractTextId(children)} {...props}>
-                            {children}
-                          </h2>
-                        ),
-                        h3: ({ children, ...props }) => (
-                          <h3 id={extractTextId(children)} {...props}>
-                            {children}
-                          </h3>
-                        ),
-                      }}
-                    >
-                      {cleanMarkdown(page.content)}
-                    </ReactMarkdown>
+                    <MarkdownContent content={page.content} headingIds />
                   </div>
                 ) : (
                   <div className="rounded-xl border border-dashed p-8 text-center">

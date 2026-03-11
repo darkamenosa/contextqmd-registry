@@ -46,6 +46,10 @@ module DocsFetcher
         on_progress&.call("Cloning repository")
         clone_repository(repo_url, tmpdir, branch_or_tag: branch_or_tag)
 
+        # When no explicit ref was used, detect the actual default branch
+        # from the cloned repo (e.g. "master" instead of assuming "main").
+        branch_or_tag ||= detect_head_branch(tmpdir)
+
         files = discover_doc_files(tmpdir)
         raise DocsFetcher::PermanentFetchError, "No documentation found in #{repo_url}" if files.empty?
 
@@ -71,6 +75,15 @@ module DocsFetcher
 
         success = system(*args, out: File::NULL, err: File::NULL)
         raise DocsFetcher::TransientFetchError, "git clone failed for #{repo_url}" unless success
+      end
+
+      def detect_head_branch(tmpdir)
+        output, status = Open3.capture2("git", "-C", tmpdir, "rev-parse", "--abbrev-ref", "HEAD")
+        return nil unless status.success?
+
+        branch = output.strip
+        # "HEAD" means detached state (tag checkout) — not a usable branch name
+        branch == "HEAD" ? nil : branch.presence
       end
 
       # --- URL parsing (template methods — override in subclasses) ---
