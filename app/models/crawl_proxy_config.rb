@@ -43,7 +43,7 @@ class CrawlProxyConfig < ApplicationRecord
   end
 
   # Record a successful use of this proxy.
-  def record_success!(target_host: nil)
+  def record_success(target_host: nil)
     update!(
       consecutive_failures: 0,
       cooldown_until: nil,
@@ -53,7 +53,7 @@ class CrawlProxyConfig < ApplicationRecord
   end
 
   # Record a failure and apply cooldown if needed.
-  def record_failure!(error_class: nil, target_host: nil)
+  def record_failure(error_class: nil, target_host: nil)
     new_failures = consecutive_failures + 1
     cooldown = compute_cooldown(new_failures)
 

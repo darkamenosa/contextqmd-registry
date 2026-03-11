@@ -16,21 +16,33 @@ export default function Contact() {
           </h1>
           <p className="mt-6 text-lg text-muted-foreground">
             ContextQMD is an open-source project. For questions, bug reports,
-            and feedback, reach out via email. GitHub repository coming soon.
+            and feature requests, open an issue on GitHub or reach out via
+            email.
           </p>
-          <div className="mt-8 flex flex-col items-center gap-4">
+          <div className="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
             <Button
               size="lg"
               nativeButton={false}
-              render={<a href="mailto:contextqmd@example.com" />}
+              render={
+                <a
+                  href="https://github.com/contextqmd/contextqmd"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                />
+              }
+            >
+              <Github className="size-5" />
+              GitHub
+            </Button>
+            <Button
+              variant="outline"
+              size="lg"
+              nativeButton={false}
+              render={<a href="mailto:hello@contextqmd.com" />}
             >
               <Mail className="size-5" />
-              Send us an Email
+              Email Us
             </Button>
-            <p className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Github className="size-4" />
-              GitHub (coming soon)
-            </p>
           </div>
         </div>
       </section>

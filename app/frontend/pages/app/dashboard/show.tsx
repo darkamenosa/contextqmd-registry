@@ -8,9 +8,11 @@ import {
   Plus,
 } from "lucide-react"
 
+import { formatTimeAgo } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { StatusBadge } from "@/components/admin/ui/status-badge"
 import AppLayout from "@/layouts/app-layout"
 
 interface Stats {
@@ -42,29 +44,6 @@ interface Props {
   stats: Stats
   recentCrawls: CrawlItem[]
   recentLibraries: LibraryItem[]
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const variant =
-    status === "completed"
-      ? "secondary"
-      : status === "failed"
-        ? "destructive"
-        : status === "processing"
-          ? "default"
-          : "outline"
-  return <Badge variant={variant}>{status}</Badge>
-}
-
-function formatTimeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
-  const minutes = Math.floor(diff / 60000)
-  if (minutes < 1) return "just now"
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
 }
 
 export default function AppDashboard({
@@ -201,10 +180,10 @@ export default function AppDashboard({
                         <p className="truncate text-sm font-medium">{cr.url}</p>
                       )}
                       <p className="truncate text-xs text-muted-foreground">
-                        {cr.url} · {formatTimeAgo(cr.createdAt)}
+                        {cr.url} · {formatTimeAgo(cr.createdAt, true)}
                       </p>
                     </div>
-                    <StatusBadge status={cr.status} />
+                    <StatusBadge status={cr.status} showDot={false} />
                   </div>
                 ))}
               </div>

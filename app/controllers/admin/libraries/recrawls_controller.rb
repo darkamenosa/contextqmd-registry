@@ -15,7 +15,7 @@ module Admin
         # Use the admin's own identity to submit the crawl request
         crawl_request = CrawlRequest.new(
           url: url,
-          identity: current_identity,
+          identity: Current.identity,
           library: library
         )
 

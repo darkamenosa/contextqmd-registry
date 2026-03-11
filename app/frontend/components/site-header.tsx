@@ -1,9 +1,28 @@
 import { useState } from "react"
-import { Link, usePage } from "@inertiajs/react"
+import { Link, router, usePage } from "@inertiajs/react"
 import type { SharedProps } from "@/types"
-import { Command, Menu } from "lucide-react"
+import {
+  ChevronDown,
+  Command,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  Settings,
+  Shield,
+} from "lucide-react"
 
+import { userInitials } from "@/lib/user-initials"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Sheet,
   SheetContent,
@@ -14,7 +33,7 @@ import {
 const navLinks = [
   { href: "/libraries", label: "Libraries" },
   { href: "/rankings", label: "Rankings" },
-  { href: "/crawl", label: "Status" },
+  { href: "/crawl", label: "Queue" },
   { href: "/about", label: "About" },
 ]
 
@@ -59,13 +78,79 @@ export function SiteHeader() {
         {/* Right: Auth + Mobile toggle */}
         <div className="ml-auto flex items-center gap-3">
           {currentIdentity ? (
-            <Button
-              nativeButton={false}
-              render={<Link href="/app" />}
-              size="sm"
-            >
-              Dashboard
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger className="hidden cursor-pointer items-center gap-2 rounded-full py-1 pr-3 pl-1 ring-offset-background outline-hidden transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:flex">
+                <Avatar className="size-7">
+                  <AvatarFallback className="bg-foreground text-xs font-medium text-background">
+                    {userInitials(
+                      currentIdentity.name ?? currentIdentity.email
+                    )}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-sm font-medium">
+                  {currentIdentity.name ?? currentIdentity.email.split("@")[0]}
+                </span>
+                <ChevronDown className="size-3.5 text-muted-foreground" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="min-w-56 rounded-lg"
+                sideOffset={4}
+              >
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel className="p-0 font-normal">
+                    <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
+                      <Avatar className="size-10 rounded-lg after:rounded-lg">
+                        <AvatarFallback className="rounded-lg bg-primary text-primary-foreground">
+                          {userInitials(
+                            currentIdentity.name ?? currentIdentity.email
+                          )}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="grid flex-1 text-left text-sm leading-tight">
+                        <span className="truncate font-medium">
+                          {currentIdentity.name ?? "User"}
+                        </span>
+                        <span className="truncate text-xs">
+                          {currentIdentity.email}
+                        </span>
+                      </div>
+                    </div>
+                  </DropdownMenuLabel>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuItem onClick={() => router.visit("/app")}>
+                    <LayoutDashboard />
+                    Dashboard
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => router.visit("/app/settings")}
+                  >
+                    <Settings />
+                    Settings
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+                {currentIdentity.staff && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuGroup>
+                      <DropdownMenuItem
+                        onClick={() => router.visit("/admin/dashboard")}
+                      >
+                        <Shield />
+                        Admin
+                      </DropdownMenuItem>
+                    </DropdownMenuGroup>
+                  </>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => router.delete("/logout")}>
+                  <LogOut />
+                  Log out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : (
             <>
               <Link
@@ -133,7 +218,70 @@ export function SiteHeader() {
                 ))}
               </nav>
 
-              {!currentIdentity && (
+              {currentIdentity ? (
+                <div className="mt-auto border-t">
+                  <div className="flex items-center gap-3 border-b px-4 py-3">
+                    <Avatar className="size-8">
+                      <AvatarFallback className="bg-foreground text-xs font-medium text-background">
+                        {userInitials(
+                          currentIdentity.name ?? currentIdentity.email
+                        )}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      {currentIdentity.name && (
+                        <p className="truncate text-sm font-medium">
+                          {currentIdentity.name}
+                        </p>
+                      )}
+                      <p className="truncate text-xs text-muted-foreground">
+                        {currentIdentity.email}
+                      </p>
+                    </div>
+                  </div>
+                  <nav className="flex flex-col p-2">
+                    <Link
+                      href="/app"
+                      className="flex items-center gap-3 rounded-lg px-4 py-3 text-[15px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      onClick={() => setOpen(false)}
+                    >
+                      <LayoutDashboard className="size-4" />
+                      Dashboard
+                    </Link>
+                    <Link
+                      href="/app/settings"
+                      className="flex items-center gap-3 rounded-lg px-4 py-3 text-[15px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      onClick={() => setOpen(false)}
+                    >
+                      <Settings className="size-4" />
+                      Settings
+                    </Link>
+                    {currentIdentity.staff && (
+                      <Link
+                        href="/admin/dashboard"
+                        className="flex items-center gap-3 rounded-lg px-4 py-3 text-[15px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        onClick={() => setOpen(false)}
+                      >
+                        <Shield className="size-4" />
+                        Admin
+                      </Link>
+                    )}
+                  </nav>
+                  <div className="border-t p-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpen(false)
+                        router.delete("/logout")
+                      }}
+                      className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-[15px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    >
+                      <LogOut className="size-4" />
+                      Log out
+                    </button>
+                  </div>
+                </div>
+              ) : (
                 <div className="mt-auto flex flex-col gap-2 border-t p-4">
                   <Button
                     nativeButton={false}

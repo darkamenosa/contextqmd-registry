@@ -28,19 +28,19 @@ const techStack = [
     icon: Server,
     title: "Registry",
     description:
-      "Rails 8 + Inertia.js + React. REST API with cursor pagination. PostgreSQL with full-text search.",
+      "Free, open API serving documentation packages. Browse libraries, fetch manifests, and download pages — no API key needed.",
   },
   {
     icon: Code2,
     title: "MCP Server",
     description:
-      "TypeScript MCP server. Install via npx. Works with Claude, Cursor, Windsurf, and any MCP client.",
+      "Install via npx. Works with Claude, Cursor, Windsurf, and any MCP client. Runs locally on your machine.",
   },
   {
     icon: BookOpen,
     title: "QMD Engine",
     description:
-      "Local hybrid search engine. BM25 + vector retrieval. SQLite-backed for zero-config setup.",
+      "Local hybrid search combining full-text and semantic retrieval. Zero-config setup, SQLite-backed, works offline.",
   },
 ]
 
@@ -99,7 +99,7 @@ export default function About() {
         <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              Tech stack
+              How it fits together
             </h2>
           </div>
           <div className="mt-16 grid gap-8 md:grid-cols-3">

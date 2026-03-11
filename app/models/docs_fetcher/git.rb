@@ -2,6 +2,7 @@
 
 require "find"
 require "json"
+require "nokogiri"
 require "open3"
 require "tmpdir"
 
@@ -43,7 +44,7 @@ module DocsFetcher
 
       Dir.mktmpdir("contextqmd-git-") do |tmpdir|
         on_progress&.call("Cloning repository")
-        clone!(repo_url, tmpdir, branch_or_tag: branch_or_tag)
+        clone_repository(repo_url, tmpdir, branch_or_tag: branch_or_tag)
 
         files = discover_doc_files(tmpdir)
         raise DocsFetcher::PermanentFetchError, "No documentation found in #{repo_url}" if files.empty?
@@ -63,7 +64,7 @@ module DocsFetcher
 
       # --- Git operations ---
 
-      def clone!(repo_url, tmpdir, branch_or_tag: nil)
+      def clone_repository(repo_url, tmpdir, branch_or_tag: nil)
         args = [ "git", "clone", "--depth", "1", "--single-branch" ]
         args += [ "--branch", branch_or_tag ] if branch_or_tag.present?
         args += [ repo_url, tmpdir ]
@@ -127,6 +128,11 @@ module DocsFetcher
         Array(rules["git_include_prefixes"])
       end
 
+      def effective_include_basenames
+        rules = @crawl_rules || {}
+        Set.new(Array(rules["git_include_basenames"]))
+      end
+
       # --- File discovery ---
 
       # Uses Find.find + Find.prune to skip excluded directories entirely
@@ -136,6 +142,7 @@ module DocsFetcher
         exclude_prefixes = effective_exclude_prefixes.map(&:downcase)
         exclude_basenames = Set.new(effective_exclude_basenames)
         include_prefixes = effective_include_prefixes.map(&:downcase)
+        include_basenames = effective_include_basenames
 
         files = []
         Find.find(tmpdir) do |path|
@@ -154,9 +161,8 @@ module DocsFetcher
 
             # Check if directory matches an include prefix (overrides excludes)
             unless include_prefixes.any? { |ip| rel_lower.start_with?(ip) || ip.start_with?(rel_lower) }
-              # Check if any path segment matches an exclude prefix
-              if exclude_prefixes.include?(dirname) ||
-                 exclude_prefixes.any? { |ep| rel_lower.start_with?(ep) || rel_lower.start_with?("#{ep}/") }
+              # Check if path starts with an exclude prefix (root-relative only)
+              if exclude_prefixes.any? { |ep| rel_lower == ep || rel_lower.start_with?("#{ep}/") }
                 Find.prune
                 next
               end
@@ -170,7 +176,7 @@ module DocsFetcher
           next unless DOC_EXTENSIONS.include?(File.extname(path).downcase)
 
           basename = File.basename(path)
-          next if exclude_basenames.include?(basename)
+          next if exclude_basenames.include?(basename) && !include_basenames.include?(basename)
 
           # Include prefixes override basename excludes too
           rel_lower = rel.downcase
@@ -285,10 +291,12 @@ module DocsFetcher
 
       def clean_title(raw, filename)
         clean = raw.gsub(/<[^>]+>/, "")
-                    .gsub(/\[!\[.*?\]\(.*?\)\]/, "")
-                    .gsub(/\[([^\]]+)\]\([^)]+\)/, '\1')
+                    .gsub(/\[\!\[[^\]]*\]\((?:[^()]|\([^)]*\))*\)\]\((?:[^()]|\([^)]*\))*\)/, "")
+                    .gsub(/\!\[[^\]]*\]\((?:[^()]|\([^)]*\))*\)/, "")
+                    .gsub(/\[([^\]]+)\]\((?:[^()]|\([^)]*\))*\)/, '\1')
+        clean = Nokogiri::HTML.fragment(clean).text
                     .gsub("\\", "")
-                    .strip
+                    .squish
         clean.empty? ? humanize_filename(filename) : clean
       end
 

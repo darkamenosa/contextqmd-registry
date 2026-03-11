@@ -13,7 +13,7 @@ class LibrariesController < InertiaController
     else
       Library.all
     end
-    libraries = libraries.includes(:source_policy, versions: [ :pages, :fetch_recipe ]).order(:namespace, :name)
+    libraries = libraries.includes(:source_policy, versions: :pages).order(:namespace, :name)
 
     render inertia: "libraries/index", props: {
       libraries: libraries.map { |lib| library_props(lib) },
@@ -22,7 +22,7 @@ class LibrariesController < InertiaController
   end
 
   def show
-    library = Library.includes(versions: [ :pages, :fetch_recipe ], source_policy: []).find_by!(namespace: params[:namespace], name: params[:name])
+    library = Library.includes(versions: :pages, source_policy: []).find_by!(namespace: params[:namespace], name: params[:name])
     versions = library.versions.ordered
 
     # Pick the best version: requested > version with most pages > default > first
@@ -117,7 +117,7 @@ class LibrariesController < InertiaController
         license_status: library.source_policy&.license_status,
         version_count: library.versions.size,
         page_count: library.versions.sum { |v| v.pages.size },
-        source_type: library.versions.flat_map { |v| v.fetch_recipe&.source_type }.compact.first
+        source_type: library.source_type
       }
     end
 
@@ -145,19 +145,6 @@ class LibrariesController < InertiaController
     def truncate_content(content)
       return nil unless content
       content.length > 5000 ? "#{content[0, 5000]}..." : content
-    end
-
-    def pagination_props(pagy)
-      {
-        page: pagy.page,
-        per_page: pagy.limit,
-        total: pagy.count,
-        pages: pagy.last,
-        from: pagy.from,
-        to: pagy.to,
-        has_previous: pagy.previous.present?,
-        has_next: pagy.next.present?
-      }
     end
 
     def library_params

@@ -11,4 +11,17 @@ module InertiaUtils
       errors: model.errors.to_hash(full_messages).transform_values(&:to_sentence)
     }
   end
+
+  def pagination_props(pagy)
+    {
+      page: pagy.page,
+      per_page: pagy.limit,
+      total: pagy.count,
+      pages: pagy.last,
+      from: pagy.from,
+      to: pagy.to,
+      has_previous: pagy.previous.present?,
+      has_next: pagy.next.present?
+    }
+  end
 end

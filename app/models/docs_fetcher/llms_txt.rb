@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "net/http"
-
 module DocsFetcher
   # Fetches documentation from an llms.txt or llms-full.txt file.
   #
@@ -18,6 +16,8 @@ module DocsFetcher
   # - If index: follow links to fetch each page's content
   # - If full content: split by headings into pages
   class LlmsTxt
+    include HttpFetching
+
     MAX_SIZE = 50_000_000       # 50 MB per fetched file
     MAX_TOTAL_BYTES = 20_000_000 # 20 MB total content budget
     MAX_PAGES = 500
@@ -77,50 +77,8 @@ module DocsFetcher
 
     private
 
-      # --- HTTP ---
-
-      def http_get(uri, redirect_limit: 5, raise_on_error: false)
-        raise DocsFetcher::TransientFetchError, "Too many redirects for #{uri}" if redirect_limit <= 0
-
-        proxy = ::ProxyPool.next_proxy
-        http = Net::HTTP.new(uri.hostname, uri.port,
-          proxy&.host, proxy&.port, proxy&.user, proxy&.password)
-        http.use_ssl = uri.scheme == "https"
-        http.open_timeout = 10
-        http.read_timeout = 30
-
-        response = http.request(Net::HTTP::Get.new(uri))
-
-        if response.is_a?(Net::HTTPRedirection) && response["location"]
-          redirect_uri = URI.join(uri, response["location"])
-          unless SsrfGuard.safe_uri?(redirect_uri)
-            raise_on_error ? raise(DocsFetcher::PermanentFetchError, "Redirect to private address: #{redirect_uri.host}") : return
-          end
-          return http_get(redirect_uri, redirect_limit: redirect_limit - 1, raise_on_error: raise_on_error)
-        end
-
-        unless response.is_a?(Net::HTTPSuccess)
-          return nil unless raise_on_error
-
-          code = response.code.to_i
-          case code
-          when 429
-            raise DocsFetcher::RateLimitError, "Rate limited (429) fetching #{uri}"
-          when 404, 410
-            raise DocsFetcher::PermanentFetchError, "Not found (#{code}) fetching #{uri}"
-          when 500..599
-            raise DocsFetcher::TransientFetchError, "Server error (#{code}) fetching #{uri}"
-          else
-            raise DocsFetcher::PermanentFetchError, "HTTP #{code} fetching #{uri}"
-          end
-        end
-
-        body = response.body.force_encoding("UTF-8")
-        body.bytesize > MAX_SIZE ? body.byteslice(0, MAX_SIZE) : body
-      rescue Net::OpenTimeout, Net::ReadTimeout, Errno::ECONNREFUSED,
-             Errno::ECONNRESET, SocketError, OpenSSL::SSL::SSLError => e
-        raise DocsFetcher::TransientFetchError, "Network error fetching #{uri}: #{e.message}" if raise_on_error
-        nil
+      def http_get(uri, **options)
+        super(uri, **options, raise_on_error: options.fetch(:raise_on_error, false), max_size: MAX_SIZE)
       end
 
       # --- Index detection ---

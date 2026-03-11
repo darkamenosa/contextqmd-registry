@@ -1,7 +1,7 @@
 import { Head, Link } from "@inertiajs/react"
 import { ChevronLeft, ExternalLink, FileText, Hash, Pencil } from "lucide-react"
 
-import { formatDateTime } from "@/lib/format-date"
+import { formatBytes, formatDateTime } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -31,12 +31,6 @@ interface Props {
     namespace: string
     name: string
   }
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  const kb = bytes / 1024
-  return kb < 1024 ? `${kb.toFixed(1)} KB` : `${(kb / 1024).toFixed(1)} MB`
 }
 
 export default function AdminPageShow({ page, version, library }: Props) {

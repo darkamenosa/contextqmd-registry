@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require "net/http"
 require "nokogiri"
 require "set"
 
@@ -10,11 +9,13 @@ module DocsFetcher
     # Discovers and fetches documentation pages by following links from a seed URL.
     # Converts HTML to clean Markdown via HtmlToMarkdown (reverse_markdown).
     class RubyRunner
+      include HttpFetching
+
       MAX_PAGES = 1000
-      MAX_TOTAL_BYTES = 50_000_000   # 50MB total content budget
-      MAX_PAGE_SIZE = 1_000_000      # 1MB per page
+      MAX_TOTAL_BYTES = 50_000_000 # 50MB total content budget
+      MAX_PAGE_SIZE = 1_000_000 # 1MB per page
       MAX_REDIRECTS = 3
-      CRAWL_DELAY = 0.25             # 250ms between requests
+      CRAWL_DELAY = 0.25 # 250ms between requests
 
       USER_AGENT = "ContextQMD-Registry/1.0"
 
@@ -245,47 +246,21 @@ module DocsFetcher
         # --- HTTP ---
 
         def http_get_with_redirects(uri, redirects_remaining = MAX_REDIRECTS)
-          response = http_request(uri)
-
-          case response
-          when Net::HTTPSuccess
-            body = response.body.force_encoding("UTF-8")
-            content_type = response["content-type"].to_s
-            return nil unless content_type.include?("text/html") || content_type.empty?
-            body.bytesize > MAX_PAGE_SIZE ? nil : body
-          when Net::HTTPRedirection
-            return nil if redirects_remaining <= 0
-            location = response["location"]
-            return nil unless location
-
-            begin
-              redirect_uri = URI.join(uri, location)
-              return nil unless SsrfGuard.safe_uri?(redirect_uri)
-              http_get_with_redirects(redirect_uri, redirects_remaining - 1)
-            rescue URI::InvalidURIError
-              nil
-            end
-          else
-            nil
-          end
-        rescue Net::OpenTimeout, Net::ReadTimeout, Errno::ECONNREFUSED,
-               Errno::ECONNRESET, SocketError, OpenSSL::SSL::SSLError => e
-          Rails.logger.debug { "Website crawl failed for #{uri}: #{e.message}" }
-          nil
+          http_get(
+            uri,
+            redirect_limit: redirects_remaining,
+            raise_on_error: false,
+            user_agent: USER_AGENT,
+            accept: "text/html",
+            read_timeout: 15,
+            max_size: MAX_PAGE_SIZE,
+            oversize: :nil,
+            allowed_content_types: [ "text/html" ]
+          )
         end
 
-        def http_request(uri)
-          proxy = ::ProxyPool.next_proxy
-          http = Net::HTTP.new(uri.hostname, uri.port,
-            proxy&.host, proxy&.port, proxy&.user, proxy&.password)
-          http.use_ssl = uri.scheme == "https"
-          http.open_timeout = 10
-          http.read_timeout = 15
-
-          request = Net::HTTP::Get.new(uri)
-          request["User-Agent"] = USER_AGENT
-          request["Accept"] = "text/html"
-          http.request(request)
+        def proxy_scope
+          "website"
         end
     end
   end

@@ -1,6 +1,5 @@
 import { useState } from "react"
 import { Head, Link, router } from "@inertiajs/react"
-import { SourceTypeIcon } from "@/components/shared/source-type-icon"
 import type {
   AdminCrawlItem,
   AdminLibraryDetail,
@@ -62,6 +61,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { StatusBadge } from "@/components/admin/ui/status-badge"
+import { SourceTypeIcon } from "@/components/shared/source-type-icon"
 import AdminLayout from "@/layouts/admin-layout"
 
 interface Props {
@@ -70,38 +71,38 @@ interface Props {
   crawlRequests: AdminCrawlItem[]
 }
 
-function StatusBadge({ status }: { status: string }) {
+function CrawlStatusBadge({ status }: { status: string }) {
   switch (status) {
     case "pending":
       return (
-        <Badge variant="outline" className="gap-1">
+        <StatusBadge status={status} showDot={false}>
           <Clock className="size-3" />
           Pending
-        </Badge>
+        </StatusBadge>
       )
     case "processing":
       return (
-        <Badge variant="default" className="gap-1">
+        <StatusBadge status={status} showDot={false}>
           <Loader2 className="size-3 animate-spin" />
           Processing
-        </Badge>
+        </StatusBadge>
       )
     case "completed":
       return (
-        <Badge variant="secondary" className="gap-1">
+        <StatusBadge status={status} showDot={false}>
           <CheckCircle className="size-3" />
           Completed
-        </Badge>
+        </StatusBadge>
       )
     case "failed":
       return (
-        <Badge variant="destructive" className="gap-1">
+        <StatusBadge status={status} showDot={false}>
           <XCircle className="size-3" />
           Failed
-        </Badge>
+        </StatusBadge>
       )
     default:
-      return <Badge variant="outline">{status}</Badge>
+      return <StatusBadge status={status} showDot={false} />
   }
 }
 
@@ -692,7 +693,7 @@ export default function AdminLibraryShow({
                               />
                             </TableCell>
                             <TableCell>
-                              <StatusBadge status={cr.status} />
+                              <CrawlStatusBadge status={cr.status} />
                             </TableCell>
                             <TableCell className="text-right text-sm text-muted-foreground">
                               {formatDateTime(cr.createdAt)}

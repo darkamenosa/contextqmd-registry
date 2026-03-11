@@ -14,7 +14,7 @@ import {
   TrendingUp,
 } from "lucide-react"
 
-import { SourceTypeIcon } from "@/components/shared/source-type-icon"
+import { formatCount, formatTimeAgo } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -28,6 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { SourceTypeIcon } from "@/components/shared/source-type-icon"
 import PublicLayout from "@/layouts/public-layout"
 
 interface LibraryItem {
@@ -51,26 +52,11 @@ interface Props {
   libraries: LibraryItem[]
 }
 
-function formatTimeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
-  const hours = Math.floor(diff / 3600000)
-  if (hours < 1) return "just now"
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
-}
-
-function formatCount(n: number): string {
-  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`
-  return String(n)
-}
-
 const mcpConfig = `{
   "mcpServers": {
     "contextqmd": {
       "command": "npx",
-      "args": ["-y", "contextqmd-mcp"]
+      "args": ["-y", "contextqmd"]
     }
   }
 }`
@@ -242,12 +228,12 @@ export default function Home({ libraryCount, libraries }: Props) {
         <div className="mx-auto max-w-7xl px-4 pt-16 pb-8 sm:px-6 sm:pt-20 sm:pb-12 lg:px-8">
           <div className="mx-auto max-w-3xl text-center">
             <h1 className="text-4xl font-bold tracking-tight sm:text-6xl">
-              Up-to-date docs{" "}
-              <span className="text-muted-foreground">for AI</span>
+              Local-first docs{" "}
+              <span className="text-muted-foreground">for your AI editor</span>
             </h1>
             <p className="mx-auto mt-4 max-w-xl text-lg/relaxed text-muted-foreground">
-              Get the latest documentation into Claude, Cursor, or any
-              MCP-compatible editor. Local-first, version-aware.
+              Install documentation packages locally. Search offline with hybrid
+              retrieval. Version-pinned and always available.
             </p>
 
             {/* Search bar */}
@@ -373,9 +359,9 @@ export default function Home({ libraryCount, libraries }: Props) {
             </div>
             <div className="overflow-hidden rounded-xl border bg-zinc-950 text-zinc-100">
               <div className="flex items-center gap-2 border-b border-zinc-800 px-4 py-3">
-                <div className="size-3 rounded-full bg-zinc-700" />
-                <div className="size-3 rounded-full bg-zinc-700" />
-                <div className="size-3 rounded-full bg-zinc-700" />
+                <div className="size-3 rounded-full bg-red-500/70" />
+                <div className="size-3 rounded-full bg-yellow-500/70" />
+                <div className="size-3 rounded-full bg-green-500/70" />
                 <span className="ml-2 text-xs text-zinc-500">mcp.json</span>
               </div>
               <pre className="overflow-x-auto p-4 text-sm leading-relaxed">

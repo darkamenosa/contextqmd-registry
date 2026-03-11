@@ -2,6 +2,7 @@ import type { FormEvent } from "react"
 import { Head, Link, useForm } from "@inertiajs/react"
 import { ChevronLeft } from "lucide-react"
 
+import { formatBytes } from "@/lib/format-date"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -27,12 +28,6 @@ interface Props {
   page: PageData
   version: { id: number; version: string }
   library: { id: number; displayName: string }
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  const kb = bytes / 1024
-  return kb < 1024 ? `${kb.toFixed(1)} KB` : `${(kb / 1024).toFixed(1)} MB`
 }
 
 export default function AdminPageEdit({ page, version, library }: Props) {

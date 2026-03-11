@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require "net/http"
 require "json"
 require "yaml"
 
@@ -15,6 +14,8 @@ module DocsFetcher
   # 4. Generate overview page from info section
   # 5. Generate schema pages for reusable components
   class Openapi
+    include HttpFetching
+
     MAX_SIZE = 10_000_000 # 10MB
 
     def fetch(crawl_request, on_progress: nil)
@@ -280,48 +281,16 @@ module DocsFetcher
           .presence || "api"
       end
 
-      # --- HTTP ---
-
-      def http_get(uri, redirect_limit: 5)
-        raise DocsFetcher::TransientFetchError, "Too many redirects for #{uri}" if redirect_limit <= 0
-
-        proxy = ::ProxyPool.next_proxy
-        http = Net::HTTP.new(uri.hostname, uri.port,
-          proxy&.host, proxy&.port, proxy&.user, proxy&.password)
-        http.use_ssl = uri.scheme == "https"
-        http.open_timeout = 10
-        http.read_timeout = 30
-
-        request = Net::HTTP::Get.new(uri)
-        request["User-Agent"] = "ContextQMD-Registry/1.0"
-        request["Accept"] = "application/json, application/yaml, text/yaml, */*"
-        response = http.request(request)
-
-        if response.is_a?(Net::HTTPRedirection) && response["location"]
-          redirect_uri = URI.join(uri, response["location"])
-          raise DocsFetcher::PermanentFetchError, "Redirect to private address: #{redirect_uri.host}" unless SsrfGuard.safe_uri?(redirect_uri)
-          return http_get(redirect_uri, redirect_limit: redirect_limit - 1)
-        end
-
-        unless response.is_a?(Net::HTTPSuccess)
-          code = response.code.to_i
-          case code
-          when 429
-            raise DocsFetcher::RateLimitError, "Rate limited (429) fetching #{uri}"
-          when 404, 410
-            raise DocsFetcher::PermanentFetchError, "Not found (#{code}) fetching #{uri}"
-          when 500..599
-            raise DocsFetcher::TransientFetchError, "Server error (#{code}) fetching #{uri}"
-          else
-            raise DocsFetcher::PermanentFetchError, "HTTP #{code} fetching #{uri}"
-          end
-        end
-
-        body = response.body.force_encoding("UTF-8")
-        body.bytesize > MAX_SIZE ? nil : body
-      rescue Net::OpenTimeout, Net::ReadTimeout, Errno::ECONNREFUSED,
-             Errno::ECONNRESET, SocketError, OpenSSL::SSL::SSLError => e
-        raise DocsFetcher::TransientFetchError, "Network error fetching #{uri}: #{e.message}"
+      def http_get(uri, **options)
+        super(
+          uri,
+          **options,
+          raise_on_error: true,
+          accept: "application/json, application/yaml, text/yaml, */*",
+          user_agent: "ContextQMD-Registry/1.0",
+          max_size: MAX_SIZE,
+          oversize: :nil
+        )
       end
   end
 end

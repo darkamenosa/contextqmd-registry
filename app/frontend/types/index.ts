@@ -75,6 +75,7 @@ export type AdminLibrary = {
 
 export type CrawlRules = {
   gitIncludePrefixes?: string[]
+  gitIncludeBasenames?: string[]
   gitExcludePrefixes?: string[]
   gitExcludeBasenames?: string[]
   websiteExcludePathPrefixes?: string[]

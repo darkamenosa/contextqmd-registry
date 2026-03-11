@@ -10,32 +10,57 @@ export function SiteFooter() {
             <h3 className="text-sm font-semibold">Registry</h3>
             <ul className="mt-4 flex flex-col gap-2 text-sm text-muted-foreground">
               <li>
-                <Link href="/libraries" className="hover:text-foreground">
+                <Link
+                  href="/libraries"
+                  className="transition-colors hover:text-foreground"
+                >
                   Libraries
                 </Link>
               </li>
               <li>
-                <Link href="/rankings" className="hover:text-foreground">
+                <Link
+                  href="/rankings"
+                  className="transition-colors hover:text-foreground"
+                >
                   Rankings
                 </Link>
               </li>
               <li>
-                <Link href="/crawl" className="hover:text-foreground">
-                  Add Docs
+                <Link
+                  href="/crawl"
+                  className="transition-colors hover:text-foreground"
+                >
+                  Queue
                 </Link>
               </li>
             </ul>
           </div>
           <div>
-            <h3 className="text-sm font-semibold">Company</h3>
+            <h3 className="text-sm font-semibold">Project</h3>
             <ul className="mt-4 flex flex-col gap-2 text-sm text-muted-foreground">
               <li>
-                <Link href="/about" className="hover:text-foreground">
+                <Link
+                  href="/about"
+                  className="transition-colors hover:text-foreground"
+                >
                   About
                 </Link>
               </li>
               <li>
-                <Link href="/contact" className="hover:text-foreground">
+                <a
+                  href="https://github.com/contextqmd/contextqmd"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="transition-colors hover:text-foreground"
+                >
+                  GitHub
+                </a>
+              </li>
+              <li>
+                <Link
+                  href="/contact"
+                  className="transition-colors hover:text-foreground"
+                >
                   Contact
                 </Link>
               </li>
@@ -45,12 +70,18 @@ export function SiteFooter() {
             <h3 className="text-sm font-semibold">Legal</h3>
             <ul className="mt-4 flex flex-col gap-2 text-sm text-muted-foreground">
               <li>
-                <Link href="/privacy" className="hover:text-foreground">
+                <Link
+                  href="/privacy"
+                  className="transition-colors hover:text-foreground"
+                >
                   Privacy Policy
                 </Link>
               </li>
               <li>
-                <Link href="/terms" className="hover:text-foreground">
+                <Link
+                  href="/terms"
+                  className="transition-colors hover:text-foreground"
+                >
                   Terms of Service
                 </Link>
               </li>
@@ -62,7 +93,7 @@ export function SiteFooter() {
             <div className="flex size-6 items-center justify-center rounded-lg bg-foreground text-background">
               <Command className="size-3" />
             </div>
-            <span className="font-medium">ContextQMD</span>
+            <span className="font-semibold tracking-tight">ContextQMD</span>
           </Link>
           <span>
             &copy; {new Date().getFullYear()} ContextQMD. All rights reserved.

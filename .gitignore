@@ -54,3 +54,6 @@ node_modules
 
 # Playwright
 .playwright-cli/
+*.swp
+.playwright-mcp/
+docs/superpowers/

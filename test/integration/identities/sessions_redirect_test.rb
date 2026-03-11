@@ -96,6 +96,30 @@ class Identities::SessionsRedirectTest < ActionDispatch::IntegrationTest
     assert_redirected_to app_path
   end
 
+  test "inertia sign out from the home page redirects back to home" do
+    identity, = create_tenant(
+      email: "session-home-sign-out-#{SecureRandom.hex(4)}@example.com",
+      name: "Session Home Sign Out"
+    )
+
+    post identity_session_path, params: {
+      identity: {
+        email: identity.email,
+        password: "password123"
+      }
+    }
+
+    assert_redirected_to app_path
+
+    delete destroy_identity_session_path, headers: {
+      "X-Inertia" => "true",
+      "X-Requested-With" => "XMLHttpRequest",
+      "Referer" => root_url
+    }
+
+    assert_redirected_to root_path
+  end
+
   test "inertia sign out redirects to login to avoid host redirect issues" do
     identity, = create_tenant(
       email: "session-inertia-sign-out-#{SecureRandom.hex(4)}@example.com",
@@ -116,6 +140,34 @@ class Identities::SessionsRedirectTest < ActionDispatch::IntegrationTest
     delete destroy_identity_session_path, headers: {
       "X-Inertia" => "true",
       "X-Requested-With" => "XMLHttpRequest"
+    }
+
+    assert_redirected_to new_identity_session_path
+  ensure
+    host! "www.example.com"
+  end
+
+  test "inertia sign out from home on 127 host keeps the login fallback" do
+    identity, = create_tenant(
+      email: "session-inertia-home-127-#{SecureRandom.hex(4)}@example.com",
+      name: "Session Inertia Home 127"
+    )
+
+    host! "127.0.0.1"
+
+    post identity_session_path, params: {
+      identity: {
+        email: identity.email,
+        password: "password123"
+      }
+    }
+
+    assert_redirected_to app_path
+
+    delete destroy_identity_session_path, headers: {
+      "X-Inertia" => "true",
+      "X-Requested-With" => "XMLHttpRequest",
+      "Referer" => root_url
     }
 
     assert_redirected_to new_identity_session_path

@@ -61,7 +61,7 @@ export default function Privacy() {
             </h2>
             <p className="mt-3">
               If you have any questions about this Privacy Policy, please
-              contact us at privacy@contextqmd.com.
+              contact us at hello@contextqmd.com.
             </p>
           </div>
         </div>

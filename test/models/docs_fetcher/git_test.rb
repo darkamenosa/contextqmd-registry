@@ -249,6 +249,16 @@ class DocsFetcher::GitTest < ActiveSupport::TestCase
     assert_equal "Setup", title
   end
 
+  test "extract_title strips linked badges from linked headings" do
+    content = <<~MD
+      # [React](https://react.dev/) &middot; [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/facebook/react/blob/main/LICENSE) [![npm version](https://img.shields.io/npm/v/react.svg?style=flat)](https://www.npmjs.com/package/react)
+    MD
+
+    title = @generic.send(:extract_title, content, "README.md")
+
+    assert_equal "React ·", title
+  end
+
   # --- Content conversion ---
 
   test "convert_content passes through markdown" do

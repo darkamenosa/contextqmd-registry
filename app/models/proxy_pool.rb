@@ -8,9 +8,13 @@
 #   http = Net::HTTP.new(uri.host, uri.port, proxy&.host, proxy&.port, proxy&.user, proxy&.password)
 class ProxyPool
   class << self
+    def next_proxy_config(scope: "all")
+      CrawlProxyConfig.available.for_scope(scope).by_priority.first
+    end
+
     # Returns the next proxy URI, or nil if none configured.
     def next_proxy(scope: "all")
-      CrawlProxyConfig.next_proxy(scope: scope)
+      next_proxy_config(scope: scope)&.to_uri
     end
 
     def all_proxies(scope: "all")

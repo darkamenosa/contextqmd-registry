@@ -3,13 +3,14 @@ import {
   CheckCircle,
   Clock,
   ExternalLink,
+  FolderOpen,
   Loader2,
   Plus,
   RefreshCw,
+  Sparkles,
   XCircle,
 } from "lucide-react"
 
-import { getSourceTypeConfig } from "@/components/shared/source-type-icon"
 import { Button } from "@/components/ui/button"
 import {
   Table,
@@ -20,6 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { getSourceTypeConfig } from "@/components/shared/source-type-icon"
 import PublicLayout from "@/layouts/public-layout"
 
 interface CrawlRequestItem {
@@ -27,7 +29,6 @@ interface CrawlRequestItem {
   url: string
   sourceType: string
   status: string
-  errorMessage: string | null
   libraryName: string | null
   librarySlug: string | null
   createdAt: string
@@ -105,24 +106,82 @@ function shortenUrl(url: string): string {
 
 // --- Task Table ---
 
-function TaskTable({ tasks }: { tasks: CrawlRequestItem[] }) {
-  if (tasks.length === 0) {
-    return (
-      <div className="py-12 text-center text-sm text-muted-foreground">
-        No tasks in this category.
+function ActiveEmptyState() {
+  return (
+    <div className="flex flex-col items-center py-20">
+      <div className="relative mb-6">
+        <div className="flex size-16 items-center justify-center rounded-2xl border border-dashed border-border/80 bg-muted/40">
+          <Sparkles className="size-7 text-muted-foreground/60" />
+        </div>
+        <div className="absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
+          <Plus className="size-3" />
+        </div>
       </div>
-    )
+      <h3 className="text-base font-semibold tracking-tight">
+        No active tasks
+      </h3>
+      <p className="mt-1.5 max-w-sm text-center text-sm/6 text-muted-foreground">
+        Submit a documentation URL to start crawling. We&apos;ll fetch, parse,
+        and index it into the registry.
+      </p>
+      <Button
+        nativeButton={false}
+        render={<Link href="/crawl/new" />}
+        className="mt-5"
+        size="sm"
+      >
+        <Plus className="size-3.5" />
+        Add Docs
+      </Button>
+    </div>
+  )
+}
+
+function CompletedEmptyState() {
+  return (
+    <div className="flex flex-col items-center py-20">
+      <div className="mb-6 flex size-16 items-center justify-center rounded-2xl border border-border/60 bg-muted/30">
+        <FolderOpen className="size-7 text-muted-foreground/50" />
+      </div>
+      <h3 className="text-base font-semibold tracking-tight">
+        Nothing here yet
+      </h3>
+      <p className="mt-1.5 max-w-sm text-center text-sm/6 text-muted-foreground">
+        Completed and failed crawl tasks will appear here once they finish
+        processing.
+      </p>
+    </div>
+  )
+}
+
+function TaskTable({
+  tasks,
+  variant,
+}: {
+  tasks: CrawlRequestItem[]
+  variant: "active" | "completed"
+}) {
+  if (tasks.length === 0) {
+    return variant === "active" ? <ActiveEmptyState /> : <CompletedEmptyState />
   }
 
   return (
     <div className="overflow-x-auto rounded-xl border">
       <Table>
         <TableHeader>
-          <TableRow>
-            <TableHead>Library</TableHead>
-            <TableHead>Source</TableHead>
-            <TableHead>State</TableHead>
-            <TableHead className="text-right">Time</TableHead>
+          <TableRow className="hover:bg-transparent">
+            <TableHead className="text-xs font-medium tracking-wider text-muted-foreground/70">
+              LIBRARY
+            </TableHead>
+            <TableHead className="text-xs font-medium tracking-wider text-muted-foreground/70">
+              SOURCE
+            </TableHead>
+            <TableHead className="text-xs font-medium tracking-wider text-muted-foreground/70">
+              STATE
+            </TableHead>
+            <TableHead className="text-right text-xs font-medium tracking-wider text-muted-foreground/70">
+              TIME
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -235,11 +294,11 @@ export default function CrawlRequestsIndex({ crawlRequests, counts }: Props) {
           </TabsList>
 
           <TabsContent value="active" className="mt-4">
-            <TaskTable tasks={active} />
+            <TaskTable tasks={active} variant="active" />
           </TabsContent>
 
           <TabsContent value="completed" className="mt-4">
-            <TaskTable tasks={completed} />
+            <TaskTable tasks={completed} variant="completed" />
           </TabsContent>
         </Tabs>
       </section>

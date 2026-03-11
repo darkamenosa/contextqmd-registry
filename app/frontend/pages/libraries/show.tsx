@@ -18,7 +18,7 @@ import {
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 
-import { SourceTypeIcon } from "@/components/shared/source-type-icon"
+import { cleanMarkdown, formatBytes } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -39,6 +39,8 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { LicenseBadge } from "@/components/shared/license-badge"
+import { SourceTypeIcon } from "@/components/shared/source-type-icon"
 import PublicLayout from "@/layouts/public-layout"
 
 interface LibraryDetail {
@@ -79,13 +81,6 @@ interface Props {
   search: string
 }
 
-/** Strip inline HTML tags (especially img) from markdown source before rendering */
-function cleanMarkdown(md: string): string {
-  return md
-    .replace(/<img[^>]*>/gi, "") // remove img tags
-    .replace(/<br\s*\/?>/gi, "\n") // convert br to newlines
-}
-
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
 
@@ -111,17 +106,6 @@ function CopyButton({ text }: { text: string }) {
   )
 }
 
-function LicenseBadge({ status }: { status: string | null }) {
-  if (!status) return null
-  const variant =
-    status === "verified"
-      ? "secondary"
-      : status === "unclear"
-        ? "outline"
-        : "destructive"
-  return <Badge variant={variant}>{status}</Badge>
-}
-
 function ChannelBadge({ channel }: { channel: string }) {
   const variant =
     channel === "stable"
@@ -132,6 +116,60 @@ function ChannelBadge({ channel }: { channel: string }) {
   return <Badge variant={variant}>{channel}</Badge>
 }
 
+function getPageRange(current: number, total: number): (number | "...")[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+  const pages: (number | "...")[] = []
+  if (current <= 4) {
+    for (let i = 1; i <= 5; i++) pages.push(i)
+    pages.push("...", total)
+  } else if (current >= total - 3) {
+    pages.push(1, "...")
+    for (let i = total - 4; i <= total; i++) pages.push(i)
+  } else {
+    pages.push(1, "...", current - 1, current, current + 1, "...", total)
+  }
+  return pages
+}
+
+function PageNumbers({
+  current,
+  total,
+  onPage,
+}: {
+  current: number
+  total: number
+  onPage: (p: number) => void
+}) {
+  const range = getPageRange(current, total)
+  return (
+    <>
+      {range.map((item, i) =>
+        item === "..." ? (
+          <span
+            key={`ellipsis-${i}`}
+            className="inline-flex size-8 items-center justify-center text-xs text-muted-foreground/50"
+          >
+            &hellip;
+          </span>
+        ) : (
+          <button
+            key={item}
+            type="button"
+            onClick={() => onPage(item)}
+            className={`inline-flex size-8 items-center justify-center rounded-sm text-xs font-medium tabular-nums transition-colors ${
+              item === current
+                ? "bg-foreground text-background"
+                : "text-muted-foreground hover:bg-background hover:text-foreground"
+            }`}
+          >
+            {item}
+          </button>
+        )
+      )}
+    </>
+  )
+}
+
 function formatDate(iso: string | null): string {
   if (!iso) return "-"
   return new Date(iso).toLocaleDateString("en-US", {
@@ -139,12 +177,6 @@ function formatDate(iso: string | null): string {
     month: "short",
     day: "numeric",
   })
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 export default function LibraryShow({
@@ -204,14 +236,14 @@ export default function LibraryShow({
   }
 
   const mcpInstall = `// In your MCP-enabled editor, use the install_docs tool:
-resolve_docs_library({ name: "${library.aliases[0] || library.name}" })
+resolve_library({ name: "${library.aliases[0] || library.name}" })
 install_docs({ library: "${slug}" })`
 
-  const apiResolve = `curl https://contextqmd.com/api/v1/resolve \\
+  const apiResolve = `curl /api/v1/resolve \\
   -X POST -H "Content-Type: application/json" \\
   -d '{"query": "${library.aliases[0] || library.name}"}'`
 
-  const apiPages = `curl https://contextqmd.com/api/v1/libraries/${slug}/versions/${selectedVersion || "latest"}/page-index`
+  const apiPages = `curl /api/v1/libraries/${slug}/versions/${selectedVersion || "latest"}/page-index`
 
   return (
     <PublicLayout title={`${library.displayName} — ContextQMD`}>
@@ -476,7 +508,7 @@ install_docs({ library: "${slug}" })`
                         {isExpanded && page.content && (
                           <div className="relative border-t border-border/60 bg-muted/20">
                             <CopyButton text={page.content} />
-                            <div className="max-h-[500px] overflow-y-auto p-4 pr-12">
+                            <div className="p-4 pr-12">
                               <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:scroll-mt-4 prose-code:before:content-none prose-code:after:content-none prose-pre:overflow-x-auto prose-pre:bg-zinc-950 prose-pre:text-zinc-100">
                                 <ReactMarkdown
                                   remarkPlugins={[remarkGfm]}
@@ -510,34 +542,47 @@ install_docs({ library: "${slug}" })`
                       </div>
                     )
                   })}
-                </div>
 
-                {/* Pagination */}
-                {pagination.pages > 1 && (
-                  <div className="mt-5 flex items-center justify-between">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => goToPage(pagination.page - 1)}
-                      disabled={!pagination.hasPrevious}
-                    >
-                      <ChevronLeft className="size-4" />
-                      <span className="hidden sm:inline">Previous</span>
-                    </Button>
-                    <span className="rounded-md bg-muted px-3 py-1 text-xs font-medium text-muted-foreground tabular-nums">
-                      {pagination.page} / {pagination.pages}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => goToPage(pagination.page + 1)}
-                      disabled={!pagination.hasNext}
-                    >
-                      <span className="hidden sm:inline">Next</span>
-                      <ChevronRight className="size-4" />
-                    </Button>
-                  </div>
-                )}
+                  {/* Pagination footer */}
+                  {pagination.pages > 1 && (
+                    <div className="flex items-center justify-between border-t bg-muted/30 px-4 py-3">
+                      <span className="hidden text-xs text-muted-foreground tabular-nums sm:block">
+                        {pagination.from}&ndash;{pagination.to} of{" "}
+                        {pagination.total}
+                      </span>
+
+                      <div className="flex flex-1 items-center justify-center gap-1 sm:flex-initial">
+                        <button
+                          type="button"
+                          onClick={() => goToPage(pagination.page - 1)}
+                          disabled={!pagination.hasPrevious}
+                          className="inline-flex size-8 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+                        >
+                          <ChevronLeft className="size-4" />
+                        </button>
+
+                        <PageNumbers
+                          current={pagination.page}
+                          total={pagination.pages}
+                          onPage={goToPage}
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() => goToPage(pagination.page + 1)}
+                          disabled={!pagination.hasNext}
+                          className="inline-flex size-8 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+                        >
+                          <ChevronRight className="size-4" />
+                        </button>
+                      </div>
+
+                      <span className="hidden min-w-16 text-right text-xs text-muted-foreground sm:block">
+                        Page {pagination.page}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </>
             )}
           </TabsContent>

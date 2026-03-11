@@ -88,7 +88,7 @@ module Admin
         if params[:library]&.key?(:crawl_rules)
           rules = {}
           cr = params[:library][:crawl_rules]
-          %w[git_include_prefixes git_exclude_prefixes git_exclude_basenames website_exclude_path_prefixes].each do |key|
+          %w[git_include_prefixes git_include_basenames git_exclude_prefixes git_exclude_basenames website_exclude_path_prefixes].each do |key|
             next unless cr&.key?(key)
             rules[key] = cr[key].to_s.split("\n").map(&:strip).reject(&:blank?)
           end

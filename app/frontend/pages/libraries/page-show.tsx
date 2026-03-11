@@ -1,8 +1,10 @@
+import type { ReactNode } from "react"
 import { Link } from "@inertiajs/react"
 import { ArrowLeft, BookOpen, ExternalLink, FileText, List } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 
+import { cleanMarkdown, formatBytes } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -30,17 +32,24 @@ interface Props {
   page: PageDetail
 }
 
-/** Strip inline HTML tags (especially img) from markdown source before rendering */
-function cleanMarkdown(md: string): string {
-  return md
-    .replace(/<img[^>]*>/gi, "") // remove img tags
-    .replace(/<br\s*\/?>/gi, "\n") // convert br to newlines
+/** Recursively extract text content from React children for heading IDs */
+function extractText(node: ReactNode): string {
+  if (typeof node === "string") return node
+  if (typeof node === "number") return String(node)
+  if (!node) return ""
+  if (Array.isArray(node)) return node.map(extractText).join("")
+  if (typeof node === "object" && "props" in node) {
+    return extractText(
+      (node as { props: { children?: ReactNode } }).props.children
+    )
+  }
+  return ""
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+function extractTextId(children: ReactNode): string {
+  return extractText(children)
+    .toLowerCase()
+    .replace(/[^\w]+/g, "-")
 }
 
 export default function LibraryPageShow({ library, version, page }: Props) {
@@ -140,36 +149,21 @@ export default function LibraryPageShow({ library, version, page }: Props) {
                       remarkPlugins={[remarkGfm]}
                       components={{
                         img: () => null,
-                        h1: ({ children, ...props }) => {
-                          const text =
-                            typeof children === "string" ? children : ""
-                          const id = text.toLowerCase().replace(/[^\w]+/g, "-")
-                          return (
-                            <h1 id={id} {...props}>
-                              {children}
-                            </h1>
-                          )
-                        },
-                        h2: ({ children, ...props }) => {
-                          const text =
-                            typeof children === "string" ? children : ""
-                          const id = text.toLowerCase().replace(/[^\w]+/g, "-")
-                          return (
-                            <h2 id={id} {...props}>
-                              {children}
-                            </h2>
-                          )
-                        },
-                        h3: ({ children, ...props }) => {
-                          const text =
-                            typeof children === "string" ? children : ""
-                          const id = text.toLowerCase().replace(/[^\w]+/g, "-")
-                          return (
-                            <h3 id={id} {...props}>
-                              {children}
-                            </h3>
-                          )
-                        },
+                        h1: ({ children, ...props }) => (
+                          <h1 id={extractTextId(children)} {...props}>
+                            {children}
+                          </h1>
+                        ),
+                        h2: ({ children, ...props }) => (
+                          <h2 id={extractTextId(children)} {...props}>
+                            {children}
+                          </h2>
+                        ),
+                        h3: ({ children, ...props }) => (
+                          <h3 id={extractTextId(children)} {...props}>
+                            {children}
+                          </h3>
+                        ),
                       }}
                     >
                       {cleanMarkdown(page.content)}

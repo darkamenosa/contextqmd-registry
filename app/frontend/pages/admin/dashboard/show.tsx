@@ -11,7 +11,7 @@ import {
   XCircle,
 } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
+import { formatTimeAgo } from "@/lib/format-date"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -22,6 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { StatusBadge } from "@/components/admin/ui/status-badge"
 import AdminLayout from "@/layouts/admin-layout"
 
 interface Stats {
@@ -52,50 +53,39 @@ interface Props {
   recentCrawls: CrawlItem[]
 }
 
-function StatusBadge({ status }: { status: string }) {
+function CrawlStatusBadge({ status }: { status: string }) {
   switch (status) {
     case "pending":
       return (
-        <Badge variant="outline" className="gap-1">
+        <StatusBadge status={status} showDot={false}>
           <Clock className="size-3" />
           Pending
-        </Badge>
+        </StatusBadge>
       )
     case "processing":
       return (
-        <Badge variant="default" className="gap-1">
+        <StatusBadge status={status} showDot={false}>
           <Loader2 className="size-3 animate-spin" />
           Processing
-        </Badge>
+        </StatusBadge>
       )
     case "completed":
       return (
-        <Badge variant="secondary" className="gap-1">
+        <StatusBadge status={status} showDot={false}>
           <CheckCircle className="size-3" />
           Completed
-        </Badge>
+        </StatusBadge>
       )
     case "failed":
       return (
-        <Badge variant="destructive" className="gap-1">
+        <StatusBadge status={status} showDot={false}>
           <XCircle className="size-3" />
           Failed
-        </Badge>
+        </StatusBadge>
       )
     default:
-      return <Badge variant="outline">{status}</Badge>
+      return <StatusBadge status={status} showDot={false} />
   }
-}
-
-function formatTimeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
-  const minutes = Math.floor(diff / 60000)
-  if (minutes < 1) return "just now"
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
 }
 
 export default function AdminDashboard({ stats, recentCrawls }: Props) {
@@ -282,10 +272,10 @@ export default function AdminDashboard({ stats, recentCrawls }: Props) {
                       {cr.submittedBy}
                     </TableCell>
                     <TableCell>
-                      <StatusBadge status={cr.status} />
+                      <CrawlStatusBadge status={cr.status} />
                     </TableCell>
                     <TableCell className="text-right text-sm text-muted-foreground">
-                      {formatTimeAgo(cr.createdAt)}
+                      {formatTimeAgo(cr.createdAt, true)}
                     </TableCell>
                   </TableRow>
                 ))}

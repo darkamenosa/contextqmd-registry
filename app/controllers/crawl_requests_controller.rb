@@ -36,7 +36,6 @@ class CrawlRequestsController < InertiaController
         url: cr.url,
         source_type: cr.source_type,
         status: cr.status,
-        error_message: cr.error_message&.truncate(200),
         library_name: cr.library&.display_name,
         library_slug: cr.library ? "#{cr.library.namespace}/#{cr.library.name}" : nil,
         created_at: cr.created_at.iso8601,

@@ -2,14 +2,6 @@ import type { FormEvent } from "react"
 import { Head, useForm, usePage } from "@inertiajs/react"
 import { BookOpen } from "lucide-react"
 
-import {
-  BitbucketIcon,
-  Code2,
-  FileText,
-  GitHubIcon,
-  GitLabIcon,
-  Globe,
-} from "@/components/shared/source-type-icon"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -25,6 +17,14 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import {
+  BitbucketIcon,
+  Code2,
+  FileText,
+  GitHubIcon,
+  GitLabIcon,
+  Globe,
+} from "@/components/shared/source-type-icon"
 import AppLayout from "@/layouts/app-layout"
 
 // --- Source type config ---

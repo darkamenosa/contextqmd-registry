@@ -9,6 +9,7 @@ import {
   Trophy,
 } from "lucide-react"
 
+import { formatTimeAgo } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import {
@@ -89,15 +90,6 @@ function FreshnessBar({ pct }: { pct: number }) {
   )
 }
 
-function formatTimeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
-  const hours = Math.floor(diff / 3600000)
-  if (hours < 1) return "just now"
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
-}
-
 export default function RankingsIndex({ libraries, totalLibraries }: Props) {
   return (
     <PublicLayout
@@ -114,8 +106,8 @@ export default function RankingsIndex({ libraries, totalLibraries }: Props) {
               Rankings
             </h1>
             <p className="mt-4 text-lg text-muted-foreground">
-              Libraries ranked by documentation coverage. More pages, more
-              versions, more freshness.
+              Libraries ranked by documentation coverage — page count, version
+              depth, and how recently docs were updated.
             </p>
           </div>
           <Badge variant="outline" className="self-start text-sm">

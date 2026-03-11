@@ -46,7 +46,7 @@ module DocsFetcher
     end
 
     def convert
-      strip_noise!
+      strip_noise
       node = find_content_node
       return empty_result if node.nil? || node.text.strip.empty?
 
@@ -63,7 +63,7 @@ module DocsFetcher
 
     private
 
-      def strip_noise!
+      def strip_noise
         STRIP_SELECTORS.each do |sel|
           @doc.css(sel).each(&:remove)
         end

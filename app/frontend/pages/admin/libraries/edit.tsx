@@ -1,22 +1,9 @@
-import { useState, type FormEvent } from "react"
 import { Head, Link, useForm } from "@inertiajs/react"
 import type { CrawlRules } from "@/types"
-import { ChevronDown, ChevronLeft, FolderGit2, Globe } from "lucide-react"
+import { ChevronLeft, FolderGit2, Globe, Save, X } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
 import {
   Field,
   FieldDescription,
@@ -31,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Separator } from "@/components/ui/separator"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import AdminLayout from "@/layouts/admin-layout"
 
@@ -126,10 +113,6 @@ const WEBSITE_DEFAULT_EXCLUDE_PATHS = [
   "/feed/",
 ] as const
 
-const GIT_DEFAULT_PREFIX_COUNT = Object.values(
-  GIT_DEFAULT_EXCLUDE_PREFIXES
-).reduce((sum, arr) => sum + arr.length, 0)
-
 interface LibraryEdit {
   id: number
   namespace: string
@@ -147,50 +130,18 @@ interface Props {
   versions: string[]
 }
 
-function TagList({ items }: { items: readonly string[] }) {
+function DefaultTags({ items }: { items: readonly string[] }) {
   return (
     <div className="flex flex-wrap gap-1">
       {items.map((item) => (
-        <Badge
+        <span
           key={item}
-          variant="outline"
-          className="font-mono text-[11px] font-normal text-muted-foreground"
+          className="inline-block rounded-sm bg-muted px-1.5 py-px font-mono text-[10px]/4 text-muted-foreground"
         >
           {item}
-        </Badge>
+        </span>
       ))}
     </div>
-  )
-}
-
-function DefaultsCollapsible({
-  label,
-  count,
-  children,
-}: {
-  label: string
-  count: number
-  children: React.ReactNode
-}) {
-  const [open, setOpen] = useState(false)
-
-  return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-        <ChevronDown
-          className={`size-3.5 shrink-0 transition-transform ${open ? "" : "-rotate-90"}`}
-        />
-        {label}
-        <Badge variant="secondary" className="ml-auto text-[10px] tabular-nums">
-          {count}
-        </Badge>
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <div className="mt-1.5 rounded-md border bg-muted/30 p-3">
-          {children}
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
   )
 }
 
@@ -200,6 +151,7 @@ export default function AdminLibraryEdit({ library, versions }: Props) {
   const isGit =
     !sourceType || ["git", "github", "gitlab", "bitbucket"].includes(sourceType)
   const isWebsite = !sourceType || sourceType === "website"
+  const hasBothSources = isGit && isWebsite
 
   const { data, setData, patch, processing, transform } = useForm({
     displayName: library.displayName,
@@ -207,14 +159,15 @@ export default function AdminLibraryEdit({ library, versions }: Props) {
     defaultVersion: library.defaultVersion || "",
     aliases: library.aliases.join(", "),
     gitIncludePrefixes: (rules.gitIncludePrefixes || []).join("\n"),
+    gitIncludeBasenames: (rules.gitIncludeBasenames || []).join("\n"),
     gitExcludePrefixes: (rules.gitExcludePrefixes || []).join("\n"),
     gitExcludeBasenames: (rules.gitExcludeBasenames || []).join("\n"),
-    websiteExcludePathPrefixes: (
-      rules.websiteExcludePathPrefixes || []
-    ).join("\n"),
+    websiteExcludePathPrefixes: (rules.websiteExcludePathPrefixes || []).join(
+      "\n"
+    ),
   })
 
-  function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     transform((data) => ({
       library: {
@@ -227,6 +180,7 @@ export default function AdminLibraryEdit({ library, versions }: Props) {
           .filter(Boolean),
         crawl_rules: {
           git_include_prefixes: data.gitIncludePrefixes,
+          git_include_basenames: data.gitIncludeBasenames,
           git_exclude_prefixes: data.gitExcludePrefixes,
           git_exclude_basenames: data.gitExcludeBasenames,
           website_exclude_path_prefixes: data.websiteExcludePathPrefixes,
@@ -236,273 +190,341 @@ export default function AdminLibraryEdit({ library, versions }: Props) {
     patch(`/admin/libraries/${library.id}`)
   }
 
+  const defaultTab = isGit ? "git" : "website"
+
   return (
     <AdminLayout>
       <Head title={`Edit ${library.displayName}`} />
 
-      <div className="flex flex-col gap-4">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         {/* Header */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
           <Link
             href={`/admin/libraries/${library.id}`}
             aria-label="Back to library"
-            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="rounded-sm p-0.5 text-muted-foreground transition-colors hover:text-foreground"
           >
             <ChevronLeft className="size-4" />
           </Link>
-          <h1 className="min-w-0 truncate text-lg font-semibold">
-            Edit {library.displayName}
+          <h1 className="text-base/6 font-semibold">
+            Edit <span className="text-foreground">{library.displayName}</span>
           </h1>
-          <span className="font-mono text-sm text-muted-foreground">
+          <Badge
+            variant="outline"
+            className="font-mono text-[11px] font-normal"
+          >
             {library.namespace}/{library.name}
-          </span>
+          </Badge>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex max-w-2xl flex-col gap-4">
-          {/* --- Library metadata --- */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Library metadata</CardTitle>
-              <CardDescription>
-                Namespace and name cannot be changed as they are used for
-                routing and API access.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <FieldGroup className="gap-5">
-                <Field>
-                  <FieldLabel htmlFor="displayName">Display Name</FieldLabel>
-                  <Input
-                    id="displayName"
-                    value={data.displayName}
-                    onChange={(e) => setData("displayName", e.target.value)}
-                    required
-                  />
-                </Field>
-
-                <Field>
-                  <FieldLabel htmlFor="homepageUrl">Homepage URL</FieldLabel>
-                  <Input
-                    id="homepageUrl"
-                    type="url"
-                    placeholder="https://example.com"
-                    value={data.homepageUrl}
-                    onChange={(e) => setData("homepageUrl", e.target.value)}
-                  />
-                </Field>
-
-                <Field>
-                  <FieldLabel>Default Version</FieldLabel>
-                  {versions.length > 0 ? (
-                    <Select
-                      value={data.defaultVersion || undefined}
-                      onValueChange={(val) =>
-                        setData("defaultVersion", val ?? "")
-                      }
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select a version" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {versions.map((v) => (
-                          <SelectItem key={v} value={v}>
-                            {v}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      No versions available yet.
-                    </p>
-                  )}
-                  <FieldDescription>
-                    The version shown by default on the library detail page.
-                  </FieldDescription>
-                </Field>
-
-                <Field>
-                  <FieldLabel htmlFor="aliases">Aliases</FieldLabel>
-                  <Input
-                    id="aliases"
-                    placeholder="react, reactjs, react-dom"
-                    value={data.aliases}
-                    onChange={(e) => setData("aliases", e.target.value)}
-                  />
-                  <FieldDescription>
-                    Comma-separated search aliases.
-                  </FieldDescription>
-                </Field>
-              </FieldGroup>
-            </CardContent>
-          </Card>
-
-          {/* --- Git source crawl rules --- */}
-          {isGit && (
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <FolderGit2 className="size-4 text-muted-foreground" />
-                  <CardTitle>Git source rules</CardTitle>
-                </div>
-                <CardDescription>
-                  Controls which directories and files are included when
-                  crawling git repositories. Custom entries are additive — they
-                  extend the built-in defaults, not replace them.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <FieldGroup className="gap-5">
-                  <Field>
-                    <FieldLabel htmlFor="gitIncludePrefixes">
-                      Folders to Include
-                    </FieldLabel>
-                    <Textarea
-                      id="gitIncludePrefixes"
-                      placeholder={"docs\nguides"}
-                      value={data.gitIncludePrefixes}
-                      onChange={(e) =>
-                        setData("gitIncludePrefixes", e.target.value)
-                      }
-                      className="min-h-[80px] font-mono text-sm"
-                    />
-                    <FieldDescription>
-                      Directory prefixes to force-include (overrides all
-                      excludes). Leave empty to include all folders not
-                      excluded.
-                    </FieldDescription>
-                  </Field>
-
-                  <Field>
-                    <FieldLabel htmlFor="gitExcludePrefixes">
-                      Folders to Exclude
-                    </FieldLabel>
-                    <Textarea
-                      id="gitExcludePrefixes"
-                      placeholder={"internal\nscripts"}
-                      value={data.gitExcludePrefixes}
-                      onChange={(e) =>
-                        setData("gitExcludePrefixes", e.target.value)
-                      }
-                      className="min-h-[80px] font-mono text-sm"
-                    />
-                    <FieldDescription>
-                      Additional directory prefixes to skip. Entire subtrees are
-                      pruned — no files inside will be scanned.
-                    </FieldDescription>
-                  </Field>
-
-                  <Field>
-                    <FieldLabel htmlFor="gitExcludeBasenames">
-                      Files to Exclude
-                    </FieldLabel>
-                    <Textarea
-                      id="gitExcludeBasenames"
-                      placeholder={"MIGRATION.md\nINTERNAL.md"}
-                      value={data.gitExcludeBasenames}
-                      onChange={(e) =>
-                        setData("gitExcludeBasenames", e.target.value)
-                      }
-                      className="min-h-[80px] font-mono text-sm"
-                    />
-                    <FieldDescription>
-                      Additional filenames to skip (matched by exact name, any
-                      directory).
-                    </FieldDescription>
-                  </Field>
-
-                  <Separator />
-
-                  <DefaultsCollapsible
-                    label="Default excluded folders"
-                    count={GIT_DEFAULT_PREFIX_COUNT}
-                  >
-                    <div className="space-y-3">
-                      {Object.entries(GIT_DEFAULT_EXCLUDE_PREFIXES).map(
-                        ([group, items]) => (
-                          <div key={group} className="space-y-1">
-                            <span className="text-[11px] text-muted-foreground">
-                              {group}
-                            </span>
-                            <TagList items={items} />
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </DefaultsCollapsible>
-
-                  <DefaultsCollapsible
-                    label="Default excluded files"
-                    count={GIT_DEFAULT_EXCLUDE_BASENAMES.length}
-                  >
-                    <TagList items={GIT_DEFAULT_EXCLUDE_BASENAMES} />
-                  </DefaultsCollapsible>
-                </FieldGroup>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* --- Website source crawl rules --- */}
-          {isWebsite && (
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <Globe className="size-4 text-muted-foreground" />
-                  <CardTitle>Website source rules</CardTitle>
-                </div>
-                <CardDescription>
-                  Controls which URL paths are skipped when crawling website
-                  documentation. Custom entries extend the built-in defaults.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <FieldGroup className="gap-5">
-                  <Field>
-                    <FieldLabel htmlFor="websiteExcludePathPrefixes">
-                      Exclude URLs
-                    </FieldLabel>
-                    <Textarea
-                      id="websiteExcludePathPrefixes"
-                      placeholder={"/careers/\n/press/"}
-                      value={data.websiteExcludePathPrefixes}
-                      onChange={(e) =>
-                        setData("websiteExcludePathPrefixes", e.target.value)
-                      }
-                      className="min-h-[80px] font-mono text-sm"
-                    />
-                    <FieldDescription>
-                      URL path prefixes to skip. Pages whose path starts with
-                      any of these will not be crawled.
-                    </FieldDescription>
-                  </Field>
-
-                  <Separator />
-
-                  <DefaultsCollapsible
-                    label="Default excluded URL paths"
-                    count={WEBSITE_DEFAULT_EXCLUDE_PATHS.length}
-                  >
-                    <TagList items={WEBSITE_DEFAULT_EXCLUDE_PATHS} />
-                  </DefaultsCollapsible>
-                </FieldGroup>
-              </CardContent>
-            </Card>
-          )}
-
-          <div className="flex items-center gap-3">
-            <Button type="submit" disabled={processing}>
-              {processing ? "Saving..." : "Save Changes"}
-            </Button>
-            <Button
-              variant="outline"
-              nativeButton={false}
-              render={<Link href={`/admin/libraries/${library.id}`} />}
-            >
-              Cancel
-            </Button>
+        {/* --- Metadata section --- */}
+        <section>
+          <div className="mb-3 flex items-center gap-2 border-b pb-2">
+            <h2 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+              Metadata
+            </h2>
           </div>
-        </form>
-      </div>
+          <FieldGroup className="gap-4">
+            <div className="grid gap-4 @lg/main:grid-cols-2">
+              <Field>
+                <FieldLabel htmlFor="displayName">Display Name</FieldLabel>
+                <Input
+                  id="displayName"
+                  value={data.displayName}
+                  onChange={(e) => setData("displayName", e.target.value)}
+                  required
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="homepageUrl">Homepage URL</FieldLabel>
+                <Input
+                  id="homepageUrl"
+                  type="url"
+                  placeholder="https://example.com"
+                  value={data.homepageUrl}
+                  onChange={(e) => setData("homepageUrl", e.target.value)}
+                />
+              </Field>
+            </div>
+            <div className="grid gap-4 @lg/main:grid-cols-2">
+              <Field>
+                <FieldLabel>Default Version</FieldLabel>
+                {versions.length > 0 ? (
+                  <Select
+                    value={data.defaultVersion || undefined}
+                    onValueChange={(val) =>
+                      setData("defaultVersion", val ?? "")
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select a version" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {versions.map((v) => (
+                        <SelectItem key={v} value={v}>
+                          {v}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="py-1.5 text-sm text-muted-foreground">
+                    No versions yet
+                  </p>
+                )}
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="aliases">Aliases</FieldLabel>
+                <Input
+                  id="aliases"
+                  placeholder="react, reactjs, react-dom"
+                  value={data.aliases}
+                  onChange={(e) => setData("aliases", e.target.value)}
+                />
+                <FieldDescription>Comma-separated</FieldDescription>
+              </Field>
+            </div>
+          </FieldGroup>
+        </section>
+
+        {/* --- Crawl rules section --- */}
+        {(isGit || isWebsite) && (
+          <section>
+            <div className="mb-3 flex items-center gap-2 border-b pb-2">
+              <h2 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                Crawl Rules
+              </h2>
+              <span className="text-[10px] text-muted-foreground/60">
+                Custom entries extend built-in defaults
+              </span>
+            </div>
+
+            {hasBothSources ? (
+              <Tabs defaultValue={defaultTab}>
+                <TabsList variant="line" className="mb-3">
+                  {isGit && (
+                    <TabsTrigger value="git" className="gap-1.5 text-xs">
+                      <FolderGit2 className="size-3.5" />
+                      Git
+                    </TabsTrigger>
+                  )}
+                  {isWebsite && (
+                    <TabsTrigger value="website" className="gap-1.5 text-xs">
+                      <Globe className="size-3.5" />
+                      Website
+                    </TabsTrigger>
+                  )}
+                </TabsList>
+
+                {isGit && (
+                  <TabsContent value="git">
+                    <GitRulesFields data={data} setData={setData} />
+                  </TabsContent>
+                )}
+                {isWebsite && (
+                  <TabsContent value="website">
+                    <WebsiteRulesFields data={data} setData={setData} />
+                  </TabsContent>
+                )}
+              </Tabs>
+            ) : isGit ? (
+              <div className="mb-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+                <FolderGit2 className="size-3.5" />
+                <span className="font-medium">Git source</span>
+              </div>
+            ) : (
+              <div className="mb-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Globe className="size-3.5" />
+                <span className="font-medium">Website source</span>
+              </div>
+            )}
+
+            {!hasBothSources && isGit && (
+              <GitRulesFields data={data} setData={setData} />
+            )}
+            {!hasBothSources && isWebsite && (
+              <WebsiteRulesFields data={data} setData={setData} />
+            )}
+          </section>
+        )}
+
+        {/* --- Actions --- */}
+        <div className="flex items-center gap-2 border-t pt-4">
+          <Button
+            type="submit"
+            size="sm"
+            disabled={processing}
+            className="gap-1.5"
+          >
+            <Save className="size-3.5" />
+            {processing ? "Saving..." : "Save Changes"}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1.5 text-muted-foreground"
+            nativeButton={false}
+            render={<Link href={`/admin/libraries/${library.id}`} />}
+          >
+            <X className="size-3.5" />
+            Cancel
+          </Button>
+        </div>
+      </form>
     </AdminLayout>
+  )
+}
+
+// --- Git crawl rules fields ---
+
+function GitRulesFields({
+  data,
+  setData,
+}: {
+  data: {
+    gitIncludePrefixes: string
+    gitIncludeBasenames: string
+    gitExcludePrefixes: string
+    gitExcludeBasenames: string
+  }
+  setData: (key: string, value: string) => void
+}) {
+  return (
+    <FieldGroup className="gap-4">
+      {/* 2x2 grid: Include/Exclude × Folders/Files */}
+      <div className="grid gap-4 @lg/main:grid-cols-2">
+        <Field>
+          <FieldLabel htmlFor="gitIncludePrefixes">Include Folders</FieldLabel>
+          <Textarea
+            id="gitIncludePrefixes"
+            placeholder={"docs\nguides"}
+            value={data.gitIncludePrefixes}
+            onChange={(e) => setData("gitIncludePrefixes", e.target.value)}
+            className="min-h-16 font-mono text-xs"
+            rows={3}
+          />
+          <FieldDescription className="text-xs">
+            Root-relative paths to force-include (overrides excludes)
+          </FieldDescription>
+        </Field>
+
+        <Field>
+          <FieldLabel htmlFor="gitIncludeBasenames">Include Files</FieldLabel>
+          <Textarea
+            id="gitIncludeBasenames"
+            placeholder={"CHANGELOG.md\nCONTRIBUTING.md"}
+            value={data.gitIncludeBasenames}
+            onChange={(e) => setData("gitIncludeBasenames", e.target.value)}
+            className="min-h-16 font-mono text-xs"
+            rows={3}
+          />
+          <FieldDescription className="text-xs">
+            Force-include by filename (overrides file excludes)
+          </FieldDescription>
+        </Field>
+
+        <Field>
+          <FieldLabel htmlFor="gitExcludePrefixes">Exclude Folders</FieldLabel>
+          <Textarea
+            id="gitExcludePrefixes"
+            placeholder={"internal\nscripts"}
+            value={data.gitExcludePrefixes}
+            onChange={(e) => setData("gitExcludePrefixes", e.target.value)}
+            className="min-h-16 font-mono text-xs"
+            rows={3}
+          />
+          <FieldDescription className="text-xs">
+            Root-relative paths to skip (entire subtree pruned)
+          </FieldDescription>
+        </Field>
+
+        <Field>
+          <FieldLabel htmlFor="gitExcludeBasenames">Exclude Files</FieldLabel>
+          <Textarea
+            id="gitExcludeBasenames"
+            placeholder={"MIGRATION.md\nINTERNAL.md"}
+            value={data.gitExcludeBasenames}
+            onChange={(e) => setData("gitExcludeBasenames", e.target.value)}
+            className="min-h-16 font-mono text-xs"
+            rows={3}
+          />
+          <FieldDescription className="text-xs">
+            Skip by exact filename (any directory)
+          </FieldDescription>
+        </Field>
+      </div>
+
+      {/* Built-in defaults reference — separated from editing area */}
+      <div className="rounded-md border border-dashed border-muted-foreground/20 bg-muted/30 px-3 py-2.5">
+        <p className="mb-2 text-[11px] font-medium text-muted-foreground">
+          Built-in defaults (always applied)
+        </p>
+        <div className="grid gap-3 @lg/main:grid-cols-2">
+          <div>
+            <p className="mb-1.5 text-[10px] font-semibold tracking-wider text-muted-foreground/60 uppercase">
+              Excluded folders
+            </p>
+            <div className="space-y-1.5">
+              {Object.entries(GIT_DEFAULT_EXCLUDE_PREFIXES).map(
+                ([group, items]) => (
+                  <div key={group}>
+                    <span className="text-[9px] font-medium text-muted-foreground/50">
+                      {group}
+                    </span>
+                    <DefaultTags items={items} />
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+          <div>
+            <p className="mb-1.5 text-[10px] font-semibold tracking-wider text-muted-foreground/60 uppercase">
+              Excluded files
+            </p>
+            <DefaultTags items={GIT_DEFAULT_EXCLUDE_BASENAMES} />
+          </div>
+        </div>
+      </div>
+    </FieldGroup>
+  )
+}
+
+// --- Website crawl rules fields ---
+
+function WebsiteRulesFields({
+  data,
+  setData,
+}: {
+  data: { websiteExcludePathPrefixes: string }
+  setData: (key: string, value: string) => void
+}) {
+  return (
+    <FieldGroup className="gap-4">
+      <Field>
+        <FieldLabel htmlFor="websiteExcludePathPrefixes">
+          Exclude URL Paths
+        </FieldLabel>
+        <Textarea
+          id="websiteExcludePathPrefixes"
+          placeholder={"/careers/\n/press/"}
+          value={data.websiteExcludePathPrefixes}
+          onChange={(e) =>
+            setData("websiteExcludePathPrefixes", e.target.value)
+          }
+          className="min-h-16 font-mono text-xs"
+          rows={3}
+        />
+        <FieldDescription className="text-xs">
+          Pages whose path starts with these prefixes won&apos;t be crawled
+        </FieldDescription>
+      </Field>
+
+      <div className="rounded-md border border-dashed border-muted-foreground/20 bg-muted/30 px-3 py-2.5">
+        <p className="mb-2 text-[11px] font-medium text-muted-foreground">
+          Built-in defaults (always applied)
+        </p>
+        <DefaultTags items={WEBSITE_DEFAULT_EXCLUDE_PATHS} />
+      </div>
+    </FieldGroup>
   )
 }

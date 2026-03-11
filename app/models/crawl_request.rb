@@ -1,6 +1,11 @@
 # frozen_string_literal: true
 
+require "zlib"
+
 class CrawlRequest < ApplicationRecord
+  SYSTEM_ACCOUNT_NAME = "ContextQMD System"
+  SYSTEM_ACCOUNT_LOCK_KEY = Zlib.crc32(SYSTEM_ACCOUNT_NAME).freeze
+
   belongs_to :identity
   belongs_to :library, optional: true
 
@@ -38,7 +43,7 @@ class CrawlRequest < ApplicationRecord
   def process
     return unless pending? || processing?
 
-    start_processing! if pending?
+    mark_processing if pending?
 
     update_progress("Fetching documentation")
     result = DocsFetcher.for(source_type).fetch(self, on_progress: method(:update_progress))
@@ -46,29 +51,29 @@ class CrawlRequest < ApplicationRecord
     update_progress("Importing #{result.pages.size} pages")
     library = import_result(result)
 
-    complete!(library)
+    mark_completed(library)
   rescue DocsFetcher::TransientFetchError
     # Let job framework retry — don't mark as failed yet
     update_progress("Waiting to retry")
     raise
   rescue StandardError => e
     # Permanent failure — mark failed immediately
-    fail!(e.message) unless completed?
+    mark_failed(e.message) unless completed?
     raise
   end
 
-  def start_processing!
+  def mark_processing
     raise "Cannot start processing from #{status}" unless pending?
     update!(status: "processing", started_at: Time.current, status_message: "Starting")
   end
 
-  def complete!(library)
+  def mark_completed(library)
     raise "Cannot complete from #{status}" unless processing?
     update!(status: "completed", library: library, error_message: nil,
             completed_at: Time.current, status_message: "Completed")
   end
 
-  def fail!(message)
+  def mark_failed(message)
     raise "Cannot fail from #{status}" if completed?
     update!(status: "failed", error_message: message,
             completed_at: Time.current, status_message: "Failed")
@@ -102,7 +107,7 @@ class CrawlRequest < ApplicationRecord
       version = find_or_create_version(library, result)
       sync_pages(version, result.pages, prune_stale: result.complete)
       record_fetch_recipe(version)
-      update_manifest_checksum!(version)
+      update_manifest_checksum(version)
 
       if should_promote_default_version?(library, version)
         library.update!(default_version: version.version)
@@ -112,7 +117,7 @@ class CrawlRequest < ApplicationRecord
     end
 
     def find_or_create_library(result)
-      system_account = Account.find_or_create_by!(name: "ContextQMD System") { |a| a.personal = false }
+      system_account = ensure_system_account
       namespace_slug = library_slug(result.namespace, prefix: "ns")
       name_slug = library_slug(result.name, prefix: "lib")
 
@@ -126,10 +131,10 @@ class CrawlRequest < ApplicationRecord
         end
       end
 
-      library ||= Library.create!(
+      library ||= find_or_create_record(
+        Library,
+        { namespace: namespace_slug, name: name_slug },
         account: system_account,
-        namespace: namespace_slug,
-        name: name_slug,
         display_name: result.display_name,
         homepage_url: result.homepage_url,
         aliases: result.aliases,
@@ -149,7 +154,12 @@ class CrawlRequest < ApplicationRecord
 
     def find_or_create_version(library, result)
       version_tag = result.version || "latest"
-      version = library.versions.find_or_initialize_by(version: version_tag)
+      version = find_or_create_record(
+        library.versions,
+        { version: version_tag },
+        channel: Version.channel_for(result.version),
+        generated_at: Time.current
+      )
       version.channel = Version.channel_for(result.version)
       version.generated_at = Time.current
       version.save!
@@ -199,9 +209,18 @@ class CrawlRequest < ApplicationRecord
         uid = page_data[:page_uid]
         incoming_uids << uid
 
-        page = version.pages.find_or_initialize_by(page_uid: uid)
-        next if page.persisted? && page.checksum == checksum
-
+        page = find_or_create_record(
+          version.pages,
+          { page_uid: uid },
+          path: page_data[:path],
+          title: page_data[:title],
+          url: page_data[:url],
+          description: content,
+          bytes: content.bytesize,
+          checksum: checksum,
+          source_ref: source_type,
+          headings: sanitize_headings(page_data[:headings] || [])
+        )
         page.assign_attributes(
           path: page_data[:path],
           title: page_data[:title],
@@ -212,7 +231,7 @@ class CrawlRequest < ApplicationRecord
           source_ref: source_type,
           headings: sanitize_headings(page_data[:headings] || [])
         )
-        page.save!
+        page.save! if page.changed?
 
         # Debounce progress updates (every 10 pages or last page)
         if (index + 1) % 10 == 0 || index + 1 == total
@@ -252,7 +271,7 @@ class CrawlRequest < ApplicationRecord
       recipe.save!
     end
 
-    def update_manifest_checksum!(version)
+    def update_manifest_checksum(version)
       page_checksums = version.pages.order(:page_uid).pluck(:checksum).compact
       return if page_checksums.empty?
 
@@ -277,5 +296,32 @@ class CrawlRequest < ApplicationRecord
 
     def enqueue_processing
       ProcessCrawlRequestJob.perform_later(self)
+    end
+
+    def ensure_system_account
+      with_system_account_lock do
+        account = Account.find_or_create_by!(name: SYSTEM_ACCOUNT_NAME, personal: false)
+        account.users.find_or_create_by!(role: :system) { |user| user.name = "System" }
+        account
+      end
+    end
+
+    def with_system_account_lock
+      return yield unless Account.connection.adapter_name == "PostgreSQL"
+
+      Account.transaction do
+        lock_sql = Account.send(
+          :sanitize_sql_array,
+          [ "SELECT pg_advisory_xact_lock(?)", SYSTEM_ACCOUNT_LOCK_KEY ]
+        )
+        Account.connection.execute(lock_sql)
+        yield
+      end
+    end
+
+    def find_or_create_record(relation, unique_attrs, create_attrs = {})
+      relation.find_by(unique_attrs) || relation.create!(unique_attrs.merge(create_attrs))
+    rescue ActiveRecord::RecordNotUnique
+      relation.find_by!(unique_attrs)
     end
 end

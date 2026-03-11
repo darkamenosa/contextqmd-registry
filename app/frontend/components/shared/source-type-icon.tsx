@@ -47,7 +47,7 @@ interface SourceTypeConfig {
 // eslint-disable-next-line react-refresh/only-export-components
 export function getSourceTypeConfig(
   sourceType: string,
-  size = "size-3.5",
+  size = "size-3.5"
 ): SourceTypeConfig {
   switch (sourceType) {
     case "github":
@@ -67,7 +67,10 @@ export function getSourceTypeConfig(
     case "openapi":
       return { label: "OpenAPI", icon: <Code2 className={size} /> }
     default:
-      return { label: sourceType || "Unknown", icon: <Globe className={size} /> }
+      return {
+        label: sourceType || "Unknown",
+        icon: <Globe className={size} />,
+      }
   }
 }
 

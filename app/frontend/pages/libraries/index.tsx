@@ -2,11 +2,12 @@ import { useState, type FormEvent } from "react"
 import { Link, router } from "@inertiajs/react"
 import { BookOpen, FileText, Library, Plus, Search } from "lucide-react"
 
-import { SourceTypeIcon } from "@/components/shared/source-type-icon"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { LicenseBadge } from "@/components/shared/license-badge"
+import { SourceTypeIcon } from "@/components/shared/source-type-icon"
 import PublicLayout from "@/layouts/public-layout"
 
 interface LibraryItem {
@@ -26,20 +27,6 @@ interface Props {
   libraries: LibraryItem[]
   query: string
 }
-
-function LicenseBadge({ status }: { status: string | null }) {
-  if (!status) return null
-
-  const variant =
-    status === "verified"
-      ? "secondary"
-      : status === "unclear"
-        ? "outline"
-        : "destructive"
-
-  return <Badge variant={variant}>{status}</Badge>
-}
-
 
 export default function LibrariesIndex({ libraries, query }: Props) {
   const [search, setSearch] = useState(query)

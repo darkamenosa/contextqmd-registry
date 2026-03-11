@@ -156,7 +156,7 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     )
 
     # Track status transitions
-    @crawl_request.define_singleton_method(:start_processing!) do
+    @crawl_request.define_singleton_method(:mark_processing) do
       statuses << "processing"
       super()
     end
@@ -173,7 +173,7 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     ns = "ns-#{SecureRandom.hex(4)}"
     lib_name = "lib-#{SecureRandom.hex(4)}"
 
-    system_account = Account.find_or_create_by!(name: "ContextQMD System") { |a| a.personal = false }
+    system_account = Account.create!(name: "ContextQMD System", personal: false)
     existing = Library.create!(
       account: system_account,
       namespace: ns,
@@ -202,6 +202,34 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
 
     @crawl_request.reload
     assert_equal existing.id, @crawl_request.library_id
+  end
+
+  test "creates a non-personal system account instead of reusing a personal one with the same name" do
+    Account.where(name: "ContextQMD System", personal: false).destroy_all
+    Account.create!(name: "ContextQMD System", personal: true)
+
+    result = CrawlResult.new(
+      namespace: "ns-#{SecureRandom.hex(4)}",
+      name: "lib-#{SecureRandom.hex(4)}",
+      display_name: "Lib",
+      homepage_url: "https://example.com",
+      aliases: [],
+      version: nil,
+      pages: [
+        { page_uid: "index", path: "index.md", title: "Index",
+          url: "https://example.com", content: "Content", headings: [] }
+      ]
+    )
+
+    with_stub_fetcher(result) do
+      assert_difference -> { Account.where(name: "ContextQMD System", personal: false).count }, 1 do
+        ProcessCrawlRequestJob.perform_now(@crawl_request)
+      end
+    end
+
+    library = @crawl_request.reload.library
+    assert_not_nil library
+    assert_equal false, library.account.personal
   end
 
   test "skips saving unchanged pages on re-crawl (deduplication)" do

@@ -3,6 +3,7 @@ import { Head, Link, router } from "@inertiajs/react"
 import type { AdminPage, PaginationData } from "@/types"
 import { ChevronLeft, Eye, Pencil, Search, Trash2, X } from "lucide-react"
 
+import { formatBytes } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -35,12 +36,6 @@ interface Props {
   pages: AdminPage[]
   pagination: PaginationData
   query: string
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  const kb = bytes / 1024
-  return kb < 1024 ? `${kb.toFixed(1)} KB` : `${(kb / 1024).toFixed(1)} MB`
 }
 
 function PageRow({ page }: { page: AdminPage }) {

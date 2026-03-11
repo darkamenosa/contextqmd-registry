@@ -30,11 +30,51 @@ module Identities
       end
 
       def after_sign_out_path_for(_resource)
-        if request.headers["X-Inertia"].present?
-          new_identity_session_path
+        return root_path unless request.headers["X-Inertia"].present?
+
+        public_inertia_sign_out_path || new_identity_session_path
+      end
+
+    private
+
+      def public_inertia_sign_out_path
+        return if request.host == "127.0.0.1"
+
+        referer = request.referer
+        return if referer.blank?
+
+        uri = URI.parse(referer)
+        return if uri.host.present? && uri.host != request.host
+
+        path = uri.path.presence || root_path
+        return unless public_sign_out_path?(path)
+
+        [ path, uri.query.presence ].compact.join("?")
+      rescue URI::InvalidURIError
+        nil
+      end
+
+      def public_sign_out_path?(path)
+        route = Rails.application.routes.recognize_path(path, method: :get)
+
+        case route[:controller]
+        when "pages"
+          true
+        when "rankings"
+          route[:action] == "index"
+        when "libraries"
+          %w[index show].include?(route[:action])
+        when "libraries/pages"
+          route[:action] == "show"
+        when "crawl_requests"
+          route[:action] == "index"
+        when "errors"
+          route[:action] == "show"
         else
-          root_path
+          false
         end
+      rescue ActionController::RoutingError
+        false
       end
   end
 end
