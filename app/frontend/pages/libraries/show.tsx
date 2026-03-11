@@ -18,6 +18,7 @@ import {
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 
+import { SourceTypeIcon } from "@/components/shared/source-type-icon"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -235,6 +236,15 @@ install_docs({ library: "${slug}" })`
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">{slug}</p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
+              {library.sourceType && (
+                <Badge variant="outline" className="gap-1 text-xs">
+                  <SourceTypeIcon
+                    sourceType={library.sourceType}
+                    size="size-3"
+                    showLabel
+                  />
+                </Badge>
+              )}
               <LicenseBadge status={library.licenseStatus} />
               {library.aliases.map((alias) => (
                 <Badge key={alias} variant="outline" className="text-xs">

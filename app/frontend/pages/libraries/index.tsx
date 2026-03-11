@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react"
 import { Link, router } from "@inertiajs/react"
 import { BookOpen, FileText, Library, Plus, Search } from "lucide-react"
 
+import { SourceTypeIcon } from "@/components/shared/source-type-icon"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -39,26 +40,6 @@ function LicenseBadge({ status }: { status: string | null }) {
   return <Badge variant={variant}>{status}</Badge>
 }
 
-const SOURCE_TYPE_LABELS: Record<string, string> = {
-  git: "Git",
-  github: "GitHub",
-  github_markdown: "GitHub",
-  gitlab: "GitLab",
-  website: "Website",
-  openapi: "OpenAPI",
-  llms_txt: "llms.txt",
-  llms_full_txt: "llms.txt",
-}
-
-function SourceTypeBadge({ sourceType }: { sourceType: string | null }) {
-  if (!sourceType) return null
-  const label = SOURCE_TYPE_LABELS[sourceType] ?? sourceType
-  return (
-    <Badge variant="outline" className="text-xs">
-      {label}
-    </Badge>
-  )
-}
 
 export default function LibrariesIndex({ libraries, query }: Props) {
   const [search, setSearch] = useState(query)
@@ -170,7 +151,15 @@ export default function LibrariesIndex({ libraries, query }: Props) {
                             v{lib.defaultVersion}
                           </Badge>
                         )}
-                        <SourceTypeBadge sourceType={lib.sourceType} />
+                        {lib.sourceType && (
+                          <Badge variant="outline" className="gap-1 text-xs">
+                            <SourceTypeIcon
+                              sourceType={lib.sourceType}
+                              size="size-3"
+                              showLabel
+                            />
+                          </Badge>
+                        )}
                         {lib.aliases.map((alias) => (
                           <Badge
                             key={alias}

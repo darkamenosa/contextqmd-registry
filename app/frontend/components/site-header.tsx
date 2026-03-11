@@ -14,7 +14,7 @@ import {
 const navLinks = [
   { href: "/libraries", label: "Libraries" },
   { href: "/rankings", label: "Rankings" },
-  { href: "/crawl", label: "Add Docs" },
+  { href: "/crawl", label: "Status" },
   { href: "/about", label: "About" },
 ]
 

@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { Head, Link, router } from "@inertiajs/react"
+import { SourceTypeIcon } from "@/components/shared/source-type-icon"
 import type {
   AdminCrawlItem,
   AdminLibraryDetail,
@@ -684,7 +685,11 @@ export default function AdminLibraryShow({
                               )}
                             </TableCell>
                             <TableCell className="text-sm">
-                              {cr.sourceType}
+                              <SourceTypeIcon
+                                sourceType={cr.sourceType}
+                                size="size-3.5"
+                                showLabel
+                              />
                             </TableCell>
                             <TableCell>
                               <StatusBadge status={cr.status} />

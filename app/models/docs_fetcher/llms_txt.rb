@@ -179,6 +179,7 @@ module DocsFetcher
 
           resolved_uri = resolve_link(base_uri, link[:path])
           next unless resolved_uri
+          next unless SsrfGuard.safe_uri?(resolved_uri)
 
           raw = http_get(resolved_uri)
           next unless raw

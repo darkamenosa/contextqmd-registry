@@ -373,6 +373,38 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
     assert_equal "https://other.dev/docs.md", resolved.to_s
   end
 
+  test "fetch_linked_pages skips links that fail SSRF validation" do
+    index_content = <<~MD
+      - [Safe Guide](/guide.md)
+      - [Unsafe Guide](http://127.0.0.1/private.md)
+    MD
+
+    fetched_urls = []
+    fetcher = DocsFetcher::LlmsTxt.new
+    fetcher.define_singleton_method(:http_get) do |uri, **_kw|
+      fetched_urls << uri.to_s
+      "# Page\n\nBody"
+    end
+
+    original_safe_uri = SsrfGuard.method(:safe_uri?)
+    SsrfGuard.define_singleton_method(:safe_uri?) { |uri| uri.host != "127.0.0.1" }
+
+    begin
+      pages, complete = fetcher.send(
+        :fetch_linked_pages,
+        URI.parse("https://example.com/llms.txt"),
+        index_content
+      )
+
+      assert_equal 1, pages.size
+      assert complete
+    ensure
+      SsrfGuard.define_singleton_method(:safe_uri?, original_safe_uri)
+    end
+
+    assert_equal [ "https://example.com/guide.md" ], fetched_urls
+  end
+
   # --- Full fetch with stubbed HTTP ---
 
   test "fetch returns a Result with pages from H2 sections" do

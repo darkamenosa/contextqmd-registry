@@ -20,7 +20,7 @@ class CrawlRequestsController < InertiaController
   end
 
   def new
-    membership = Current.identity.accessible_memberships.includes(:account).first
+    membership = current_identity_default_membership
     if membership
       redirect_to new_app_crawl_request_path(account_id: membership.account.external_account_id)
     else

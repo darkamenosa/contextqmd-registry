@@ -46,6 +46,8 @@ class PagesController < InertiaController
         version: best_version&.version || latest_version&.version,
         version_count: library.versions.size,
         page_count: best_version&.pages&.size || 0,
+        source_type: library.source_type,
+        homepage_url: library.homepage_url,
         license_status: library.source_policy&.license_status,
         updated_at: (latest_version&.created_at || library.updated_at).iso8601
       }

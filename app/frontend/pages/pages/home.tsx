@@ -14,6 +14,7 @@ import {
   TrendingUp,
 } from "lucide-react"
 
+import { SourceTypeIcon } from "@/components/shared/source-type-icon"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -33,6 +34,8 @@ interface LibraryItem {
   namespace: string
   name: string
   displayName: string
+  sourceType: string | null
+  homepageUrl: string | null
   defaultVersion: string | null
   version: string | null
   versionCount: number
@@ -46,7 +49,6 @@ interface Props {
   pageCount: number
   versionCount: number
   libraries: LibraryItem[]
-  crawlPending: number
 }
 
 function formatTimeAgo(iso: string): string {
@@ -116,38 +118,64 @@ function LibraryTable({ libraries }: { libraries: LibraryItem[] }) {
   return (
     <Table>
       <TableHeader>
-        <TableRow>
-          <TableHead>SOURCE</TableHead>
-          <TableHead className="text-right">PAGES</TableHead>
-          <TableHead className="text-right">VERSION</TableHead>
-          <TableHead className="text-right">UPDATE</TableHead>
+        <TableRow className="hover:bg-transparent">
+          <TableHead className="text-xs font-medium tracking-wider text-muted-foreground/70">
+            LIBRARY
+          </TableHead>
+          <TableHead className="text-xs font-medium tracking-wider text-muted-foreground/70">
+            SOURCE
+          </TableHead>
+          <TableHead className="text-right text-xs font-medium tracking-wider text-muted-foreground/70">
+            PAGES
+          </TableHead>
+          <TableHead className="text-right text-xs font-medium tracking-wider text-muted-foreground/70">
+            UPDATE
+          </TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {libraries.map((lib) => (
           <TableRow key={`${lib.namespace}/${lib.name}`}>
-            <TableCell>
+            <TableCell className="py-3.5">
               <Link
                 href={`/libraries/${lib.namespace}/${lib.name}`}
-                className="group flex items-center gap-3"
+                className="font-medium text-primary hover:underline"
               >
-                <div>
-                  <span className="font-medium text-primary group-hover:underline">
-                    {lib.displayName}
-                  </span>
-                  <span className="ml-3 text-sm text-muted-foreground">
-                    /{lib.namespace}/{lib.name}
-                  </span>
-                </div>
+                {lib.displayName}
               </Link>
             </TableCell>
-            <TableCell className="text-right font-mono text-sm">
+            <TableCell className="py-3.5">
+              {lib.homepageUrl ? (
+                <a
+                  href={lib.homepageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 hover:text-foreground"
+                >
+                  <SourceTypeIcon sourceType={lib.sourceType} size="size-4" />
+                  <span className="hidden text-sm text-muted-foreground sm:inline">
+                    /{lib.namespace}/{lib.name}
+                  </span>
+                  <span className="text-sm text-muted-foreground sm:hidden">
+                    /{lib.name}
+                  </span>
+                </a>
+              ) : (
+                <span className="inline-flex items-center gap-1.5">
+                  <SourceTypeIcon sourceType={lib.sourceType} size="size-4" />
+                  <span className="hidden text-sm text-muted-foreground sm:inline">
+                    /{lib.namespace}/{lib.name}
+                  </span>
+                  <span className="text-sm text-muted-foreground sm:hidden">
+                    /{lib.name}
+                  </span>
+                </span>
+              )}
+            </TableCell>
+            <TableCell className="py-3.5 text-right text-sm">
               {formatCount(lib.pageCount)}
             </TableCell>
-            <TableCell className="text-right font-mono text-sm text-muted-foreground">
-              {lib.version || "—"}
-            </TableCell>
-            <TableCell className="text-right text-sm text-muted-foreground">
+            <TableCell className="py-3.5 text-right text-sm text-muted-foreground">
               {formatTimeAgo(lib.updatedAt)}
             </TableCell>
           </TableRow>
@@ -157,7 +185,22 @@ function LibraryTable({ libraries }: { libraries: LibraryItem[] }) {
   )
 }
 
-export default function Home({ libraryCount, libraries, crawlPending }: Props) {
+function TableFooter({ libraryCount }: { libraryCount: number }) {
+  return (
+    <div className="flex items-center justify-between border-t px-4 py-3 text-xs tracking-wide text-muted-foreground">
+      <span>{libraryCount.toLocaleString()} LIBRARIES</span>
+      <Link
+        href="/crawl"
+        className="flex items-center gap-1 uppercase hover:text-foreground"
+      >
+        See tasks in progress
+        <ArrowRight className="size-3" />
+      </Link>
+    </div>
+  )
+}
+
+export default function Home({ libraryCount, libraries }: Props) {
   const [search, setSearch] = useState("")
 
   const handleSearch = (e: FormEvent) => {
@@ -253,41 +296,31 @@ export default function Home({ libraryCount, libraries, crawlPending }: Props) {
               render={<Link href="/crawl/new" />}
             >
               <Plus className="size-4" />
-              Add Docs
+              Submit Docs
             </Button>
           </div>
 
           <TabsContent value="popular" className="mt-4">
             <div className="overflow-x-auto rounded-xl border">
               <LibraryTable libraries={sortedByPopular} />
+              <TableFooter libraryCount={libraryCount} />
             </div>
           </TabsContent>
 
           <TabsContent value="trending" className="mt-4">
             <div className="overflow-x-auto rounded-xl border">
               <LibraryTable libraries={sortedByTrending} />
+              <TableFooter libraryCount={libraryCount} />
             </div>
           </TabsContent>
 
           <TabsContent value="recent" className="mt-4">
             <div className="overflow-x-auto rounded-xl border">
               <LibraryTable libraries={sortedByRecent} />
+              <TableFooter libraryCount={libraryCount} />
             </div>
           </TabsContent>
         </Tabs>
-
-        <div className="mt-3 flex items-center justify-between text-sm text-muted-foreground">
-          <span>{libraryCount.toLocaleString()} LIBRARIES</span>
-          {crawlPending > 0 && (
-            <Link
-              href="/crawl"
-              className="flex items-center gap-1 hover:text-foreground"
-            >
-              SEE TASKS IN PROGRESS
-              <ArrowRight className="size-3" />
-            </Link>
-          )}
-        </div>
       </section>
 
       {/* MCP Quickstart */}
