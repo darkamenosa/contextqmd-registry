@@ -199,6 +199,8 @@ module DocsFetcher
 
           title = extra_title || extract_title(content, rel)
           content = strip_frontmatter(content) if ext == ".md" || ext == ".mdx"
+          next if content.strip.empty?
+
           headings = content.scan(/^\#{2,4}\s+(.+)$/).flatten.map(&:strip)
           slug = rel.delete_suffix(File.extname(rel)).tr("/", "-").downcase
 
