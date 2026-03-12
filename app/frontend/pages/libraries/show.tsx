@@ -247,14 +247,14 @@ install_docs({ library: "${slug}" })`
 
   return (
     <PublicLayout title={`${library.displayName} — ContextQMD`}>
-      <section className="mx-auto max-w-7xl px-4 pt-6 pb-4 sm:px-6 sm:pt-16 sm:pb-6 lg:px-8">
+      <section className="mx-auto max-w-7xl px-4 pt-6 pb-4 sm:px-6 sm:pt-8 sm:pb-6 lg:px-8">
         {/* Back link */}
         <Button
           variant="ghost"
           size="sm"
           nativeButton={false}
           render={<Link href="/libraries" />}
-          className="mb-4 sm:mb-6"
+          className="-ml-3 mb-4 sm:mb-6"
         >
           <ArrowLeft className="size-4" />
           Back to Libraries
@@ -519,11 +519,11 @@ install_docs({ library: "${slug}" })`
                               </div>
                             )}
                           </div>
-                          <div className="hidden shrink-0 items-center gap-2 sm:flex">
-                            <code className="rounded-xs bg-muted px-1.5 py-0.5 text-[11px]/3 font-medium text-muted-foreground">
+                          <div className="flex shrink-0 items-center gap-2">
+                            <code className="hidden rounded-xs bg-muted px-1.5 py-0.5 text-[11px]/3 font-medium text-muted-foreground sm:inline">
                               {page.path}
                             </code>
-                            <span className="min-w-12 text-right text-[11px] text-muted-foreground/70 tabular-nums">
+                            <span className="hidden min-w-12 text-right text-[11px] text-muted-foreground/70 tabular-nums sm:inline">
                               {formatBytes(page.bytes)}
                             </span>
                             {selectedVersion && (
@@ -533,7 +533,7 @@ install_docs({ library: "${slug}" })`
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 <ExternalLink className="size-3" />
-                                Full page
+                                <span className="hidden sm:inline">Full page</span>
                               </Link>
                             )}
                           </div>
