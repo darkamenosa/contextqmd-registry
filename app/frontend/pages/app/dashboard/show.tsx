@@ -55,64 +55,66 @@ export default function AppDashboard({
     <AppLayout>
       <Head title="Dashboard" />
 
-      {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
-                <BookOpen className="size-5 text-primary" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold">{stats.libraryCount}</div>
-                <div className="text-xs text-muted-foreground">Libraries</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
-                <Layers className="size-5 text-primary" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold">{stats.versionCount}</div>
-                <div className="text-xs text-muted-foreground">Versions</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
-                <FileText className="size-5 text-primary" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold">{stats.pageCount}</div>
-                <div className="text-xs text-muted-foreground">Doc Pages</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-orange-500/10">
-                <Clock className="size-5 text-orange-500" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold">{stats.crawlPending}</div>
-                <div className="text-xs text-muted-foreground">Crawl Queue</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Stats — pills on mobile, card strip on desktop */}
+      <div className="flex flex-wrap gap-2 sm:hidden">
+        <Badge variant="secondary" className="gap-1.5 px-2.5 py-1 text-xs">
+          <BookOpen className="size-3" />
+          {stats.libraryCount} libraries
+        </Badge>
+        <Badge variant="secondary" className="gap-1.5 px-2.5 py-1 text-xs">
+          <Layers className="size-3" />
+          {stats.versionCount} versions
+        </Badge>
+        <Badge variant="secondary" className="gap-1.5 px-2.5 py-1 text-xs">
+          <FileText className="size-3" />
+          {stats.pageCount} pages
+        </Badge>
+        <Badge variant="secondary" className="gap-1.5 px-2.5 py-1 text-xs">
+          <Clock className="size-3 text-orange-500" />
+          {stats.crawlPending} queued
+        </Badge>
+      </div>
+      <div className="hidden grid-cols-4 divide-x rounded-lg border bg-card text-card-foreground sm:grid">
+        <div className="flex items-center gap-3 px-4 py-3">
+          <div className="rounded-md bg-primary/10 p-2">
+            <BookOpen className="size-4 text-primary" />
+          </div>
+          <div>
+            <div className="text-2xl font-bold">{stats.libraryCount}</div>
+            <div className="text-xs text-muted-foreground">Libraries</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 px-4 py-3">
+          <div className="rounded-md bg-primary/10 p-2">
+            <Layers className="size-4 text-primary" />
+          </div>
+          <div>
+            <div className="text-2xl font-bold">{stats.versionCount}</div>
+            <div className="text-xs text-muted-foreground">Versions</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 px-4 py-3">
+          <div className="rounded-md bg-primary/10 p-2">
+            <FileText className="size-4 text-primary" />
+          </div>
+          <div>
+            <div className="text-2xl font-bold">{stats.pageCount}</div>
+            <div className="text-xs text-muted-foreground">Doc Pages</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 px-4 py-3">
+          <div className="rounded-md bg-orange-500/10 p-2">
+            <Clock className="size-4 text-orange-500" />
+          </div>
+          <div>
+            <div className="text-2xl font-bold">{stats.crawlPending}</div>
+            <div className="text-xs text-muted-foreground">Crawl Queue</div>
+          </div>
+        </div>
       </div>
 
       {/* Quick Actions */}
-      <div className="mt-6 flex gap-3">
+      <div className="mt-3 flex flex-wrap gap-2 sm:mt-6 sm:gap-3">
         <Button
           nativeButton={false}
           render={<Link href="/crawl/new" />}
@@ -127,7 +129,7 @@ export default function AppDashboard({
           render={<Link href="/crawl" />}
           size="sm"
         >
-          View Crawl Queue
+          Crawl Queue
         </Button>
         <Button
           variant="outline"
@@ -135,13 +137,13 @@ export default function AppDashboard({
           render={<Link href="/libraries" />}
           size="sm"
         >
-          Browse Libraries
+          Libraries
           <ArrowRight className="size-4" />
         </Button>
       </div>
 
       {/* Two-column layout */}
-      <div className="mt-8 grid gap-6 lg:grid-cols-2">
+      <div className="mt-3 grid gap-3 sm:mt-8 sm:gap-6 lg:grid-cols-2">
         {/* Recent Crawl Requests */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">

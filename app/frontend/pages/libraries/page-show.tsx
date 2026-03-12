@@ -11,10 +11,10 @@ import {
 } from "lucide-react"
 
 import { formatBytes } from "@/lib/format-date"
+import { slugify } from "@/lib/heading-slug"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { slugify } from "@/lib/heading-slug"
 import { MarkdownContent } from "@/components/shared/markdown-content"
 import PublicLayout from "@/layouts/public-layout"
 
@@ -71,14 +71,14 @@ export default function LibraryPageShow({ library, version, page }: Props) {
 
   return (
     <PublicLayout title={`${page.title} - ${library.displayName} — ContextQMD`}>
-      <section className="mx-auto max-w-7xl px-4 pt-16 pb-12 sm:px-6 lg:px-8">
+      <section className="mx-auto max-w-7xl px-4 pt-6 pb-8 sm:px-6 sm:pt-16 sm:pb-12 lg:px-8">
         {/* Back link */}
         <Button
           variant="ghost"
           size="sm"
           nativeButton={false}
           render={<Link href={`/libraries/${slug}?version=${version}`} />}
-          className="mb-6"
+          className="mb-4 sm:mb-6"
         >
           <ArrowLeft className="size-4" />
           Back to {library.displayName}

@@ -41,12 +41,12 @@ export default function LibrariesIndex({ libraries, query }: Props) {
 
   return (
     <PublicLayout title="Libraries">
-      <section className="mx-auto max-w-7xl px-4 pt-16 pb-12 sm:px-6 lg:px-8">
+      <section className="mx-auto max-w-7xl px-4 pt-8 pb-6 sm:px-6 sm:pt-16 sm:pb-12 lg:px-8">
         <div className="mx-auto max-w-3xl text-center">
-          <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
+          <h1 className="text-3xl font-bold tracking-tight sm:text-5xl">
             Libraries
           </h1>
-          <p className="mt-4 text-lg text-muted-foreground">
+          <p className="mt-2 text-base text-muted-foreground sm:mt-4 sm:text-lg">
             Browse documentation packages available through the ContextQMD
             registry.
           </p>
@@ -55,7 +55,7 @@ export default function LibrariesIndex({ libraries, query }: Props) {
         {/* Search + Submit */}
         <form
           onSubmit={handleSearch}
-          className="mx-auto mt-10 flex max-w-xl gap-2"
+          className="mx-auto mt-5 flex max-w-xl flex-wrap gap-2 sm:mt-10"
         >
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />

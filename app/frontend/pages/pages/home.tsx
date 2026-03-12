@@ -105,16 +105,16 @@ function LibraryTable({ libraries }: { libraries: LibraryItem[] }) {
     <Table>
       <TableHeader>
         <TableRow className="hover:bg-transparent">
-          <TableHead className="text-xs font-medium tracking-wider text-muted-foreground/70">
+          <TableHead className="pl-4 text-xs font-medium tracking-wider text-muted-foreground/70">
             LIBRARY
           </TableHead>
           <TableHead className="text-xs font-medium tracking-wider text-muted-foreground/70">
             SOURCE
           </TableHead>
-          <TableHead className="text-right text-xs font-medium tracking-wider text-muted-foreground/70">
+          <TableHead className="pr-4 text-right text-xs font-medium tracking-wider text-muted-foreground/70 sm:pr-2">
             PAGES
           </TableHead>
-          <TableHead className="text-right text-xs font-medium tracking-wider text-muted-foreground/70">
+          <TableHead className="hidden pr-4 text-right text-xs font-medium tracking-wider text-muted-foreground/70 sm:table-cell">
             UPDATE
           </TableHead>
         </TableRow>
@@ -122,7 +122,7 @@ function LibraryTable({ libraries }: { libraries: LibraryItem[] }) {
       <TableBody>
         {libraries.map((lib) => (
           <TableRow key={`${lib.namespace}/${lib.name}`}>
-            <TableCell className="py-3.5">
+            <TableCell className="py-3.5 pl-4">
               <Link
                 href={`/libraries/${lib.namespace}/${lib.name}`}
                 className="font-medium text-primary hover:underline"
@@ -158,10 +158,10 @@ function LibraryTable({ libraries }: { libraries: LibraryItem[] }) {
                 </span>
               )}
             </TableCell>
-            <TableCell className="py-3.5 text-right text-sm">
+            <TableCell className="py-3.5 pr-4 text-right text-sm sm:pr-2">
               {formatCount(lib.pageCount)}
             </TableCell>
-            <TableCell className="py-3.5 text-right text-sm text-muted-foreground">
+            <TableCell className="hidden py-3.5 pr-4 text-right text-sm text-muted-foreground sm:table-cell">
               {formatTimeAgo(lib.updatedAt)}
             </TableCell>
           </TableRow>
@@ -225,13 +225,13 @@ export default function Home({ libraryCount, libraries }: Props) {
       {/* Hero */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_30%_20%,_var(--muted)_0%,_transparent_50%)]" />
-        <div className="mx-auto max-w-7xl px-4 pt-16 pb-8 sm:px-6 sm:pt-20 sm:pb-12 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 pt-8 pb-6 sm:px-6 sm:pt-20 sm:pb-12 lg:px-8">
           <div className="mx-auto max-w-3xl text-center">
-            <h1 className="text-4xl font-bold tracking-tight sm:text-6xl">
+            <h1 className="text-3xl font-bold tracking-tight sm:text-6xl">
               Local-first docs{" "}
               <span className="text-muted-foreground">for your AI editor</span>
             </h1>
-            <p className="mx-auto mt-4 max-w-xl text-lg/relaxed text-muted-foreground">
+            <p className="mx-auto mt-2 max-w-xl text-base/relaxed text-muted-foreground sm:mt-4 sm:text-lg/relaxed">
               Install documentation packages locally. Search offline with hybrid
               retrieval. Version-pinned and always available.
             </p>
@@ -239,7 +239,7 @@ export default function Home({ libraryCount, libraries }: Props) {
             {/* Search bar */}
             <form
               onSubmit={handleSearch}
-              className="mx-auto mt-8 flex max-w-lg gap-2"
+              className="mx-auto mt-5 flex max-w-lg gap-2 sm:mt-8"
             >
               <div className="relative flex-1">
                 <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -260,7 +260,7 @@ export default function Home({ libraryCount, libraries }: Props) {
       {/* Library Table — context7 style */}
       <section className="mx-auto max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
         <Tabs defaultValue="popular">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <TabsList>
               <TabsTrigger value="popular" className="gap-1.5">
                 <Star className="size-3.5" />
@@ -311,7 +311,7 @@ export default function Home({ libraryCount, libraries }: Props) {
 
       {/* MCP Quickstart */}
       <section className="border-t">
-        <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-24 lg:px-8">
           <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
             <div>
               <Badge variant="secondary" className="mb-3">
@@ -374,7 +374,7 @@ export default function Home({ libraryCount, libraries }: Props) {
 
       {/* Features */}
       <section className="border-t bg-muted/10">
-        <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-24 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
               How it works
@@ -408,7 +408,7 @@ export default function Home({ libraryCount, libraries }: Props) {
 
       {/* CTA */}
       <section className="border-t">
-        <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-24 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
               Start using ContextQMD

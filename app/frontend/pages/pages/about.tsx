@@ -47,15 +47,15 @@ const techStack = [
 export default function About() {
   return (
     <PublicLayout title="About">
-      <section className="mx-auto max-w-7xl px-4 pt-20 pb-12 sm:px-6 lg:px-8">
+      <section className="mx-auto max-w-7xl px-4 pt-8 pb-6 sm:px-6 sm:pt-16 sm:pb-12 lg:px-8">
         <div className="mx-auto max-w-3xl">
           <p className="text-sm font-medium tracking-widest text-muted-foreground uppercase">
             About
           </p>
-          <h1 className="mt-3 text-4xl font-bold tracking-tight sm:text-5xl">
+          <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-5xl">
             Documentation for the AI era
           </h1>
-          <div className="mt-8 space-y-6 text-lg/relaxed text-muted-foreground">
+          <div className="mt-4 space-y-6 text-base/relaxed text-muted-foreground sm:mt-8 sm:text-lg/relaxed">
             <p>
               ContextQMD is a documentation package system built for MCP-enabled
               AI coding tools. Instead of hitting APIs for every query, you
@@ -73,7 +73,7 @@ export default function About() {
       </section>
 
       <section className="border-t">
-        <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-24 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
               Design principles
@@ -96,7 +96,7 @@ export default function About() {
       </section>
 
       <section className="border-t bg-muted/10">
-        <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-24 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
               How it fits together

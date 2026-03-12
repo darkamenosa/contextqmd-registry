@@ -3,17 +3,17 @@ import PublicLayout from "@/layouts/public-layout"
 export default function Privacy() {
   return (
     <PublicLayout title="Privacy Policy">
-      <section className="mx-auto max-w-3xl px-4 py-20 sm:px-6 lg:px-8">
+      <section className="mx-auto max-w-3xl px-4 pt-8 pb-12 sm:px-6 sm:pt-16 sm:pb-20 lg:px-8">
         <p className="text-sm font-medium tracking-widest text-muted-foreground uppercase">
           Legal
         </p>
-        <h1 className="mt-3 text-4xl font-bold tracking-tight">
+        <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
           Privacy Policy
         </h1>
         <p className="mt-4 text-sm text-muted-foreground">
           Last updated: March 2026
         </p>
-        <div className="mt-12 space-y-8 text-sm/relaxed text-muted-foreground">
+        <div className="mt-8 space-y-8 text-sm/relaxed text-muted-foreground sm:mt-12">
           <div>
             <h2 className="text-base font-semibold text-foreground">
               1. Information We Collect

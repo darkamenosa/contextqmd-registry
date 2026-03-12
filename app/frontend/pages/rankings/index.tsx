@@ -99,13 +99,13 @@ export default function RankingsIndex({ libraries, totalLibraries }: Props) {
           "Documentation coverage rankings for libraries on ContextQMD. Sorted by page count, versions, and freshness.",
       }}
     >
-      <section className="mx-auto max-w-7xl px-4 pt-16 pb-8 sm:px-6 lg:px-8">
+      <section className="mx-auto max-w-7xl px-4 pt-8 pb-6 sm:px-6 sm:pt-16 sm:pb-12 lg:px-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
+            <h1 className="text-3xl font-bold tracking-tight sm:text-5xl">
               Rankings
             </h1>
-            <p className="mt-4 text-lg text-muted-foreground">
+            <p className="mt-2 text-base text-muted-foreground sm:mt-4 sm:text-lg">
               Libraries ranked by documentation coverage — page count, version
               depth, and how recently docs were updated.
             </p>
@@ -115,7 +115,7 @@ export default function RankingsIndex({ libraries, totalLibraries }: Props) {
           </Badge>
         </div>
 
-        <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="mt-4 hidden gap-4 sm:mt-8 sm:grid sm:grid-cols-3">
           <Card>
             <CardContent className="flex items-start gap-3 pt-6">
               <FileText className="mt-0.5 size-5 shrink-0 text-primary" />
@@ -153,7 +153,7 @@ export default function RankingsIndex({ libraries, totalLibraries }: Props) {
       </section>
 
       {/* Rankings Table */}
-      <section className="mx-auto max-w-7xl px-4 pb-24 sm:px-6 lg:px-8">
+      <section className="mx-auto max-w-7xl px-4 pb-12 sm:px-6 sm:pb-24 lg:px-8">
         {libraries.length === 0 ? (
           <div className="mx-auto max-w-md py-16 text-center">
             <BarChart3 className="mx-auto size-12 text-muted-foreground/50" />
@@ -169,18 +169,24 @@ export default function RankingsIndex({ libraries, totalLibraries }: Props) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-12">RANK</TableHead>
+                  <TableHead className="w-12 pl-4">RANK</TableHead>
                   <TableHead>LIBRARY</TableHead>
                   <TableHead className="text-right">PAGES</TableHead>
-                  <TableHead className="text-right">VERSIONS</TableHead>
-                  <TableHead>FRESHNESS</TableHead>
-                  <TableHead className="text-right">UPDATED</TableHead>
+                  <TableHead className="pr-4 text-right sm:pr-2">
+                    VERSIONS
+                  </TableHead>
+                  <TableHead className="hidden sm:table-cell">
+                    FRESHNESS
+                  </TableHead>
+                  <TableHead className="hidden pr-4 text-right sm:table-cell">
+                    UPDATED
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {libraries.map((lib) => (
                   <TableRow key={`${lib.namespace}/${lib.name}`}>
-                    <TableCell>
+                    <TableCell className="pl-4">
                       <RankBadge rank={lib.rank} />
                     </TableCell>
                     <TableCell>
@@ -192,7 +198,7 @@ export default function RankingsIndex({ libraries, totalLibraries }: Props) {
                           <span className="font-medium text-primary group-hover:underline">
                             {lib.displayName}
                           </span>
-                          <span className="ml-2 text-sm text-muted-foreground">
+                          <span className="ml-2 hidden text-sm text-muted-foreground sm:inline">
                             /{lib.namespace}/{lib.name}
                           </span>
                         </div>
@@ -202,13 +208,13 @@ export default function RankingsIndex({ libraries, totalLibraries }: Props) {
                     <TableCell className="text-right font-mono text-sm">
                       {lib.pageCount}
                     </TableCell>
-                    <TableCell className="text-right font-mono text-sm">
+                    <TableCell className="pr-4 text-right font-mono text-sm sm:pr-2">
                       {lib.versionCount}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden sm:table-cell">
                       <FreshnessBar pct={lib.freshnessPct} />
                     </TableCell>
-                    <TableCell className="text-right text-sm text-muted-foreground">
+                    <TableCell className="hidden pr-4 text-right text-sm text-muted-foreground sm:table-cell">
                       {formatTimeAgo(lib.updatedAt)}
                     </TableCell>
                   </TableRow>

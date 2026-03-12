@@ -6,15 +6,15 @@ import PublicLayout from "@/layouts/public-layout"
 export default function Contact() {
   return (
     <PublicLayout title="Contact">
-      <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
+      <section className="mx-auto max-w-7xl px-4 pt-8 pb-12 sm:px-6 sm:pt-16 sm:pb-20 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
           <p className="text-sm font-medium tracking-widest text-muted-foreground uppercase">
             Contact
           </p>
-          <h1 className="mt-3 text-4xl font-bold tracking-tight">
+          <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
             Get in touch
           </h1>
-          <p className="mt-6 text-lg text-muted-foreground">
+          <p className="mt-3 text-base text-muted-foreground sm:mt-6 sm:text-lg">
             ContextQMD is an open-source project. For questions, bug reports,
             and feature requests, open an issue on GitHub or reach out via
             email.

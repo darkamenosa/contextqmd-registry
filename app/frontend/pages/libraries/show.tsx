@@ -11,12 +11,13 @@ import {
   ExternalLink,
   FileText,
   Globe,
+  Layers,
   Search,
   Terminal,
   X,
 } from "lucide-react"
+
 import { formatBytes } from "@/lib/format-date"
-import { MarkdownContent } from "@/components/shared/markdown-content"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -38,6 +39,7 @@ import {
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { LicenseBadge } from "@/components/shared/license-badge"
+import { MarkdownContent } from "@/components/shared/markdown-content"
 import { SourceTypeIcon } from "@/components/shared/source-type-icon"
 import PublicLayout from "@/layouts/public-layout"
 
@@ -245,21 +247,21 @@ install_docs({ library: "${slug}" })`
 
   return (
     <PublicLayout title={`${library.displayName} — ContextQMD`}>
-      <section className="mx-auto max-w-7xl px-4 pt-16 pb-12 sm:px-6 lg:px-8">
+      <section className="mx-auto max-w-7xl px-4 pt-6 pb-4 sm:px-6 sm:pt-16 sm:pb-12 lg:px-8">
         {/* Back link */}
         <Button
           variant="ghost"
           size="sm"
           nativeButton={false}
           render={<Link href="/libraries" />}
-          className="mb-6"
+          className="mb-4 sm:mb-6"
         >
           <ArrowLeft className="size-4" />
           Back to Libraries
         </Button>
 
         {/* Header */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
               {library.displayName}
@@ -304,31 +306,54 @@ install_docs({ library: "${slug}" })`
           </div>
         </div>
 
-        {/* Quick stats */}
-        <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Card>
-            <CardContent className="pt-6">
+        {/* Quick stats — pills on mobile, card strip on desktop */}
+        <div className="mt-4 flex flex-wrap gap-2 sm:hidden">
+          <Badge variant="secondary" className="gap-1.5 px-2.5 py-1 text-xs">
+            <Layers className="size-3" />
+            {versions.length} versions
+          </Badge>
+          <Badge variant="secondary" className="gap-1.5 px-2.5 py-1 text-xs">
+            <FileText className="size-3" />
+            {selectedVersionData?.pageCount ?? pagination.total} pages
+            {selectedVersion ? ` (${selectedVersion})` : ""}
+          </Badge>
+          <Badge variant="secondary" className="gap-1.5 px-2.5 py-1 text-xs">
+            <Globe className="size-3" />
+            {library.aliases.length} aliases
+          </Badge>
+        </div>
+        <div className="mt-8 hidden grid-cols-3 divide-x rounded-lg border bg-card text-card-foreground sm:grid">
+          <div className="flex items-center gap-3 px-4 py-3">
+            <div className="rounded-md bg-muted p-2">
+              <Layers className="size-4 text-muted-foreground" />
+            </div>
+            <div>
               <div className="text-2xl font-bold">{versions.length}</div>
-              <div className="text-sm text-muted-foreground">Versions</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
+              <div className="text-xs text-muted-foreground">Versions</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 px-4 py-3">
+            <div className="rounded-md bg-muted p-2">
+              <FileText className="size-4 text-muted-foreground" />
+            </div>
+            <div>
               <div className="text-2xl font-bold">
                 {selectedVersionData?.pageCount ?? pagination.total}
               </div>
-              <div className="text-sm text-muted-foreground">
-                Pages
-                {selectedVersion ? ` (${selectedVersion})` : ""}
+              <div className="text-xs text-muted-foreground">
+                Pages{selectedVersion ? ` (${selectedVersion})` : ""}
               </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
+            </div>
+          </div>
+          <div className="flex items-center gap-3 px-4 py-3">
+            <div className="rounded-md bg-muted p-2">
+              <Globe className="size-4 text-muted-foreground" />
+            </div>
+            <div>
               <div className="text-2xl font-bold">{library.aliases.length}</div>
-              <div className="text-sm text-muted-foreground">Aliases</div>
-            </CardContent>
-          </Card>
+              <div className="text-xs text-muted-foreground">Aliases</div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -351,9 +376,9 @@ install_docs({ library: "${slug}" })`
           </TabsList>
 
           {/* Pages tab */}
-          <TabsContent value="pages" className="mt-6">
+          <TabsContent value="pages" className="mt-4 sm:mt-6">
             {/* Toolbar: unified filter bar */}
-            <div className="mb-5 flex flex-col gap-2 rounded-lg border bg-muted/20 p-2 sm:flex-row sm:items-center sm:gap-3">
+            <div className="mb-3 flex flex-col gap-2 rounded-lg border bg-muted/20 p-2 sm:mb-5 sm:flex-row sm:items-center sm:gap-3">
               {versions.length > 1 && (
                 <div className="flex shrink-0 items-center gap-2">
                   <Select
@@ -478,9 +503,9 @@ install_docs({ library: "${slug}" })`
                             </div>
                             {page.headings.length > 1 && (
                               <div className="mt-1.5 flex flex-wrap gap-1">
-                                {page.headings.slice(1, 5).map((h) => (
+                                {page.headings.slice(1, 5).map((h, i) => (
                                   <span
-                                    key={h}
+                                    key={`${h}-${i}`}
                                     className="inline-block rounded-xs bg-muted px-1.5 py-0.5 text-[11px]/3 text-muted-foreground"
                                   >
                                     {h}
@@ -578,21 +603,23 @@ install_docs({ library: "${slug}" })`
                 No versions published yet.
               </p>
             ) : (
-              <div className="rounded-xl border">
+              <div className="overflow-x-auto rounded-xl border">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Version</TableHead>
+                      <TableHead className="pl-4">Version</TableHead>
                       <TableHead>Channel</TableHead>
-                      <TableHead>Generated</TableHead>
+                      <TableHead className="hidden sm:table-cell">
+                        Generated
+                      </TableHead>
                       <TableHead className="text-right">Pages</TableHead>
-                      <TableHead />
+                      <TableHead className="pr-4" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {versions.map((v) => (
                       <TableRow key={v.version}>
-                        <TableCell className="font-medium">
+                        <TableCell className="pl-4 font-medium">
                           {v.version}
                           {v.version === selectedVersion && (
                             <Badge variant="secondary" className="ml-2 text-xs">
@@ -608,11 +635,13 @@ install_docs({ library: "${slug}" })`
                         <TableCell>
                           <ChannelBadge channel={v.channel} />
                         </TableCell>
-                        <TableCell>{formatDate(v.generatedAt)}</TableCell>
+                        <TableCell className="hidden sm:table-cell">
+                          {formatDate(v.generatedAt)}
+                        </TableCell>
                         <TableCell className="text-right">
                           {v.pageCount}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="pr-4 text-right">
                           {v.version !== selectedVersion && (
                             <Button
                               variant="ghost"

@@ -170,16 +170,16 @@ function TaskTable({
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
-            <TableHead className="text-xs font-medium tracking-wider text-muted-foreground/70">
+            <TableHead className="pl-4 text-xs font-medium tracking-wider text-muted-foreground/70">
               LIBRARY
             </TableHead>
             <TableHead className="text-xs font-medium tracking-wider text-muted-foreground/70">
               SOURCE
             </TableHead>
-            <TableHead className="text-xs font-medium tracking-wider text-muted-foreground/70">
+            <TableHead className="pr-4 text-xs font-medium tracking-wider text-muted-foreground/70 sm:pr-2">
               STATE
             </TableHead>
-            <TableHead className="text-right text-xs font-medium tracking-wider text-muted-foreground/70">
+            <TableHead className="hidden pr-4 text-right text-xs font-medium tracking-wider text-muted-foreground/70 sm:table-cell">
               TIME
             </TableHead>
           </TableRow>
@@ -189,7 +189,7 @@ function TaskTable({
             const source = getSourceTypeConfig(cr.sourceType)
             return (
               <TableRow key={cr.id}>
-                <TableCell>
+                <TableCell className="pl-4">
                   {cr.librarySlug ? (
                     <Link
                       href={`/libraries/${cr.librarySlug}`}
@@ -215,8 +215,10 @@ function TaskTable({
                     <ExternalLink className="size-3 text-muted-foreground/50 group-hover:text-foreground" />
                   </a>
                 </TableCell>
-                <TableCell>{stateDisplay(cr)}</TableCell>
-                <TableCell className="text-right text-sm text-muted-foreground">
+                <TableCell className="pr-4 sm:pr-2">
+                  {stateDisplay(cr)}
+                </TableCell>
+                <TableCell className="hidden pr-4 text-right text-sm text-muted-foreground sm:table-cell">
                   {cr.status === "completed" || cr.status === "failed"
                     ? formatElapsed(cr.updatedAt)
                     : formatElapsed(cr.createdAt)}
@@ -245,13 +247,13 @@ export default function CrawlRequestsIndex({ crawlRequests, counts }: Props) {
 
   return (
     <PublicLayout title="Documentation Queue">
-      <section className="mx-auto max-w-7xl px-4 pt-16 pb-12 sm:px-6 lg:px-8">
+      <section className="mx-auto max-w-7xl px-4 pt-8 pb-6 sm:px-6 sm:pt-16 sm:pb-12 lg:px-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
+            <h1 className="text-3xl font-bold tracking-tight sm:text-5xl">
               Documentation Queue
             </h1>
-            <p className="mt-4 text-lg text-muted-foreground">
+            <p className="mt-2 text-base text-muted-foreground sm:mt-4 sm:text-lg">
               Documentation crawling and indexing tasks.
             </p>
           </div>
