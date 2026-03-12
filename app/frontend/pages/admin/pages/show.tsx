@@ -96,12 +96,12 @@ export default function AdminPageShow({ page, version, library }: Props) {
                 <CardTitle className="text-base">Details</CardTitle>
               </CardHeader>
               <CardContent>
-                <dl className="space-y-3 text-sm">
-                  <div>
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                  <div className="col-span-2">
                     <dt className="text-muted-foreground">Page UID</dt>
                     <dd className="mt-0.5 font-mono text-xs">{page.pageUid}</dd>
                   </div>
-                  <div>
+                  <div className="col-span-2">
                     <dt className="text-muted-foreground">Path</dt>
                     <dd className="mt-0.5 font-mono text-xs">{page.path}</dd>
                   </div>
@@ -122,7 +122,7 @@ export default function AdminPageShow({ page, version, library }: Props) {
                     </div>
                   )}
                   {page.url && (
-                    <div>
+                    <div className="col-span-2">
                       <dt className="text-muted-foreground">URL</dt>
                       <dd className="mt-0.5">
                         <a
@@ -140,7 +140,7 @@ export default function AdminPageShow({ page, version, library }: Props) {
                     </div>
                   )}
                   {page.checksum && (
-                    <div>
+                    <div className="col-span-2">
                       <dt className="text-muted-foreground">Checksum</dt>
                       <dd className="mt-0.5 font-mono text-[11px] text-muted-foreground">
                         {page.checksum.slice(0, 12)}...

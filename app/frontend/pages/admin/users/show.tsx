@@ -113,7 +113,9 @@ function MembershipRow({
           <StatusBadge status={m.active ? "active" : "inactive"} />
         )}
       </td>
-      <td className="px-4 py-3 text-sm">{formatDateShort(m.createdAt)}</td>
+      <td className="hidden px-4 py-3 text-sm sm:table-cell">
+        {formatDateShort(m.createdAt)}
+      </td>
     </tr>
   )
 }
@@ -156,7 +158,7 @@ function MembershipsCard({
                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
                   Status
                 </th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                <th className="hidden px-4 py-3 text-left text-sm font-medium text-muted-foreground sm:table-cell">
                   Joined
                 </th>
               </tr>

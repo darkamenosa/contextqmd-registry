@@ -247,7 +247,7 @@ install_docs({ library: "${slug}" })`
 
   return (
     <PublicLayout title={`${library.displayName} — ContextQMD`}>
-      <section className="mx-auto max-w-7xl px-4 pt-6 pb-4 sm:px-6 sm:pt-16 sm:pb-12 lg:px-8">
+      <section className="mx-auto max-w-7xl px-4 pt-6 pb-4 sm:px-6 sm:pt-16 sm:pb-6 lg:px-8">
         {/* Back link */}
         <Button
           variant="ghost"
@@ -322,7 +322,7 @@ install_docs({ library: "${slug}" })`
             {library.aliases.length} aliases
           </Badge>
         </div>
-        <div className="mt-8 hidden grid-cols-3 divide-x rounded-lg border bg-card text-card-foreground sm:grid">
+        <div className="mt-6 hidden grid-cols-3 divide-x rounded-lg border bg-card text-card-foreground sm:grid">
           <div className="flex items-center gap-3 px-4 py-3">
             <div className="rounded-md bg-muted p-2">
               <Layers className="size-4 text-muted-foreground" />

@@ -129,7 +129,7 @@ export default function AppCrawlRequestsNew() {
         {/* Source Type Selection */}
         <div>
           <h2 className="mb-3 text-sm font-semibold">Source type</h2>
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-6">
             {sourceTypes.map((source) => {
               const isSelected = data.sourceType === source.value
               return (

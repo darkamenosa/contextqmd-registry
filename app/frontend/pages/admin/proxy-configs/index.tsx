@@ -134,14 +134,49 @@ export default function AdminProxyConfigsIndex({
   }, [query, filters.query, navigate])
 
   const columns: IndexTableColumn[] = [
-    { id: "name", label: "Proxy", sortable: true },
+    {
+      id: "name",
+      label: "Proxy",
+      sortable: true,
+      headerClassName: "pl-4",
+      cellClassName: "pl-4",
+    },
     { id: "host", label: "Endpoint", sortable: true },
-    { id: "kind", label: "Type" },
-    { id: "usage_scope", label: "Scope" },
-    { id: "priority", label: "Priority", sortable: true, align: "end" },
+    {
+      id: "kind",
+      label: "Type",
+      headerClassName: "hidden sm:table-cell",
+      cellClassName: "hidden sm:table-cell",
+    },
+    {
+      id: "usage_scope",
+      label: "Scope",
+      headerClassName: "hidden sm:table-cell",
+      cellClassName: "hidden sm:table-cell",
+    },
+    {
+      id: "priority",
+      label: "Priority",
+      sortable: true,
+      align: "end",
+      headerClassName: "hidden sm:table-cell",
+      cellClassName: "hidden sm:table-cell",
+    },
     { id: "health", label: "Health" },
-    { id: "capacity", label: "Capacity", align: "end" },
-    { id: "last_activity", label: "Last Activity", align: "end" },
+    {
+      id: "capacity",
+      label: "Capacity",
+      align: "end",
+      headerClassName: "hidden sm:table-cell",
+      cellClassName: "hidden sm:table-cell",
+    },
+    {
+      id: "last_activity",
+      label: "Last Activity",
+      align: "end",
+      headerClassName: "hidden sm:table-cell pr-4",
+      cellClassName: "hidden sm:table-cell pr-4",
+    },
   ]
 
   const sort: IndexTableSort = {

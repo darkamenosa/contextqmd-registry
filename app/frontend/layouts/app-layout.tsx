@@ -14,7 +14,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
       <AppSidebar />
       <SidebarInset>
         <AppSiteHeader />
-        <div className="@container/main flex flex-1 flex-col gap-4 p-4">
+        <div className="@container/main flex min-w-0 flex-1 flex-col gap-4 overflow-hidden p-4">
           {children}
         </div>
       </SidebarInset>

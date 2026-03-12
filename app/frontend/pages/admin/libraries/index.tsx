@@ -85,12 +85,42 @@ export default function AdminLibrariesIndex({
   }, [query, filters.query, navigate])
 
   const columns: IndexTableColumn[] = [
-    { id: "display_name", label: "Library", sortable: true },
+    {
+      id: "display_name",
+      label: "Library",
+      sortable: true,
+      headerClassName: "pl-4",
+      cellClassName: "pl-4",
+    },
     { id: "namespace", label: "Slug", sortable: true },
-    { id: "account_name", label: "Account" },
-    { id: "versions", label: "Versions", align: "end" },
-    { id: "pages", label: "Pages", align: "end" },
-    { id: "updated_at", label: "Updated", sortable: true, align: "end" },
+    {
+      id: "account_name",
+      label: "Account",
+      headerClassName: "hidden sm:table-cell",
+      cellClassName: "hidden sm:table-cell",
+    },
+    {
+      id: "versions",
+      label: "Versions",
+      align: "end",
+      headerClassName: "hidden sm:table-cell",
+      cellClassName: "hidden sm:table-cell",
+    },
+    {
+      id: "pages",
+      label: "Pages",
+      align: "end",
+      headerClassName: "hidden sm:table-cell",
+      cellClassName: "hidden sm:table-cell",
+    },
+    {
+      id: "updated_at",
+      label: "Updated",
+      sortable: true,
+      align: "end",
+      headerClassName: "hidden sm:table-cell pr-4",
+      cellClassName: "hidden sm:table-cell pr-4",
+    },
   ]
 
   const sort: IndexTableSort = {

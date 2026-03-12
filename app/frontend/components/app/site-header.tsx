@@ -1,3 +1,4 @@
+import { Fragment } from "react"
 import { usePage } from "@inertiajs/react"
 
 import {
@@ -59,16 +60,21 @@ export function AppSiteHeader() {
         <Breadcrumb>
           <BreadcrumbList>
             {breadcrumbs.map((crumb, i) => (
-              <BreadcrumbItem key={crumb.label}>
+              <Fragment key={crumb.label}>
                 {i > 0 && <BreadcrumbSeparator className="hidden md:block" />}
-                {crumb.href ? (
-                  <BreadcrumbLink href={crumb.href} className="hidden md:block">
-                    {crumb.label}
-                  </BreadcrumbLink>
-                ) : (
-                  <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
-                )}
-              </BreadcrumbItem>
+                <BreadcrumbItem>
+                  {crumb.href ? (
+                    <BreadcrumbLink
+                      href={crumb.href}
+                      className="hidden md:block"
+                    >
+                      {crumb.label}
+                    </BreadcrumbLink>
+                  ) : (
+                    <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
+                  )}
+                </BreadcrumbItem>
+              </Fragment>
             ))}
           </BreadcrumbList>
         </Breadcrumb>

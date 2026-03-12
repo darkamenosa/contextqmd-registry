@@ -261,10 +261,10 @@ function TokensTable({ tokens }: { tokens: AccessToken[] }) {
                   <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
                     Permission
                   </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                  <th className="hidden px-4 py-3 text-left text-sm font-medium text-muted-foreground sm:table-cell">
                     Created
                   </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                  <th className="hidden px-4 py-3 text-left text-sm font-medium text-muted-foreground sm:table-cell">
                     Last used
                   </th>
                   <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">
@@ -295,10 +295,10 @@ function TokensTable({ tokens }: { tokens: AccessToken[] }) {
                             : "Read"}
                         </Badge>
                       </td>
-                      <td className="px-4 py-3 text-sm">
+                      <td className="hidden px-4 py-3 text-sm sm:table-cell">
                         {formatDateShort(token.createdAt)}
                       </td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground">
+                      <td className="hidden px-4 py-3 text-sm text-muted-foreground sm:table-cell">
                         {token.lastUsedAt
                           ? formatDateShort(token.lastUsedAt)
                           : "Never"}

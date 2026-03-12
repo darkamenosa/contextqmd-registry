@@ -135,12 +135,35 @@ export default function AdminUsersIndex({
   }
 
   const columns: IndexTableColumn[] = [
-    { id: "email", label: "User", sortable: true },
-    { id: "auth_method", label: "Auth" },
-    { id: "staff", label: "Staff" },
+    {
+      id: "email",
+      label: "User",
+      sortable: true,
+      headerClassName: "pl-4",
+      cellClassName: "pl-4",
+    },
+    {
+      id: "auth_method",
+      label: "Auth",
+      headerClassName: "hidden sm:table-cell",
+      cellClassName: "hidden sm:table-cell",
+    },
+    {
+      id: "staff",
+      label: "Staff",
+      headerClassName: "hidden sm:table-cell",
+      cellClassName: "hidden sm:table-cell",
+    },
     { id: "status", label: "Login" },
     { id: "accounts_count", label: "Accounts" },
-    { id: "created_at", label: "Joined", sortable: true },
+    {
+      id: "created_at",
+      label: "Joined",
+      sortable: true,
+      headerClassName: "hidden sm:table-cell pr-4",
+      cellClassName: "hidden sm:table-cell pr-4",
+      align: "end",
+    },
   ]
 
   const sort: IndexTableSort = {

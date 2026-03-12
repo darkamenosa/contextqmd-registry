@@ -49,7 +49,7 @@ function PageRow({ page }: { page: AdminPage }) {
 
   return (
     <TableRow>
-      <TableCell>
+      <TableCell className="pl-4">
         <Link
           href={`/admin/pages/${page.id}`}
           className="text-sm font-medium hover:underline"
@@ -57,13 +57,13 @@ function PageRow({ page }: { page: AdminPage }) {
           {page.title}
         </Link>
       </TableCell>
-      <TableCell className="font-mono text-xs text-muted-foreground">
+      <TableCell className="hidden font-mono text-xs text-muted-foreground sm:table-cell">
         {page.path}
       </TableCell>
-      <TableCell className="text-right text-sm text-muted-foreground">
+      <TableCell className="hidden text-right text-sm text-muted-foreground sm:table-cell">
         {formatBytes(page.bytes)}
       </TableCell>
-      <TableCell className="text-right">
+      <TableCell className="pr-4 text-right">
         <div className="flex items-center justify-end gap-1">
           <Button
             variant="ghost"
@@ -221,10 +221,14 @@ export default function AdminVersionPagesIndex({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Path</TableHead>
-                  <TableHead className="text-right">Size</TableHead>
-                  <TableHead className="w-28 text-right">Actions</TableHead>
+                  <TableHead className="pl-4">Title</TableHead>
+                  <TableHead className="hidden sm:table-cell">Path</TableHead>
+                  <TableHead className="hidden text-right sm:table-cell">
+                    Size
+                  </TableHead>
+                  <TableHead className="w-28 pr-4 text-right">
+                    Actions
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

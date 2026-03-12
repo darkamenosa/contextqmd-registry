@@ -54,7 +54,10 @@ export function parseMarkdownWithTabs(md: string): ContentSegment[] {
         const tabMatch = lines[i].match(/^==\s+(.+)$/)
         if (tabMatch) {
           if (currentTab) {
-            tabs.push({ name: currentTab.name, content: currentTab.content.trim() })
+            tabs.push({
+              name: currentTab.name,
+              content: currentTab.content.trim(),
+            })
           }
           currentTab = { name: tabMatch[1].trim(), content: "" }
         } else if (currentTab) {

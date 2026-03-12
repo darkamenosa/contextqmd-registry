@@ -5,12 +5,7 @@ import remarkGfm from "remark-gfm"
 import { cleanMarkdown } from "@/lib/format-date"
 import { slugify } from "@/lib/heading-slug"
 import { parseMarkdownWithTabs } from "@/lib/parse-markdown-tabs"
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "@/components/ui/tabs"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 const remarkPlugins = [remarkGfm]
 

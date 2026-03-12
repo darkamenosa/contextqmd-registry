@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 
 import { formatTimeAgo } from "@/lib/format-date"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -99,53 +100,63 @@ export default function AdminDashboard({ stats, recentCrawls }: Props) {
         <h2 className="mt-4 mb-3 text-sm font-medium text-muted-foreground">
           Registry
         </h2>
-        <div className="grid gap-4 md:grid-cols-4">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <BookOpen className="size-5 text-muted-foreground" />
-                <div>
-                  <div className="text-2xl font-bold">{stats.libraryCount}</div>
-                  <div className="text-xs text-muted-foreground">Libraries</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <Layers className="size-5 text-muted-foreground" />
-                <div>
-                  <div className="text-2xl font-bold">{stats.versionCount}</div>
-                  <div className="text-xs text-muted-foreground">Versions</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <FileText className="size-5 text-muted-foreground" />
-                <div>
-                  <div className="text-2xl font-bold">{stats.pageCount}</div>
-                  <div className="text-xs text-muted-foreground">Doc Pages</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <Users className="size-5 text-muted-foreground" />
-                <div>
-                  <div className="text-2xl font-bold">
-                    {stats.identityCount}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Users</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Mobile: pills */}
+        <div className="flex flex-wrap gap-2 sm:hidden">
+          <Badge variant="secondary" className="gap-1.5 px-2.5 py-1 text-xs">
+            <BookOpen className="size-3" />
+            {stats.libraryCount} libraries
+          </Badge>
+          <Badge variant="secondary" className="gap-1.5 px-2.5 py-1 text-xs">
+            <Layers className="size-3" />
+            {stats.versionCount} versions
+          </Badge>
+          <Badge variant="secondary" className="gap-1.5 px-2.5 py-1 text-xs">
+            <FileText className="size-3" />
+            {stats.pageCount} pages
+          </Badge>
+          <Badge variant="secondary" className="gap-1.5 px-2.5 py-1 text-xs">
+            <Users className="size-3" />
+            {stats.identityCount} users
+          </Badge>
+        </div>
+        {/* Desktop: single card strip with dividers */}
+        <div className="hidden grid-cols-4 divide-x rounded-lg border bg-card text-card-foreground sm:grid">
+          <div className="flex items-center gap-3 px-4 py-3">
+            <div className="rounded-md bg-muted p-2">
+              <BookOpen className="size-4 text-muted-foreground" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold">{stats.libraryCount}</div>
+              <div className="text-xs text-muted-foreground">Libraries</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 px-4 py-3">
+            <div className="rounded-md bg-muted p-2">
+              <Layers className="size-4 text-muted-foreground" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold">{stats.versionCount}</div>
+              <div className="text-xs text-muted-foreground">Versions</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 px-4 py-3">
+            <div className="rounded-md bg-muted p-2">
+              <FileText className="size-4 text-muted-foreground" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold">{stats.pageCount}</div>
+              <div className="text-xs text-muted-foreground">Doc Pages</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 px-4 py-3">
+            <div className="rounded-md bg-muted p-2">
+              <Users className="size-4 text-muted-foreground" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold">{stats.identityCount}</div>
+              <div className="text-xs text-muted-foreground">Users</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -154,57 +165,63 @@ export default function AdminDashboard({ stats, recentCrawls }: Props) {
         <h2 className="mb-3 text-sm font-medium text-muted-foreground">
           Crawl Queue
         </h2>
-        <div className="grid gap-4 md:grid-cols-4">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <Clock className="size-5 text-orange-500" />
-                <div>
-                  <div className="text-2xl font-bold">{stats.crawlPending}</div>
-                  <div className="text-xs text-muted-foreground">Pending</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <Loader2 className="size-5 text-blue-500" />
-                <div>
-                  <div className="text-2xl font-bold">
-                    {stats.crawlProcessing}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    Processing
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <CheckCircle className="size-5 text-green-500" />
-                <div>
-                  <div className="text-2xl font-bold">
-                    {stats.crawlCompleted}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Completed</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <XCircle className="size-5 text-red-500" />
-                <div>
-                  <div className="text-2xl font-bold">{stats.crawlFailed}</div>
-                  <div className="text-xs text-muted-foreground">Failed</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Mobile: pills */}
+        <div className="flex flex-wrap gap-2 sm:hidden">
+          <Badge variant="secondary" className="gap-1.5 px-2.5 py-1 text-xs">
+            <Clock className="size-3 text-orange-500" />
+            {stats.crawlPending} pending
+          </Badge>
+          <Badge variant="secondary" className="gap-1.5 px-2.5 py-1 text-xs">
+            <Loader2 className="size-3 text-blue-500" />
+            {stats.crawlProcessing} processing
+          </Badge>
+          <Badge variant="secondary" className="gap-1.5 px-2.5 py-1 text-xs">
+            <CheckCircle className="size-3 text-green-500" />
+            {stats.crawlCompleted} completed
+          </Badge>
+          <Badge variant="secondary" className="gap-1.5 px-2.5 py-1 text-xs">
+            <XCircle className="size-3 text-red-500" />
+            {stats.crawlFailed} failed
+          </Badge>
+        </div>
+        {/* Desktop: single card strip with dividers */}
+        <div className="hidden grid-cols-4 divide-x rounded-lg border bg-card text-card-foreground sm:grid">
+          <div className="flex items-center gap-3 px-4 py-3">
+            <div className="rounded-md bg-muted p-2">
+              <Clock className="size-4 text-orange-500" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold">{stats.crawlPending}</div>
+              <div className="text-xs text-muted-foreground">Pending</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 px-4 py-3">
+            <div className="rounded-md bg-muted p-2">
+              <Loader2 className="size-4 text-blue-500" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold">{stats.crawlProcessing}</div>
+              <div className="text-xs text-muted-foreground">Processing</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 px-4 py-3">
+            <div className="rounded-md bg-muted p-2">
+              <CheckCircle className="size-4 text-green-500" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold">{stats.crawlCompleted}</div>
+              <div className="text-xs text-muted-foreground">Completed</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 px-4 py-3">
+            <div className="rounded-md bg-muted p-2">
+              <XCircle className="size-4 text-red-500" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold">{stats.crawlFailed}</div>
+              <div className="text-xs text-muted-foreground">Failed</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -230,17 +247,21 @@ export default function AdminDashboard({ stats, recentCrawls }: Props) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Library</TableHead>
+                  <TableHead className="pl-4">Library</TableHead>
                   <TableHead>Source</TableHead>
-                  <TableHead>Submitted By</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">When</TableHead>
+                  <TableHead className="hidden sm:table-cell">
+                    Submitted By
+                  </TableHead>
+                  <TableHead className="pr-4 sm:pr-2">Status</TableHead>
+                  <TableHead className="hidden pr-4 text-right sm:table-cell">
+                    When
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {recentCrawls.map((cr) => (
                   <TableRow key={cr.id}>
-                    <TableCell>
+                    <TableCell className="pl-4">
                       {cr.librarySlug ? (
                         <Link
                           href={`/libraries/${cr.librarySlug}`}
@@ -268,13 +289,13 @@ export default function AdminDashboard({ stats, recentCrawls }: Props) {
                         </p>
                       )}
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
+                    <TableCell className="hidden text-sm text-muted-foreground sm:table-cell">
                       {cr.submittedBy}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="pr-4 sm:pr-2">
                       <CrawlStatusBadge status={cr.status} />
                     </TableCell>
-                    <TableCell className="text-right text-sm text-muted-foreground">
+                    <TableCell className="hidden pr-4 text-right text-sm text-muted-foreground sm:table-cell">
                       {formatTimeAgo(cr.createdAt, true)}
                     </TableCell>
                   </TableRow>

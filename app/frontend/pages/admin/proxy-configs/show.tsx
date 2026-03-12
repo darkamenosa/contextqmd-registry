@@ -432,11 +432,15 @@ export default function AdminProxyConfigShow({
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Session</TableHead>
-                          <TableHead>Scope</TableHead>
-                          <TableHead>Target</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="text-right">
+                          <TableHead className="pl-4">Session</TableHead>
+                          <TableHead className="hidden sm:table-cell">
+                            Scope
+                          </TableHead>
+                          <TableHead className="hidden sm:table-cell">
+                            Target
+                          </TableHead>
+                          <TableHead className="pr-4 sm:pr-2">Status</TableHead>
+                          <TableHead className="hidden pr-4 text-right sm:table-cell">
                             Last Seen
                           </TableHead>
                         </TableRow>
@@ -444,7 +448,7 @@ export default function AdminProxyConfigShow({
                       <TableBody>
                         {leases.map((lease) => (
                           <TableRow key={lease.id}>
-                            <TableCell className="font-mono text-xs">
+                            <TableCell className="pl-4 font-mono text-xs">
                               {lease.sessionKey.length > 24
                                 ? `${lease.sessionKey.slice(0, 24)}...`
                                 : lease.sessionKey}
@@ -457,15 +461,15 @@ export default function AdminProxyConfigShow({
                                 </Badge>
                               )}
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="hidden sm:table-cell">
                               <Badge variant="secondary" className="text-xs">
                                 {lease.usageScope}
                               </Badge>
                             </TableCell>
-                            <TableCell className="font-mono text-xs text-muted-foreground">
+                            <TableCell className="hidden font-mono text-xs text-muted-foreground sm:table-cell">
                               {lease.targetHost || "—"}
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="pr-4 sm:pr-2">
                               {lease.active ? (
                                 <StatusBadge status="active" />
                               ) : lease.releasedAt ? (
@@ -476,7 +480,7 @@ export default function AdminProxyConfigShow({
                                 <StatusBadge status="expired" />
                               )}
                             </TableCell>
-                            <TableCell className="text-right text-xs text-muted-foreground">
+                            <TableCell className="hidden pr-4 text-right text-xs text-muted-foreground sm:table-cell">
                               {formatTimeAgo(lease.lastSeenAt, true)}
                             </TableCell>
                           </TableRow>

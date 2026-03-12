@@ -170,7 +170,7 @@ function VersionRow({
   return (
     <>
       <TableRow>
-        <TableCell className="font-medium">
+        <TableCell className="pl-4 font-medium">
           <Link
             href={`/admin/versions/${v.id}/pages`}
             className="hover:underline"
@@ -187,10 +187,10 @@ function VersionRow({
           <ChannelBadge channel={v.channel} />
         </TableCell>
         <TableCell className="text-right">{v.pageCount}</TableCell>
-        <TableCell className="text-right text-sm text-muted-foreground">
+        <TableCell className="hidden text-right text-sm text-muted-foreground sm:table-cell">
           {formatDateTime(v.createdAt)}
         </TableCell>
-        <TableCell className="text-right">
+        <TableCell className="pr-4 text-right">
           <div className="flex items-center justify-end gap-1">
             <Button
               variant="ghost"
@@ -464,25 +464,108 @@ export default function AdminLibraryShow({
     <AdminLayout>
       <Head title={library.displayName} />
 
-      <div className="flex flex-col gap-4">
+      <div className="flex min-w-0 flex-col gap-4">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
             <Link
               href="/admin/libraries"
               aria-label="Back to libraries"
-              className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="shrink-0 rounded-sm p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
             >
               <ChevronLeft className="size-4" />
             </Link>
             <h1 className="min-w-0 truncate text-lg font-semibold">
               {library.displayName}
             </h1>
-            <span className="font-mono text-sm text-muted-foreground">
+            <span className="hidden font-mono text-sm text-muted-foreground sm:inline">
               {slug}
             </span>
           </div>
-          <div className="flex items-center gap-2">
+
+          {/* Mobile: overflow menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border text-muted-foreground hover:bg-muted hover:text-foreground sm:hidden">
+              <MoreHorizontal className="size-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem
+                onClick={() =>
+                  router.visit(
+                    `/libraries/${library.namespace}/${library.name}`
+                  )
+                }
+              >
+                <ExternalLink className="mr-2 size-4" />
+                View public page
+              </DropdownMenuItem>
+              {library.homepageUrl && (
+                <DropdownMenuItem
+                  onClick={() => window.open(library.homepageUrl!, "_blank")}
+                >
+                  <Globe className="mr-2 size-4" />
+                  Homepage
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              {library.lastCrawlUrl && (
+                <DropdownMenuItem onClick={handleRecrawl} disabled={recrawling}>
+                  <RefreshCw className="mr-2 size-4" />
+                  {recrawling ? "Queuing..." : "Re-crawl"}
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                onClick={() =>
+                  router.visit(`/admin/libraries/${library.id}/edit`)
+                }
+              >
+                <Pencil className="mr-2 size-4" />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={() => setDeleteOpen(true)}
+              >
+                <Trash2 className="mr-2 size-4" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Desktop: inline buttons */}
+          <div className="hidden shrink-0 items-center gap-2 sm:flex">
+            <Button
+              variant="ghost"
+              size="sm"
+              nativeButton={false}
+              render={
+                <Link
+                  href={`/libraries/${library.namespace}/${library.name}`}
+                />
+              }
+            >
+              <ExternalLink className="size-3.5" />
+              Public page
+            </Button>
+            {library.homepageUrl && (
+              <Button
+                variant="ghost"
+                size="sm"
+                nativeButton={false}
+                render={
+                  <a
+                    href={library.homepageUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  />
+                }
+              >
+                <Globe className="size-3.5" />
+                Homepage
+              </Button>
+            )}
+            <div className="h-4 w-px bg-border" />
             {library.lastCrawlUrl && (
               <Button
                 variant="outline"
@@ -516,16 +599,65 @@ export default function AdminLibraryShow({
           </div>
         </div>
 
+        {/* Stats — pills on mobile, card on sm+ */}
+        <div className="flex flex-wrap gap-2 sm:hidden">
+          <Badge variant="secondary" className="gap-1.5 px-2.5 py-1 text-xs">
+            <Layers className="size-3" />
+            {library.versionCount} versions
+          </Badge>
+          <Badge variant="secondary" className="gap-1.5 px-2.5 py-1 text-xs">
+            <FileText className="size-3" />
+            {library.pageCount} pages
+          </Badge>
+          <Badge variant="secondary" className="gap-1.5 px-2.5 py-1 text-xs">
+            <BookOpen className="size-3" />
+            {library.aliases.length} aliases
+          </Badge>
+        </div>
+        <div className="hidden grid-cols-3 divide-x rounded-lg border bg-card text-card-foreground sm:grid">
+          <div className="flex items-center gap-3 px-4 py-3">
+            <div className="rounded-md bg-muted p-2">
+              <Layers className="size-4 text-muted-foreground" />
+            </div>
+            <div>
+              <div className="text-xl font-semibold">
+                {library.versionCount}
+              </div>
+              <div className="text-xs text-muted-foreground">Versions</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 px-4 py-3">
+            <div className="rounded-md bg-muted p-2">
+              <FileText className="size-4 text-muted-foreground" />
+            </div>
+            <div>
+              <div className="text-xl font-semibold">{library.pageCount}</div>
+              <div className="text-xs text-muted-foreground">Pages</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 px-4 py-3">
+            <div className="rounded-md bg-muted p-2">
+              <BookOpen className="size-4 text-muted-foreground" />
+            </div>
+            <div>
+              <div className="text-xl font-semibold">
+                {library.aliases.length}
+              </div>
+              <div className="text-xs text-muted-foreground">Aliases</div>
+            </div>
+          </div>
+        </div>
+
         {/* Main + sidebar grid */}
-        <div className="grid items-start gap-4 lg:grid-cols-5">
-          <div className="flex flex-col gap-4 lg:col-span-3">
+        <div className="grid min-w-0 items-start gap-4 lg:grid-cols-3">
+          <div className="flex min-w-0 flex-col gap-4 lg:col-span-2">
             {/* Overview */}
             <Card>
               <CardHeader>
                 <CardTitle>Library details</CardTitle>
               </CardHeader>
               <CardContent>
-                <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:gap-x-6">
                   <div>
                     <dt className="text-muted-foreground">Display name</dt>
                     <dd className="mt-0.5 font-medium">
@@ -538,7 +670,7 @@ export default function AdminLibraryShow({
                       {library.accountName}
                     </dd>
                   </div>
-                  <div>
+                  <div className="col-span-2">
                     <dt className="text-muted-foreground">Homepage</dt>
                     <dd className="mt-0.5 font-medium">
                       {library.homepageUrl ? (
@@ -580,11 +712,11 @@ export default function AdminLibraryShow({
                       {formatDateTime(library.createdAt)}
                     </dd>
                   </div>
-                  <div className="col-span-2">
-                    <dt className="text-muted-foreground">Aliases</dt>
-                    <dd className="mt-1 flex flex-wrap gap-1">
-                      {library.aliases.length > 0 ? (
-                        library.aliases.map((alias) => (
+                  {library.aliases.length > 0 && (
+                    <div className="col-span-2">
+                      <dt className="text-muted-foreground">Aliases</dt>
+                      <dd className="mt-1 flex flex-wrap gap-1">
+                        {library.aliases.map((alias) => (
                           <Badge
                             key={alias}
                             variant="outline"
@@ -592,14 +724,10 @@ export default function AdminLibraryShow({
                           >
                             {alias}
                           </Badge>
-                        ))
-                      ) : (
-                        <span className="text-sm text-muted-foreground">
-                          None
-                        </span>
-                      )}
-                    </dd>
-                  </div>
+                        ))}
+                      </dd>
+                    </div>
+                  )}
                 </dl>
               </CardContent>
             </Card>
@@ -624,11 +752,13 @@ export default function AdminLibraryShow({
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Version</TableHead>
+                          <TableHead className="pl-4">Version</TableHead>
                           <TableHead>Channel</TableHead>
                           <TableHead className="text-right">Pages</TableHead>
-                          <TableHead className="text-right">Created</TableHead>
-                          <TableHead className="w-32" />
+                          <TableHead className="hidden text-right sm:table-cell">
+                            Created
+                          </TableHead>
+                          <TableHead className="w-24 pr-4 sm:w-32" />
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -658,16 +788,18 @@ export default function AdminLibraryShow({
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>URL</TableHead>
+                          <TableHead className="pl-4">URL</TableHead>
                           <TableHead>Type</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="text-right">Date</TableHead>
+                          <TableHead className="pr-4 sm:pr-2">Status</TableHead>
+                          <TableHead className="hidden pr-4 text-right sm:table-cell">
+                            Date
+                          </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {crawlRequests.map((cr) => (
                           <TableRow key={cr.id}>
-                            <TableCell>
+                            <TableCell className="pl-4">
                               <a
                                 href={cr.url}
                                 target="_blank"
@@ -692,10 +824,10 @@ export default function AdminLibraryShow({
                                 showLabel
                               />
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="pr-4 sm:pr-2">
                               <CrawlStatusBadge status={cr.status} />
                             </TableCell>
-                            <TableCell className="text-right text-sm text-muted-foreground">
+                            <TableCell className="hidden pr-4 text-right text-sm text-muted-foreground sm:table-cell">
                               {formatDateTime(cr.createdAt)}
                             </TableCell>
                           </TableRow>
@@ -709,86 +841,7 @@ export default function AdminLibraryShow({
           </div>
 
           {/* Sidebar */}
-          <div className="flex flex-col gap-4 lg:col-span-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Stats</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <Layers className="size-5 text-muted-foreground" />
-                  <div>
-                    <div className="text-2xl font-bold">
-                      {library.versionCount}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      Versions
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <FileText className="size-5 text-muted-foreground" />
-                  <div>
-                    <div className="text-2xl font-bold">
-                      {library.pageCount}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      Total Pages
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <BookOpen className="size-5 text-muted-foreground" />
-                  <div>
-                    <div className="text-2xl font-bold">
-                      {library.aliases.length}
-                    </div>
-                    <div className="text-xs text-muted-foreground">Aliases</div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Quick links</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="justify-start"
-                  nativeButton={false}
-                  render={
-                    <Link
-                      href={`/libraries/${library.namespace}/${library.name}`}
-                    />
-                  }
-                >
-                  <ExternalLink className="size-4" />
-                  View public page
-                </Button>
-                {library.homepageUrl && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="justify-start"
-                    nativeButton={false}
-                    render={
-                      <a
-                        href={library.homepageUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      />
-                    }
-                  >
-                    <ExternalLink className="size-4" />
-                    Homepage
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-
+          <div className="flex flex-col gap-4">
             <CrawlRulesCard
               rules={library.crawlRules || {}}
               libraryId={library.id}
