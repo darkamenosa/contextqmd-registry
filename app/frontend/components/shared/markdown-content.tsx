@@ -1,6 +1,8 @@
 import { useMemo } from "react"
 import ReactMarkdown, { type Components } from "react-markdown"
+import rehypeHighlight from "rehype-highlight"
 import remarkGfm from "remark-gfm"
+import "highlight.js/styles/github-dark.min.css"
 
 import { cleanMarkdown } from "@/lib/format-date"
 import { slugify } from "@/lib/heading-slug"
@@ -8,6 +10,7 @@ import { parseMarkdownWithTabs } from "@/lib/parse-markdown-tabs"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 const remarkPlugins = [remarkGfm]
+const rehypePlugins = [rehypeHighlight]
 
 const externalLink: Components["a"] = ({ href, children, ...props }) => (
   <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
@@ -50,6 +53,7 @@ function MarkdownBlock({
   return (
     <ReactMarkdown
       remarkPlugins={remarkPlugins}
+      rehypePlugins={rehypePlugins}
       components={headingIds ? fullComponents : minimalComponents}
     >
       {cleanMarkdown(content)}
