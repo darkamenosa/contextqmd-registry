@@ -105,7 +105,7 @@ export default function AppCrawlRequestsNew() {
     e.preventDefault()
     transform((data) => ({
       crawl_request: {
-        url: data.url,
+        url: data.url.trim(),
       },
     }))
     post(createPath)

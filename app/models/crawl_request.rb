@@ -17,6 +17,7 @@ class CrawlRequest < ApplicationRecord
   validates :status, presence: true, inclusion: { in: STATUSES }
   validate :url_not_private, if: -> { url.present? }
 
+  before_validation :strip_url
   before_validation :detect_source_type, if: -> { url.present? }
   after_create_commit :enqueue_processing
 
@@ -108,6 +109,7 @@ class CrawlRequest < ApplicationRecord
       sync_pages(version, result.pages, prune_stale: result.complete)
       record_fetch_recipe(version)
       update_manifest_checksum(version)
+      refresh_full_bundle(version)
 
       if should_promote_default_version?(library, version)
         library.update!(default_version: version.version)
@@ -193,7 +195,7 @@ class CrawlRequest < ApplicationRecord
     end
 
     def library_slug(value, prefix:)
-      slug = value.to_s.parameterize(separator: "-")
+      slug = value.to_s.tr("_", "-").parameterize(separator: "-")
       return slug if slug.present?
 
       "#{prefix}-#{Digest::SHA256.hexdigest(value.to_s)[0, 12]}"
@@ -279,7 +281,17 @@ class CrawlRequest < ApplicationRecord
       version.update!(manifest_checksum: manifest_checksum)
     end
 
+    def refresh_full_bundle(version)
+      if version.pages.exists?
+        DocsBundle.refresh!(version, profile: "full")
+      end
+    end
+
     # --- Callbacks ---
+
+    def strip_url
+      self.url = url.strip if url.present?
+    end
 
     def detect_source_type
       self.source_type = DocsFetcher.detect_source_type(url)
