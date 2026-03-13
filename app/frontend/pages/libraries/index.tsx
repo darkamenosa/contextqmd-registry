@@ -3,6 +3,7 @@ import { Link, router } from "@inertiajs/react"
 import type { PaginationData } from "@/types"
 import { BookOpen, FileText, Library, Plus, Search } from "lucide-react"
 
+import { formatSource } from "@/lib/format-source"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -132,7 +133,7 @@ export default function LibrariesIndex({
                             {lib.displayName}
                           </CardTitle>
                           <p className="mt-1 text-xs text-muted-foreground">
-                            {lib.namespace}/{lib.name}
+                            {formatSource(lib)}
                           </p>
                         </div>
                         <LicenseBadge status={lib.licenseStatus} />

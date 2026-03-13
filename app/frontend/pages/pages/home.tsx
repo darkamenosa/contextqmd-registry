@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 
 import { formatCount, formatTimeAgo } from "@/lib/format-date"
+import { formatSource } from "@/lib/format-source"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -98,18 +99,6 @@ const features = [
   },
 ]
 
-function formatSource(lib: LibraryItem): string {
-  if (lib.sourceType === "github" || !lib.homepageUrl) {
-    return `/${lib.namespace}/${lib.name}`
-  }
-  try {
-    const u = new URL(lib.homepageUrl)
-    return u.hostname + (u.pathname === "/" ? "" : u.pathname)
-  } catch {
-    return `/${lib.namespace}/${lib.name}`
-  }
-}
-
 function LibraryTable({ libraries }: { libraries: LibraryItem[] }) {
   return (
     <Table>
@@ -157,7 +146,7 @@ function LibraryTable({ libraries }: { libraries: LibraryItem[] }) {
                 <span className="inline-flex items-center gap-1.5">
                   <SourceTypeIcon sourceType={lib.sourceType} size="size-4" />
                   <span className="text-sm text-muted-foreground">
-                    /{lib.namespace}/{lib.name}
+                    {formatSource(lib)}
                   </span>
                 </span>
               )}
@@ -283,11 +272,37 @@ export default function Home({
 
           <TabsContent value={activeTab} className="mt-4">
             <div className="overflow-x-auto rounded-xl border">
-              <LibraryTable libraries={libraries} />
-              <PaginationFooter
-                pagination={pagination}
-                buildParams={(page) => ({ tab: activeTab, page })}
-              />
+              {libraries.length === 0 ? (
+                <div className="py-16 text-center">
+                  <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-muted">
+                    <BookOpen className="size-6 text-muted-foreground" />
+                  </div>
+                  <h2 className="mt-4 text-lg font-semibold">
+                    No libraries yet
+                  </h2>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Be the first to submit documentation to the registry.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-6"
+                    nativeButton={false}
+                    render={<Link href="/crawl/new" />}
+                  >
+                    <Plus className="size-4" />
+                    Submit Docs
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <LibraryTable libraries={libraries} />
+                  <PaginationFooter
+                    pagination={pagination}
+                    buildParams={(page) => ({ tab: activeTab, page })}
+                  />
+                </>
+              )}
               <TableFooter libraryCount={libraryCount} />
             </div>
           </TabsContent>

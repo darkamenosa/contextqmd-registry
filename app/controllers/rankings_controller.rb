@@ -40,6 +40,8 @@ class RankingsController < InertiaController
         namespace: library.namespace,
         name: library.name,
         display_name: library.display_name,
+        homepage_url: library.homepage_url,
+        source_type: library.source_type,
         page_count: page_count,
         version_count: version_count,
         freshness_pct: (freshness * 100).round,

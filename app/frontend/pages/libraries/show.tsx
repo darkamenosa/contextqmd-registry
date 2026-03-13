@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 
 import { formatBytes } from "@/lib/format-date"
+import { formatSource } from "@/lib/format-source"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -266,7 +267,9 @@ install_docs({ library: "${slug}" })`
             <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
               {library.displayName}
             </h1>
-            <p className="mt-1 text-sm text-muted-foreground">{slug}</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {formatSource(library)}
+            </p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {library.sourceType && (
                 <Badge variant="outline" className="gap-1 text-xs">

@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 
 import { formatTimeAgo } from "@/lib/format-date"
+import { formatSource } from "@/lib/format-source"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import {
@@ -29,6 +30,8 @@ interface RankedLibrary {
   namespace: string
   name: string
   displayName: string
+  homepageUrl: string | null
+  sourceType: string | null
   pageCount: number
   versionCount: number
   freshnessPct: number
@@ -206,7 +209,7 @@ export default function RankingsIndex({
                             {lib.displayName}
                           </span>
                           <span className="ml-2 hidden text-sm text-muted-foreground sm:inline">
-                            /{lib.namespace}/{lib.name}
+                            {formatSource(lib)}
                           </span>
                         </div>
                         <ArrowUpRight className="size-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
