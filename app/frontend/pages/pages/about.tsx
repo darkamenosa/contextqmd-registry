@@ -64,8 +64,8 @@ export default function About() {
             </p>
             <p>
               The registry is free and open. The CLI and MCP server both run
-              locally. Your docs stay on your machine, version-pinned and
-              always available, even offline.
+              locally. Your docs stay on your machine, version-pinned and always
+              available, even offline.
             </p>
           </div>
         </div>

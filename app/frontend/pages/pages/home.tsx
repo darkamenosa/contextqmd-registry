@@ -335,7 +335,9 @@ export default function Home({
                   <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                     1
                   </div>
-                  <span>Search the registry and install docs with `contextqmd`</span>
+                  <span>
+                    Search the registry and install docs with `contextqmd`
+                  </span>
                 </div>
                 <div className="flex items-start gap-3">
                   <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
