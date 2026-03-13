@@ -138,8 +138,12 @@ class BundleTest < ActiveSupport::TestCase
     bundle.update!(visibility: "public")
     bundle.define_singleton_method(:package) { fake_package }
 
-    expected_url = "#{ENV.fetch("CLOUDFLARE_PUBLIC_URL")}/bundle-key"
+    original_url = ENV["CLOUDFLARE_PUBLIC_URL"]
+    ENV["CLOUDFLARE_PUBLIC_URL"] = "https://cdn.example.com"
+    expected_url = "https://cdn.example.com/bundle-key"
     assert_equal expected_url, bundle.manifest_url
+  ensure
+    ENV["CLOUDFLARE_PUBLIC_URL"] = original_url
   end
 
   test "download_url uses a signed private package URL when the bundle is private" do
