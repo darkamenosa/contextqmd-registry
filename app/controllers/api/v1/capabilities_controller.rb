@@ -6,11 +6,11 @@ module Api
       skip_before_action :authenticate_api_token!
 
       FEATURES = {
-        bundle_download: false, # not yet implemented — page-by-page only
+        bundle_download: true,
         signed_manifests: false,
         signed_fetch_recipes: false,
         origin_fetch_recipes: true,
-        hosted_content: true, # registry hosts page content via API
+        hosted_content: true,
         cursor_pagination: true,
         private_sources: false,
         delta_sync: false

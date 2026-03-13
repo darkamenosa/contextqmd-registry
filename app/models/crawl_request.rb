@@ -11,10 +11,12 @@ class CrawlRequest < ApplicationRecord
 
   SOURCE_TYPES = %w[github gitlab bitbucket git website openapi llms_txt].freeze
   STATUSES = %w[pending processing completed failed cancelled].freeze
+  BUNDLE_VISIBILITIES = %w[public private].freeze
 
   validates :url, presence: true, format: { with: URI::DEFAULT_PARSER.make_regexp(%w[http https]) }
   validates :source_type, presence: true, inclusion: { in: SOURCE_TYPES }
   validates :status, presence: true, inclusion: { in: STATUSES }
+  validates :requested_bundle_visibility, presence: true, inclusion: { in: BUNDLE_VISIBILITIES }
   validate :url_not_private, if: -> { url.present? }
 
   before_validation :strip_url
@@ -109,7 +111,7 @@ class CrawlRequest < ApplicationRecord
       sync_pages(version, result.pages, prune_stale: result.complete)
       record_fetch_recipe(version)
       update_manifest_checksum(version)
-      refresh_full_bundle(version)
+      schedule_full_bundle(version)
 
       if should_promote_default_version?(library, version)
         library.update!(default_version: version.version)
@@ -143,7 +145,7 @@ class CrawlRequest < ApplicationRecord
         source_type: source_type
       )
 
-      merged_aliases = ((library.aliases || []) + (result.aliases || []) + [ result.name, name_slug ]).uniq
+      merged_aliases = normalized_aliases((library.aliases || []) + (result.aliases || []) + [ result.name, name_slug ])
       library.update!(
         display_name: result.display_name.presence || library.display_name,
         aliases: merged_aliases,
@@ -199,6 +201,12 @@ class CrawlRequest < ApplicationRecord
       return slug if slug.present?
 
       "#{prefix}-#{Digest::SHA256.hexdigest(value.to_s)[0, 12]}"
+    end
+
+    def normalized_aliases(values)
+      raw = values.map(&:to_s).map(&:strip).reject(&:blank?)
+      compact = raw.map { |value| value.downcase.gsub(/[^a-z0-9]/, "") }.reject(&:blank?)
+      (raw + compact).uniq
     end
 
     def sync_pages(version, pages, prune_stale: true)
@@ -281,9 +289,12 @@ class CrawlRequest < ApplicationRecord
       version.update!(manifest_checksum: manifest_checksum)
     end
 
-    def refresh_full_bundle(version)
+    def schedule_full_bundle(version)
       if version.pages.exists?
-        DocsBundle.refresh!(version, profile: "full")
+        version.bundles.find_or_initialize_by(profile: "full").tap do |bundle|
+          bundle.visibility = requested_bundle_visibility
+          bundle.build_later
+        end
       end
     end
 

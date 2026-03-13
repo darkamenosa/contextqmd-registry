@@ -1,15 +1,15 @@
 nextjs_slim:
   version: nextjs_stable
   profile: "slim"
+  status: "ready"
   format: "tar.zst"
   sha256: "sha256:nextjs_slim_bundle_hash"
   size_bytes: 1048576
-  url: "https://cdn.example.com/bundles/nextjs-16.1.6-slim.tar.zst"
 
 nextjs_full:
   version: nextjs_stable
   profile: "full"
+  status: "ready"
   format: "tar.zst"
   sha256: "sha256:nextjs_full_bundle_hash"
   size_bytes: 5242880
-  url: "https://cdn.example.com/bundles/nextjs-16.1.6-full.tar.zst"

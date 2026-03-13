@@ -9,7 +9,15 @@ module Api
       before_action :find_library_and_version!
 
       def show
-        cache_key = "manifest:#{@library.id}:#{@version.id}:#{@version.manifest_checksum}"
+        cache_key = [
+          "manifest",
+          @library.id,
+          @version.id,
+          @version.manifest_checksum,
+          @version.fetch_recipe&.cache_key_with_version,
+          @library.source_policy&.cache_key_with_version,
+          bundle_cache_key
+        ]
         data = Rails.cache.fetch(cache_key, expires_in: 1.hour) { manifest_json }
         render_data(data)
       end
@@ -49,14 +57,16 @@ module Api
         end
 
         def profiles_json
-          bundles = @version.bundles.ordered
+          bundles = @version.bundles.ready.with_attached_package.ordered.select do |bundle|
+            bundle.visibility_public? && bundle.deliverable?
+          end
           return {} if bundles.empty?
 
           bundles.each_with_object({}) do |bundle, hash|
             hash[bundle.profile] = {
               bundle: {
                 format: bundle.format,
-                url: bundle.url || "/api/v1/libraries/#{@library.namespace}/#{@library.name}/versions/#{@version.version}/bundles/#{bundle.profile}",
+                url: bundle_url(bundle),
                 sha256: bundle.sha256
               }
             }
@@ -82,6 +92,20 @@ module Api
             splitter_version: recipe&.splitter_version,
             manifest_checksum: @version.manifest_checksum
           }
+        end
+
+        def bundle_cache_key
+          bundle_state = @version.bundles.ordered.pluck(:profile, :status, :visibility, :format, :sha256, :updated_at)
+          Digest::SHA256.hexdigest(bundle_state.to_json)
+        end
+
+        def bundle_url(bundle)
+          return bundle.manifest_url if bundle.manifest_url.present?
+
+          path = "/api/v1/libraries/#{@library.namespace}/#{@library.name}/versions/#{@version.version}/bundles/#{bundle.profile}"
+          return path if bundle.sha256.blank?
+
+          "#{path}?sha256=#{ERB::Util.url_encode(bundle.sha256)}"
         end
     end
   end

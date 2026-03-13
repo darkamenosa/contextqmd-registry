@@ -11,16 +11,14 @@ module Api
 
       def index
         libraries = if params[:query].present?
-          search_libraries(params[:query])
+          search_results(params[:query])
         else
-          Library.all
+          paginated_catalog
         end
 
-        result = paginate(libraries.includes(:versions))
-
         render_data(
-          result[:records].map { |lib| library_summary_json(lib) },
-          cursor: result[:next_cursor]
+          libraries[:records].map { |lib| library_summary_json(lib) },
+          cursor: libraries[:next_cursor]
         )
       end
 
@@ -31,10 +29,24 @@ module Api
       private
 
         def search_libraries(query)
-          by_alias = Library.where("aliases @> ?", [ query ].to_json)
+          normalized = query.to_s.strip
+          by_alias = Library.where("aliases @> ?", [ normalized ].to_json).order(:namespace, :name)
           return by_alias if by_alias.exists?
 
-          Library.search_by_query(query)
+          Library.search_by_query(normalized)
+        end
+
+        def search_results(query)
+          per_page = resolve_per_page(nil)
+
+          {
+            records: search_libraries(query).includes(:versions, :source_policy).limit(per_page).to_a,
+            next_cursor: nil
+          }
+        end
+
+        def paginated_catalog
+          paginate(Library.all.includes(:versions, :source_policy))
         end
 
         def library_summary_json(library)

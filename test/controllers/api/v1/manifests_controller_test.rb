@@ -5,24 +5,23 @@ require "test_helper"
 module Api
   module V1
     class ManifestsControllerTest < ActionDispatch::IntegrationTest
+      include PageHydrationTestHelper
+
       fixtures :accounts, :libraries, :versions, :pages, :bundles, :fetch_recipes, :source_policies
 
       setup do
-        @identity, _account, = create_tenant(
-          email: "manifests-test-#{SecureRandom.hex(4)}@example.com",
-          name: "Manifests Test"
-        )
-        _access_token, @raw_token = AccessToken.generate(
-          identity: @identity,
-          name: "Test Token",
-          permission: :read
-        )
+        @version = versions(:nextjs_stable)
+        hydrate_pages(@version)
+        @full_bundle = DocsBundle.refresh!(@version, profile: "full")
       end
 
-      teardown { Current.reset }
+      teardown do
+        FileUtils.rm_rf(DocsBundle.storage_root)
+        Current.reset
+      end
 
-      test "show with auth returns contract-conforming manifest" do
-        get "/api/v1/libraries/vercel/nextjs/versions/16.1.6/manifest", headers: auth_headers
+      test "show returns contract-conforming manifest" do
+        get "/api/v1/libraries/vercel/nextjs/versions/16.1.6/manifest"
 
         assert_response :ok
 
@@ -54,8 +53,11 @@ module Api
 
         # Profiles — hash of profile => { bundle: { format, url, sha256 } }
         assert data["profiles"].is_a?(Hash), "profiles should be a hash"
-        assert data["profiles"].key?("slim") || data["profiles"].key?("full"),
-          "profiles should include slim or full"
+        assert_equal "tar.gz", data["profiles"]["full"]["bundle"]["format"]
+        assert_equal @full_bundle.sha256, data["profiles"]["full"]["bundle"]["sha256"]
+        assert_equal "/api/v1/libraries/vercel/nextjs/versions/16.1.6/bundles/full?sha256=#{ERB::Util.url_encode(@full_bundle.sha256)}",
+          data["profiles"]["full"]["bundle"]["url"]
+        assert_not data["profiles"].key?("slim"), "undeliverable ready bundles should not be advertised"
 
         # Source policy
         assert_not_nil data["source_policy"]
@@ -67,18 +69,8 @@ module Api
         assert data["provenance"].key?("manifest_checksum")
       end
 
-      test "show without auth returns 200" do
-        get "/api/v1/libraries/vercel/nextjs/versions/16.1.6/manifest"
-
-        assert_response :ok
-
-        body = response.parsed_body
-        assert body.key?("data"), "Response should include 'data' key"
-        assert_equal "nextjs", body["data"]["name"]
-      end
-
       test "show returns 404 for nonexistent library or version" do
-        get "/api/v1/libraries/vercel/nextjs/versions/99.0.0/manifest", headers: auth_headers
+        get "/api/v1/libraries/vercel/nextjs/versions/99.0.0/manifest"
 
         assert_response :not_found
 
@@ -105,11 +97,27 @@ module Api
         assert_equal "stable", body["data"]["channel"]
       end
 
-      private
+      test "show only advertises ready bundles" do
+        @version.bundles.create!(profile: "compact", status: "pending")
 
-        def auth_headers
-          { "Authorization" => "Bearer #{@raw_token}" }
-        end
+        get "/api/v1/libraries/vercel/nextjs/versions/16.1.6/manifest"
+
+        assert_response :ok
+
+        profiles = response.parsed_body.dig("data", "profiles")
+        assert_not profiles.key?("compact")
+      end
+
+      test "show does not advertise private bundles" do
+        @full_bundle.update!(visibility: "private")
+
+        get "/api/v1/libraries/vercel/nextjs/versions/16.1.6/manifest"
+
+        assert_response :ok
+
+        profiles = response.parsed_body.dig("data", "profiles")
+        assert_not profiles.key?("full")
+      end
     end
   end
 end

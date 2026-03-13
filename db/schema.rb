@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_11_040000) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_13_010003) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -46,15 +46,52 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_11_040000) do
     t.index ["external_account_id"], name: "index_accounts_on_external_account_id", unique: true
   end
 
+  create_table "active_storage_attachments", force: :cascade do |t|
+    t.bigint "account_id"
+    t.bigint "blob_id", null: false
+    t.datetime "created_at", null: false
+    t.string "name", null: false
+    t.bigint "record_id", null: false
+    t.string "record_type", null: false
+    t.index ["account_id"], name: "index_active_storage_attachments_on_account_id"
+    t.index ["blob_id"], name: "index_active_storage_attachments_on_blob_id"
+    t.index ["record_type", "record_id", "name", "blob_id"], name: "index_active_storage_attachments_uniqueness", unique: true
+  end
+
+  create_table "active_storage_blobs", force: :cascade do |t|
+    t.bigint "account_id"
+    t.bigint "byte_size", null: false
+    t.string "checksum"
+    t.string "content_type"
+    t.datetime "created_at", null: false
+    t.string "filename", null: false
+    t.string "key", null: false
+    t.text "metadata"
+    t.string "service_name", null: false
+    t.index ["account_id"], name: "index_active_storage_blobs_on_account_id"
+    t.index ["key"], name: "index_active_storage_blobs_on_key", unique: true
+  end
+
+  create_table "active_storage_variant_records", force: :cascade do |t|
+    t.bigint "account_id"
+    t.bigint "blob_id", null: false
+    t.string "variation_digest", null: false
+    t.index ["account_id"], name: "index_active_storage_variant_records_on_account_id"
+    t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
+  end
+
   create_table "bundles", force: :cascade do |t|
     t.datetime "created_at", null: false
+    t.text "error_message"
     t.string "format"
     t.string "profile"
     t.string "sha256"
     t.bigint "size_bytes"
+    t.string "status", default: "ready", null: false
     t.datetime "updated_at", null: false
     t.string "url"
     t.bigint "version_id", null: false
+    t.string "visibility", default: "public", null: false
     t.index ["version_id", "profile"], name: "index_bundles_on_version_id_and_profile", unique: true
     t.index ["version_id"], name: "index_bundles_on_version_id"
   end
@@ -118,6 +155,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_11_040000) do
     t.bigint "identity_id", null: false
     t.bigint "library_id"
     t.jsonb "metadata", default: {}
+    t.string "requested_bundle_visibility", default: "public", null: false
     t.string "source_type", default: "website", null: false
     t.datetime "started_at"
     t.string "status", default: "pending", null: false
@@ -250,6 +288,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_11_040000) do
   add_foreign_key "access_tokens", "identities"
   add_foreign_key "account_cancellations", "accounts", on_delete: :cascade
   add_foreign_key "account_cancellations", "users", column: "initiated_by_id", on_delete: :nullify
+  add_foreign_key "active_storage_attachments", "accounts"
+  add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "active_storage_blobs", "accounts"
+  add_foreign_key "active_storage_variant_records", "accounts"
+  add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "bundles", "versions"
   add_foreign_key "crawl_proxy_leases", "crawl_proxy_configs"
   add_foreign_key "crawl_requests", "identities"

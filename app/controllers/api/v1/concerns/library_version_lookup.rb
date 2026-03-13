@@ -9,7 +9,7 @@ module Api
         private
 
           def find_library!
-            @library = Library.find_by!(namespace: params[:namespace], name: params[:name])
+            @library = Library.includes(:source_policy, :versions).find_by!(namespace: params[:namespace], name: params[:name])
           rescue ActiveRecord::RecordNotFound
             render_error(code: "not_found", message: "Library not found", status: :not_found)
           end
@@ -47,7 +47,9 @@ module Api
               display_name: library.display_name,
               aliases: library.aliases,
               homepage_url: library.homepage_url,
-              default_version: library.default_version
+              default_version: library.default_version,
+              source_type: library.source_type,
+              license_status: library.source_policy&.license_status
             }
           end
 

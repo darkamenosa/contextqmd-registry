@@ -5,7 +5,7 @@ require "test_helper"
 module Api
   module V1
     class LibrariesControllerTest < ActionDispatch::IntegrationTest
-      fixtures :accounts, :libraries, :versions, :pages
+      fixtures :accounts, :libraries, :versions, :pages, :source_policies
 
       setup do
         @identity, @account, = create_tenant(
@@ -57,6 +57,8 @@ module Api
         assert_includes lib["aliases"], "next.js"
         assert_equal "https://nextjs.org", lib["homepage_url"]
         assert_equal "16.1.6", lib["default_version"]
+        assert lib.key?("source_type"), "Should include source_type field"
+        assert_equal "verified", lib["license_status"]
       end
 
       test "index with query filters results by name" do
@@ -90,6 +92,16 @@ module Api
         assert body["meta"].key?("cursor"), "Meta should include cursor key"
       end
 
+      test "index with query preserves ranked order and disables cursor pagination" do
+        get api_v1_libraries_path, params: { query: "rails" }, headers: auth_headers
+
+        assert_response :ok
+
+        body = response.parsed_body
+        assert_equal [ "rails" ], body["data"].map { |lib| lib["name"] }
+        assert_nil body["meta"]["cursor"]
+      end
+
       # -- GET /api/v1/libraries/:namespace/:name (show) --
 
       test "show without auth returns 200" do
@@ -119,6 +131,8 @@ module Api
         assert_includes lib["aliases"], "next"
         assert_equal "https://nextjs.org", lib["homepage_url"]
         assert_equal "16.1.6", lib["default_version"]
+        assert lib.key?("source_type"), "Should include source_type field"
+        assert_equal "verified", lib["license_status"]
       end
 
       test "show includes stats for library with versions" do

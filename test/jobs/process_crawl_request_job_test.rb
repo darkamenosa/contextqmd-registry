@@ -17,6 +17,10 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     )
   end
 
+  teardown do
+    FileUtils.rm_rf(DocsBundle.storage_root)
+  end
+
   test "creates library, version, and pages from fetcher result" do
     ns = "example-#{SecureRandom.hex(4)}"
     lib_name = "my-lib-#{SecureRandom.hex(4)}"
@@ -48,12 +52,7 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
       ]
     )
 
-    stub_fetcher = stub_docs_fetcher(result)
-
-    original_for = DocsFetcher.method(:for)
-    DocsFetcher.define_singleton_method(:for) { |_source_type, **_opts| stub_fetcher }
-
-    begin
+    with_stub_fetcher(result) do
       assert_difference -> { Library.count }, 1 do
         assert_difference -> { Version.count }, 1 do
           assert_difference -> { Page.count }, 2 do
@@ -61,8 +60,6 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
           end
         end
       end
-    ensure
-      DocsFetcher.define_singleton_method(:for, original_for)
     end
 
     @crawl_request.reload
@@ -84,6 +81,83 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     assert_equal "Getting Started", page.title
     assert_equal "Install with npm install my-lib", page.description
     assert_equal [ "Prerequisites", "Steps" ], page.headings
+  end
+
+  test "enqueues a full bundle build after import instead of building inline" do
+    result = CrawlResult.new(
+      namespace: "bundle-ns-#{SecureRandom.hex(4)}",
+      name: "bundle-lib-#{SecureRandom.hex(4)}",
+      display_name: "Bundle Library",
+      homepage_url: "https://example.com",
+      aliases: [],
+      version: "1.0.0",
+      pages: [
+        {
+          page_uid: "readme",
+          path: "README.md",
+          title: "Readme",
+          url: "https://example.com/readme",
+          content: "# Readme\n\nBundle me.",
+          headings: [ "Readme" ]
+        }
+      ]
+    )
+
+    with_stub_fetcher(result) do
+      assert_enqueued_jobs 1, only: BuildBundleJob do
+        ProcessCrawlRequestJob.perform_now(@crawl_request)
+      end
+    end
+
+    version = @crawl_request.reload.library.versions.first
+    bundle = version.bundles.find_by(profile: "full")
+
+    assert_not_nil bundle
+    assert_equal "pending", bundle.status
+    assert_equal "public", bundle.visibility
+    assert_equal "tar.gz", bundle.format
+    assert_nil bundle.sha256
+    assert_nil bundle.size_bytes
+    assert_not File.exist?(bundle.file_path), "Bundle file should not exist until the build job runs"
+
+    perform_enqueued_jobs only: BuildBundleJob
+
+    bundle.reload
+    assert_equal "ready", bundle.status
+    assert_match(/\Asha256:[0-9a-f]{64}\z/, bundle.sha256)
+    assert_operator bundle.size_bytes, :positive?
+    assert bundle.package.attached?, "Expected bundle package to be attached after the build job runs"
+    assert File.exist?(bundle.file_path), "Expected local bundle file to exist after the build job runs"
+  end
+
+  test "carries requested bundle visibility onto the scheduled bundle" do
+    @crawl_request.update!(requested_bundle_visibility: "private")
+
+    result = CrawlResult.new(
+      namespace: "visibility-ns-#{SecureRandom.hex(4)}",
+      name: "visibility-lib-#{SecureRandom.hex(4)}",
+      display_name: "Visibility Library",
+      homepage_url: "https://example.com",
+      aliases: [],
+      version: "1.0.0",
+      pages: [
+        {
+          page_uid: "readme",
+          path: "README.md",
+          title: "Readme",
+          url: "https://example.com/readme",
+          content: "# Readme\n\nBundle me privately.",
+          headings: [ "Readme" ]
+        }
+      ]
+    )
+
+    with_stub_fetcher(result) do
+      ProcessCrawlRequestJob.perform_now(@crawl_request)
+    end
+
+    bundle = @crawl_request.reload.library.versions.first.bundles.find_by(profile: "full")
+    assert_equal "private", bundle.visibility
   end
 
   test "sets default_version on library when blank" do
@@ -371,6 +445,58 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     assert_equal "reactjs", @crawl_request.library.namespace
     assert_equal "react-dev", @crawl_request.library.name
     assert_includes @crawl_request.library.aliases, "react.dev"
+  end
+
+  test "normalizes fetched underscore library names into path-safe slugs" do
+    result = CrawlResult.new(
+      namespace: "ryanb",
+      name: "letter_opener",
+      display_name: "Letter Opener",
+      homepage_url: "https://github.com/ryanb/letter_opener",
+      aliases: [ "letter_opener", "letter-opener" ],
+      version: "latest",
+      pages: [
+        { page_uid: "intro", path: "README.md", title: "Intro",
+          url: "https://github.com/ryanb/letter_opener", content: "Hello", headings: [] }
+      ]
+    )
+
+    with_stub_fetcher(result) do
+      ProcessCrawlRequestJob.perform_now(@crawl_request)
+    end
+
+    @crawl_request.reload
+    assert_equal "completed", @crawl_request.status
+    assert_not_nil @crawl_request.library
+    assert_equal "ryanb", @crawl_request.library.namespace
+    assert_equal "letter-opener", @crawl_request.library.name
+    assert_includes @crawl_request.library.aliases, "letter_opener"
+  end
+
+  test "adds punctuationless aliases for dotted library names" do
+    result = CrawlResult.new(
+      namespace: "vercel",
+      name: "next-js",
+      display_name: "Next.js",
+      homepage_url: "https://github.com/vercel/next.js",
+      aliases: [ "next.js", "next-js" ],
+      version: "latest",
+      pages: [
+        { page_uid: "intro", path: "README.md", title: "Intro",
+          url: "https://github.com/vercel/next.js", content: "Hello", headings: [] }
+      ]
+    )
+
+    with_stub_fetcher(result) do
+      ProcessCrawlRequestJob.perform_now(@crawl_request)
+    end
+
+    @crawl_request.reload
+    assert_equal "completed", @crawl_request.status
+    assert_not_nil @crawl_request.library
+    assert_includes @crawl_request.library.aliases, "next.js"
+    assert_includes @crawl_request.library.aliases, "next-js"
+    assert_includes @crawl_request.library.aliases, "nextjs"
   end
 
   private

@@ -6,22 +6,35 @@ local:
   service: Disk
   root: <%= Rails.root.join("storage") %>
 
-# Use bin/rails credentials:edit to set the AWS secrets (as aws:access_key_id|secret_access_key)
-# amazon:
-#   service: S3
-#   access_key_id: <%= Rails.application.credentials.dig(:aws, :access_key_id) %>
-#   secret_access_key: <%= Rails.application.credentials.dig(:aws, :secret_access_key) %>
-#   region: us-east-1
-#   bucket: your_own_bucket-<%= Rails.env %>
+<%
+  cloudflare_account_id = ENV["CLOUDFLARE_ACCOUNT_ID"].presence || Rails.application.credentials.dig(:cloudflare, :account_id)
+  cloudflare_access_key_id = ENV["CLOUDFLARE_R2_ACCESS_KEY_ID"].presence || Rails.application.credentials.dig(:cloudflare, :access_key_id)
+  cloudflare_secret_access_key = ENV["CLOUDFLARE_R2_SECRET_ACCESS_KEY"].presence || Rails.application.credentials.dig(:cloudflare, :secret_access_key)
+  cloudflare_public_bucket = ENV["CLOUDFLARE_PUBLIC_BUCKET"].presence || Rails.application.credentials.dig(:cloudflare, :public_bucket)
+  cloudflare_private_bucket = ENV["CLOUDFLARE_PRIVATE_BUCKET"].presence || Rails.application.credentials.dig(:cloudflare, :private_bucket)
+%>
 
-# Remember not to checkin your GCS keyfile to a repository
-# google:
-#   service: GCS
-#   project: your_project
-#   credentials: <%= Rails.root.join("path/to/gcs.keyfile") %>
-#   bucket: your_own_bucket-<%= Rails.env %>
+r2_public_assets:
+  service: S3
+  endpoint: https://<%= cloudflare_account_id %>.r2.cloudflarestorage.com
+  access_key_id: <%= cloudflare_access_key_id %>
+  secret_access_key: <%= cloudflare_secret_access_key %>
+  region: auto
+  force_path_style: true
+  request_checksum_calculation: when_required
+  response_checksum_validation: when_required
+  bucket: <%= cloudflare_public_bucket %>
+  public: true
+  upload:
+    cache_control: "public, max-age=31536000, immutable"
 
-# mirror:
-#   service: Mirror
-#   primary: local
-#   mirrors: [ amazon, google, microsoft ]
+r2_private_assets:
+  service: S3
+  endpoint: https://<%= cloudflare_account_id %>.r2.cloudflarestorage.com
+  access_key_id: <%= cloudflare_access_key_id %>
+  secret_access_key: <%= cloudflare_secret_access_key %>
+  region: auto
+  force_path_style: true
+  request_checksum_calculation: when_required
+  response_checksum_validation: when_required
+  bucket: <%= cloudflare_private_bucket %>
