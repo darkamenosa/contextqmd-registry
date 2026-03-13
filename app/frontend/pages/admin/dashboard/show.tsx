@@ -1,4 +1,5 @@
 import { Head, Link } from "@inertiajs/react"
+import type { PaginationData } from "@/types"
 import {
   BookOpen,
   CheckCircle,
@@ -24,6 +25,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { StatusBadge } from "@/components/admin/ui/status-badge"
+import { PaginationFooter } from "@/components/shared/pagination-footer"
 import AdminLayout from "@/layouts/admin-layout"
 
 interface Stats {
@@ -52,6 +54,7 @@ interface CrawlItem {
 interface Props {
   stats: Stats
   recentCrawls: CrawlItem[]
+  pagination: PaginationData
 }
 
 function CrawlStatusBadge({ status }: { status: string }) {
@@ -89,7 +92,11 @@ function CrawlStatusBadge({ status }: { status: string }) {
   }
 }
 
-export default function AdminDashboard({ stats, recentCrawls }: Props) {
+export default function AdminDashboard({
+  stats,
+  recentCrawls,
+  pagination,
+}: Props) {
   return (
     <AdminLayout>
       <Head title="Admin Dashboard" />
@@ -244,64 +251,69 @@ export default function AdminDashboard({ stats, recentCrawls }: Props) {
               No crawl requests yet.
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="pl-4">Library</TableHead>
-                  <TableHead>Source</TableHead>
-                  <TableHead className="hidden sm:table-cell">
-                    Submitted By
-                  </TableHead>
-                  <TableHead className="pr-4 sm:pr-2">Status</TableHead>
-                  <TableHead className="hidden pr-4 text-right sm:table-cell">
-                    When
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recentCrawls.map((cr) => (
-                  <TableRow key={cr.id}>
-                    <TableCell className="pl-4">
-                      {cr.librarySlug ? (
-                        <Link
-                          href={`/libraries/${cr.librarySlug}`}
-                          className="font-medium text-foreground hover:underline"
-                        >
-                          {cr.libraryName}
-                        </Link>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <a
-                        href={cr.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-                      >
-                        <span className="max-w-xs truncate">{cr.url}</span>
-                        <ExternalLink className="size-3 shrink-0" />
-                      </a>
-                      {cr.errorMessage && (
-                        <p className="mt-1 text-xs text-destructive">
-                          {cr.errorMessage}
-                        </p>
-                      )}
-                    </TableCell>
-                    <TableCell className="hidden text-sm text-muted-foreground sm:table-cell">
-                      {cr.submittedBy}
-                    </TableCell>
-                    <TableCell className="pr-4 sm:pr-2">
-                      <CrawlStatusBadge status={cr.status} />
-                    </TableCell>
-                    <TableCell className="hidden pr-4 text-right text-sm text-muted-foreground sm:table-cell">
-                      {formatTimeAgo(cr.createdAt, true)}
-                    </TableCell>
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-4">Library</TableHead>
+                    <TableHead>Source</TableHead>
+                    <TableHead className="hidden sm:table-cell">
+                      Submitted By
+                    </TableHead>
+                    <TableHead className="pr-4 sm:pr-2">Status</TableHead>
+                    <TableHead className="hidden pr-4 text-right sm:table-cell">
+                      When
+                    </TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {recentCrawls.map((cr) => (
+                    <TableRow key={cr.id}>
+                      <TableCell className="pl-4">
+                        {cr.librarySlug ? (
+                          <Link
+                            href={`/libraries/${cr.librarySlug}`}
+                            className="font-medium text-foreground hover:underline"
+                          >
+                            {cr.libraryName}
+                          </Link>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">
+                            —
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <a
+                          href={cr.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+                        >
+                          <span className="max-w-xs truncate">{cr.url}</span>
+                          <ExternalLink className="size-3 shrink-0" />
+                        </a>
+                        {cr.errorMessage && (
+                          <p className="mt-1 text-xs text-destructive">
+                            {cr.errorMessage}
+                          </p>
+                        )}
+                      </TableCell>
+                      <TableCell className="hidden text-sm text-muted-foreground sm:table-cell">
+                        {cr.submittedBy}
+                      </TableCell>
+                      <TableCell className="pr-4 sm:pr-2">
+                        <CrawlStatusBadge status={cr.status} />
+                      </TableCell>
+                      <TableCell className="hidden pr-4 text-right text-sm text-muted-foreground sm:table-cell">
+                        {formatTimeAgo(cr.createdAt, true)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <PaginationFooter pagination={pagination} />
+            </>
           )}
         </CardContent>
       </Card>

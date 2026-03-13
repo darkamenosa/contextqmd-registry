@@ -15,8 +15,11 @@ class LibrariesController < InertiaController
     end
     libraries = libraries.includes(:source_policy, versions: :pages).order(:namespace, :name)
 
+    pagy, paginated = pagy(libraries, limit: 10)
+
     render inertia: "libraries/index", props: {
-      libraries: libraries.map { |lib| library_props(lib) },
+      libraries: paginated.map { |lib| library_props(lib) },
+      pagination: pagination_props(pagy),
       query: params[:query] || ""
     }
   end

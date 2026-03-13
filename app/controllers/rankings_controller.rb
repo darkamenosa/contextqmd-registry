@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class RankingsController < InertiaController
+  include Pagy::Method
+
   allow_unauthenticated_access
   disallow_account_scope
 
@@ -11,8 +13,11 @@ class RankingsController < InertiaController
       .sort_by { |r| [ -r[:page_count], -r[:version_count] ] }
       .each_with_index.map { |r, i| r.merge(rank: i + 1) }
 
+    pagy, paginated = pagy(ranked, limit: 10)
+
     render inertia: "rankings/index", props: {
-      libraries: ranked,
+      libraries: paginated,
+      pagination: pagination_props(pagy),
       total_libraries: libraries.size
     }
   end

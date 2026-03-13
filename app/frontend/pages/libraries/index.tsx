@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react"
 import { Link, router } from "@inertiajs/react"
+import type { PaginationData } from "@/types"
 import { BookOpen, FileText, Library, Plus, Search } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -7,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { LicenseBadge } from "@/components/shared/license-badge"
+import { PaginationFooter } from "@/components/shared/pagination-footer"
 import { SourceTypeIcon } from "@/components/shared/source-type-icon"
 import PublicLayout from "@/layouts/public-layout"
 
@@ -25,10 +27,15 @@ interface LibraryItem {
 
 interface Props {
   libraries: LibraryItem[]
+  pagination: PaginationData
   query: string
 }
 
-export default function LibrariesIndex({ libraries, query }: Props) {
+export default function LibrariesIndex({
+  libraries,
+  pagination,
+  query,
+}: Props) {
   const [search, setSearch] = useState(query)
 
   const handleSearch = (e: FormEvent) => {
@@ -107,8 +114,8 @@ export default function LibrariesIndex({ libraries, query }: Props) {
           <>
             <div className="mb-4 text-sm text-muted-foreground">
               {query
-                ? `${libraries.length} result${libraries.length !== 1 ? "s" : ""} for "${query}"`
-                : `${libraries.length} libraries`}
+                ? `${pagination.total} result${pagination.total !== 1 ? "s" : ""} for "${query}"`
+                : `${pagination.total} libraries`}
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {libraries.map((lib) => (
@@ -180,6 +187,14 @@ export default function LibrariesIndex({ libraries, query }: Props) {
                 </Link>
               ))}
             </div>
+            <PaginationFooter
+              pagination={pagination}
+              buildParams={(page) => {
+                const params: Record<string, string | number> = { page }
+                if (query) params.query = query
+                return params
+              }}
+            />
           </>
         )}
       </section>

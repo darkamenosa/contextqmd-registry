@@ -1,15 +1,28 @@
 # frozen_string_literal: true
 
 class CrawlRequestsController < InertiaController
+  include Pagy::Method
+
   allow_unauthenticated_access only: :index
   disallow_account_scope
   before_action :authenticate_identity!, only: :new
 
   def index
-    crawl_requests = CrawlRequest.includes(:library).recent.limit(50)
+    base = CrawlRequest.includes(:library).recent
+    active_tab = params[:tab] || "active"
+
+    scope = if active_tab == "completed"
+      base.where(status: [ "completed", "failed" ])
+    else
+      base.where(status: [ "pending", "processing" ])
+    end
+
+    pagy, crawl_requests = pagy(scope, limit: 10)
 
     render inertia: "crawl-requests/index", props: {
       crawl_requests: crawl_requests.map { |cr| crawl_request_props(cr) },
+      pagination: pagination_props(pagy),
+      active_tab: active_tab,
       counts: {
         pending: CrawlRequest.pending.count,
         processing: CrawlRequest.processing.count,

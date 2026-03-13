@@ -1,4 +1,5 @@
 import { Link, router } from "@inertiajs/react"
+import type { PaginationData } from "@/types"
 import {
   CheckCircle,
   Clock,
@@ -11,6 +12,7 @@ import {
   XCircle,
 } from "lucide-react"
 
+import { formatTimeAgo } from "@/lib/format-date"
 import { Button } from "@/components/ui/button"
 import {
   Table,
@@ -21,6 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { PaginationFooter } from "@/components/shared/pagination-footer"
 import { getSourceTypeConfig } from "@/components/shared/source-type-icon"
 import PublicLayout from "@/layouts/public-layout"
 
@@ -44,6 +47,8 @@ interface Counts {
 
 interface Props {
   crawlRequests: CrawlRequestItem[]
+  pagination: PaginationData
+  activeTab: string
   counts: Counts
 }
 
@@ -82,17 +87,6 @@ function stateDisplay(cr: CrawlRequestItem) {
     default:
       return <span className="text-sm text-muted-foreground">{cr.status}</span>
   }
-}
-
-function formatElapsed(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
-  const minutes = Math.floor(diff / 60000)
-  if (minutes < 1) return "< 1 min ago"
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
 }
 
 function shortenUrl(url: string): string {
@@ -157,9 +151,13 @@ function CompletedEmptyState() {
 function TaskTable({
   tasks,
   variant,
+  pagination,
+  activeTab,
 }: {
   tasks: CrawlRequestItem[]
   variant: "active" | "completed"
+  pagination: PaginationData
+  activeTab: string
 }) {
   if (tasks.length === 0) {
     return variant === "active" ? <ActiveEmptyState /> : <CompletedEmptyState />
@@ -220,30 +218,36 @@ function TaskTable({
                 </TableCell>
                 <TableCell className="hidden pr-4 text-right text-sm text-muted-foreground sm:table-cell">
                   {cr.status === "completed" || cr.status === "failed"
-                    ? formatElapsed(cr.updatedAt)
-                    : formatElapsed(cr.createdAt)}
+                    ? formatTimeAgo(cr.updatedAt, true)
+                    : formatTimeAgo(cr.createdAt, true)}
                 </TableCell>
               </TableRow>
             )
           })}
         </TableBody>
       </Table>
+      <PaginationFooter
+        pagination={pagination}
+        buildParams={(page) => ({ tab: activeTab, page })}
+      />
     </div>
   )
 }
 
 // --- Page ---
 
-export default function CrawlRequestsIndex({ crawlRequests, counts }: Props) {
-  const active = crawlRequests.filter(
-    (cr) => cr.status === "pending" || cr.status === "processing"
-  )
-  const completed = crawlRequests.filter(
-    (cr) => cr.status === "completed" || cr.status === "failed"
-  )
-
+export default function CrawlRequestsIndex({
+  crawlRequests,
+  pagination,
+  activeTab,
+  counts,
+}: Props) {
   const activeCount = counts.pending + counts.processing
   const completedCount = counts.completed + counts.failed
+
+  function handleTabChange(tab: string) {
+    router.get("/crawl", { tab }, { preserveState: true, preserveScroll: true })
+  }
 
   return (
     <PublicLayout title="Documentation Queue">
@@ -261,7 +265,9 @@ export default function CrawlRequestsIndex({ crawlRequests, counts }: Props) {
             <Button
               variant="outline"
               onClick={() =>
-                router.reload({ only: ["crawlRequests", "counts"] })
+                router.reload({
+                  only: ["crawlRequests", "counts", "pagination"],
+                })
               }
             >
               <RefreshCw className="size-4" />
@@ -276,7 +282,7 @@ export default function CrawlRequestsIndex({ crawlRequests, counts }: Props) {
       </section>
 
       <section className="mx-auto max-w-7xl px-4 pb-24 sm:px-6 lg:px-8">
-        <Tabs defaultValue="active">
+        <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList>
             <TabsTrigger value="active" className="gap-1.5">
               <span className="relative flex size-2">
@@ -295,12 +301,13 @@ export default function CrawlRequestsIndex({ crawlRequests, counts }: Props) {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="active" className="mt-4">
-            <TaskTable tasks={active} variant="active" />
-          </TabsContent>
-
-          <TabsContent value="completed" className="mt-4">
-            <TaskTable tasks={completed} variant="completed" />
+          <TabsContent value={activeTab} className="mt-4">
+            <TaskTable
+              tasks={crawlRequests}
+              variant={activeTab === "completed" ? "completed" : "active"}
+              pagination={pagination}
+              activeTab={activeTab}
+            />
           </TabsContent>
         </Tabs>
       </section>

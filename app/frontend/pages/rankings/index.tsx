@@ -1,4 +1,5 @@
 import { Link } from "@inertiajs/react"
+import type { PaginationData } from "@/types"
 import {
   ArrowUpRight,
   BarChart3,
@@ -20,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { PaginationFooter } from "@/components/shared/pagination-footer"
 import PublicLayout from "@/layouts/public-layout"
 
 interface RankedLibrary {
@@ -35,6 +37,7 @@ interface RankedLibrary {
 
 interface Props {
   libraries: RankedLibrary[]
+  pagination: PaginationData
   totalLibraries: number
 }
 
@@ -90,7 +93,11 @@ function FreshnessBar({ pct }: { pct: number }) {
   )
 }
 
-export default function RankingsIndex({ libraries, totalLibraries }: Props) {
+export default function RankingsIndex({
+  libraries,
+  pagination,
+  totalLibraries,
+}: Props) {
   return (
     <PublicLayout
       title="Rankings — ContextQMD"
@@ -221,6 +228,7 @@ export default function RankingsIndex({ libraries, totalLibraries }: Props) {
                 ))}
               </TableBody>
             </Table>
+            <PaginationFooter pagination={pagination} />
           </div>
         )}
       </section>

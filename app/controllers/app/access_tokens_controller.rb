@@ -2,13 +2,16 @@
 
 module App
   class AccessTokensController < InertiaController
+    include Pagy::Method
     include BlockSearchEngineIndexing
 
     def index
-      tokens = Current.identity.access_tokens.order(created_at: :desc)
+      scope = Current.identity.access_tokens.order(created_at: :desc)
+      pagy, tokens = pagy(scope, limit: 10)
 
       render inertia: "app/access-tokens/index", props: {
         access_tokens: tokens.map { |t| token_props(t) },
+        pagination: pagination_props(pagy),
         new_token: flash[:new_token]
       }
     end

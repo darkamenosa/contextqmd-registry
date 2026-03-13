@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { Head, useForm, usePage } from "@inertiajs/react"
-import type { AccessToken } from "@/types"
+import type { AccessToken, PaginationData } from "@/types"
 import { Check, Copy, KeyRound, Plus, Trash2 } from "lucide-react"
 
 import { withCurrentAccountScope } from "@/lib/account-scope"
@@ -32,10 +32,12 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { PaginationFooter } from "@/components/shared/pagination-footer"
 import AppLayout from "@/layouts/app-layout"
 
 interface Props {
   accessTokens: AccessToken[]
+  pagination: PaginationData
   newToken: string | null
 }
 
@@ -347,6 +349,7 @@ function TokensTable({ tokens }: { tokens: AccessToken[] }) {
 
 export default function AppAccessTokensIndex({
   accessTokens,
+  pagination,
   newToken,
 }: Props) {
   return (
@@ -368,6 +371,7 @@ export default function AppAccessTokensIndex({
         {newToken && <NewTokenAlert token={newToken} />}
 
         <TokensTable tokens={accessTokens} />
+        <PaginationFooter pagination={pagination} />
       </div>
     </AppLayout>
   )

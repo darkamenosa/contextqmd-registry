@@ -3,6 +3,11 @@
 module Admin
   class DashboardsController < BaseController
     def show
+      pagy, recent_crawls = pagy(
+        CrawlRequest.includes(:identity, :library).recent,
+        limit: 10
+      )
+
       render inertia: "admin/dashboard/show", props: {
         stats: {
           library_count: Library.count,
@@ -14,7 +19,8 @@ module Admin
           crawl_completed: CrawlRequest.completed.count,
           crawl_failed: CrawlRequest.failed.count
         },
-        recent_crawls: CrawlRequest.includes(:identity, :library).recent.limit(10).map { |cr| crawl_props(cr) }
+        recent_crawls: recent_crawls.map { |cr| crawl_props(cr) },
+        pagination: pagination_props(pagy)
       }
     end
 

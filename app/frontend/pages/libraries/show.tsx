@@ -254,7 +254,7 @@ install_docs({ library: "${slug}" })`
           size="sm"
           nativeButton={false}
           render={<Link href="/libraries" />}
-          className="-ml-3 mb-4 sm:mb-6"
+          className="mb-4 -ml-3 sm:mb-6"
         >
           <ArrowLeft className="size-4" />
           Back to Libraries
@@ -533,7 +533,9 @@ install_docs({ library: "${slug}" })`
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 <ExternalLink className="size-3" />
-                                <span className="hidden sm:inline">Full page</span>
+                                <span className="hidden sm:inline">
+                                  Full page
+                                </span>
                               </Link>
                             )}
                           </div>

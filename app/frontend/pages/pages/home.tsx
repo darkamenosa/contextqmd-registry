@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react"
 import { Link, router } from "@inertiajs/react"
+import type { PaginationData } from "@/types"
 import {
   ArrowRight,
   BookOpen,
@@ -28,6 +29,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { PaginationFooter } from "@/components/shared/pagination-footer"
 import { SourceTypeIcon } from "@/components/shared/source-type-icon"
 import PublicLayout from "@/layouts/public-layout"
 
@@ -37,19 +39,15 @@ interface LibraryItem {
   displayName: string
   sourceType: string | null
   homepageUrl: string | null
-  defaultVersion: string | null
-  version: string | null
-  versionCount: number
   pageCount: number
-  licenseStatus: string | null
   updatedAt: string
 }
 
 interface Props {
   libraryCount: number
-  pageCount: number
-  versionCount: number
   libraries: LibraryItem[]
+  pagination: PaginationData
+  activeTab: string
 }
 
 const mcpConfig = `{
@@ -122,7 +120,7 @@ function LibraryTable({ libraries }: { libraries: LibraryItem[] }) {
       <TableBody>
         {libraries.map((lib) => (
           <TableRow key={`${lib.namespace}/${lib.name}`}>
-            <TableCell className="py-3.5 pl-4">
+            <TableCell className="py-2 pl-4">
               <Link
                 href={`/libraries/${lib.namespace}/${lib.name}`}
                 className="font-medium text-primary hover:underline"
@@ -130,7 +128,7 @@ function LibraryTable({ libraries }: { libraries: LibraryItem[] }) {
                 {lib.displayName}
               </Link>
             </TableCell>
-            <TableCell className="py-3.5">
+            <TableCell className="py-2">
               {lib.homepageUrl ? (
                 <a
                   href={lib.homepageUrl}
@@ -158,10 +156,10 @@ function LibraryTable({ libraries }: { libraries: LibraryItem[] }) {
                 </span>
               )}
             </TableCell>
-            <TableCell className="py-3.5 pr-4 text-right text-sm sm:pr-2">
+            <TableCell className="py-2 pr-4 text-right text-sm sm:pr-2">
               {formatCount(lib.pageCount)}
             </TableCell>
-            <TableCell className="hidden py-3.5 pr-4 text-right text-sm text-muted-foreground sm:table-cell">
+            <TableCell className="hidden py-2 pr-4 text-right text-sm text-muted-foreground sm:table-cell">
               {formatTimeAgo(lib.updatedAt)}
             </TableCell>
           </TableRow>
@@ -173,7 +171,7 @@ function LibraryTable({ libraries }: { libraries: LibraryItem[] }) {
 
 function TableFooter({ libraryCount }: { libraryCount: number }) {
   return (
-    <div className="flex items-center justify-between border-t px-4 py-3 text-xs tracking-wide text-muted-foreground">
+    <div className="flex items-center justify-between border-t px-4 py-2.5 text-xs tracking-wide text-muted-foreground">
       <span>{libraryCount.toLocaleString()} LIBRARIES</span>
       <Link
         href="/crawl"
@@ -186,33 +184,24 @@ function TableFooter({ libraryCount }: { libraryCount: number }) {
   )
 }
 
-export default function Home({ libraryCount, libraries }: Props) {
+export default function Home({
+  libraryCount,
+  libraries,
+  pagination,
+  activeTab,
+}: Props) {
   const [search, setSearch] = useState("")
 
-  const handleSearch = (e: FormEvent) => {
+  function handleSearch(e: FormEvent) {
     e.preventDefault()
     if (search.trim()) {
       router.get("/libraries", { query: search.trim() })
     }
   }
 
-  // Popular: sort by page count desc (libraries with content first)
-  const sortedByPopular = [...libraries].sort(
-    (a, b) => b.pageCount - a.pageCount || b.versionCount - a.versionCount
-  )
-
-  const sortedByRecent = [...libraries].sort(
-    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-  )
-
-  // Trending: libraries with most recent activity AND content
-  const sortedByTrending = [...libraries]
-    .filter((lib) => lib.pageCount > 0)
-    .sort(
-      (a, b) =>
-        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime() ||
-        b.pageCount - a.pageCount
-    )
+  function handleTabChange(tab: string) {
+    router.get("/", { tab }, { preserveState: true, preserveScroll: true })
+  }
 
   return (
     <PublicLayout
@@ -259,7 +248,7 @@ export default function Home({ libraryCount, libraries }: Props) {
 
       {/* Library Table — context7 style */}
       <section className="mx-auto max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
-        <Tabs defaultValue="popular">
+        <Tabs value={activeTab} onValueChange={handleTabChange}>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <TabsList>
               <TabsTrigger value="popular" className="gap-1.5">
@@ -286,23 +275,13 @@ export default function Home({ libraryCount, libraries }: Props) {
             </Button>
           </div>
 
-          <TabsContent value="popular" className="mt-4">
+          <TabsContent value={activeTab} className="mt-4">
             <div className="overflow-x-auto rounded-xl border">
-              <LibraryTable libraries={sortedByPopular} />
-              <TableFooter libraryCount={libraryCount} />
-            </div>
-          </TabsContent>
-
-          <TabsContent value="trending" className="mt-4">
-            <div className="overflow-x-auto rounded-xl border">
-              <LibraryTable libraries={sortedByTrending} />
-              <TableFooter libraryCount={libraryCount} />
-            </div>
-          </TabsContent>
-
-          <TabsContent value="recent" className="mt-4">
-            <div className="overflow-x-auto rounded-xl border">
-              <LibraryTable libraries={sortedByRecent} />
+              <LibraryTable libraries={libraries} />
+              <PaginationFooter
+                pagination={pagination}
+                buildParams={(page) => ({ tab: activeTab, page })}
+              />
               <TableFooter libraryCount={libraryCount} />
             </div>
           </TabsContent>

@@ -2,6 +2,7 @@ import { useMemo } from "react"
 import ReactMarkdown, { type Components } from "react-markdown"
 import rehypeHighlight from "rehype-highlight"
 import remarkGfm from "remark-gfm"
+
 import "highlight.js/styles/github-dark.min.css"
 
 import { cleanMarkdown } from "@/lib/format-date"

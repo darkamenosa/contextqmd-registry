@@ -52,7 +52,7 @@ export default function LibrariesNew() {
   return (
     <PublicLayout title="Submit Library">
       <section className="mx-auto max-w-2xl px-4 pt-6 pb-16 sm:px-6 sm:pt-16 sm:pb-24 lg:px-8">
-        <div className="-ml-3 mb-4 sm:mb-6">
+        <div className="mb-4 -ml-3 sm:mb-6">
           <Button
             variant="ghost"
             size="sm"
