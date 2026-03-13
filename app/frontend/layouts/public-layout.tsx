@@ -23,7 +23,7 @@ interface PublicLayoutProps {
 const DEFAULT_SEO = {
   title: "ContextQMD",
   description:
-    "Local-first documentation package system for MCP. Install, search, and retrieve version-aware docs for any library.",
+    "Local-first documentation package system for CLI and MCP. Install, search, and retrieve version-aware docs for any library.",
   image: "/og-image.png",
 } as const
 

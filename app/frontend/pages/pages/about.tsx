@@ -28,13 +28,13 @@ const techStack = [
     icon: Server,
     title: "Registry",
     description:
-      "Free, open API serving documentation packages. Browse libraries, fetch manifests, and download pages — no API key needed.",
+      "Free, open API serving documentation packages. Browse libraries, resolve versions, fetch manifests, and download compressed bundles.",
   },
   {
     icon: Code2,
-    title: "MCP Server",
+    title: "CLI + MCP",
     description:
-      "Install via npx. Works with Claude, Cursor, Windsurf, and any MCP client. Runs locally on your machine.",
+      "Use `contextqmd` in your terminal or `contextqmd-mcp` inside Claude, Cursor, Windsurf, and other MCP clients.",
   },
   {
     icon: BookOpen,
@@ -57,16 +57,15 @@ export default function About() {
           </h1>
           <div className="mt-4 space-y-6 text-base/relaxed text-muted-foreground sm:mt-8 sm:text-lg/relaxed">
             <p>
-              ContextQMD is a documentation package system built for MCP-enabled
-              AI coding tools. Instead of hitting APIs for every query, you
-              install documentation packages locally and search them with QMD —
-              a hybrid search engine that combines full-text and semantic
-              retrieval.
+              ContextQMD is a documentation package system for local AI
+              workflows. Instead of hitting APIs for every query, you install
+              documentation packages locally and search them with QMD, a hybrid
+              engine that combines full-text and semantic retrieval.
             </p>
             <p>
-              The registry is free and open. The MCP server runs locally. Your
-              docs stay on your machine, version-pinned and always available —
-              even offline.
+              The registry is free and open. The CLI and MCP server both run
+              locally. Your docs stay on your machine, version-pinned and
+              always available, even offline.
             </p>
           </div>
         </div>

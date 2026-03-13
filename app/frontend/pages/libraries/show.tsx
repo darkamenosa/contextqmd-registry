@@ -236,13 +236,25 @@ export default function LibraryShow({
     )
   }
 
-  const mcpInstall = `// In your MCP-enabled editor, use the install_docs tool:
-resolve_library({ name: "${library.aliases[0] || library.name}" })
-install_docs({ library: "${slug}" })`
+  const installQuery = library.aliases[0] || library.name
+  const sampleVersion = selectedVersion || library.defaultVersion || "latest"
+  const samplePagePath = pages[0]?.path || "docs/getting-started.md"
+  const sampleSearchQuery =
+    library.displayName === "Kamal" ? "proxy" : library.displayName
+
+  const cliUsage = `npx -y contextqmd libraries search "${installQuery}"
+npx -y contextqmd libraries install ${installQuery}
+npx -y contextqmd docs search "${sampleSearchQuery}" --library ${slug}
+npx -y contextqmd docs get --library ${slug} --version ${sampleVersion} --doc-path ${samplePagePath} --from-line 1 --max-lines 80`
+
+  const mcpUsage = `// Add "contextqmd-mcp" to your MCP config, then use:
+install_docs({ library: "${installQuery}" })
+search_docs({ query: "${sampleSearchQuery}", library: "${slug}" })
+get_doc({ library: "${slug}", version: "${sampleVersion}", doc_path: "${samplePagePath}" })`
 
   const apiResolve = `curl /api/v1/resolve \\
   -X POST -H "Content-Type: application/json" \\
-  -d '{"query": "${library.aliases[0] || library.name}"}'`
+  -d '{"query": "${installQuery}"}'`
 
   const apiPages = `curl /api/v1/libraries/${slug}/versions/${selectedVersion || "latest"}/page-index`
 
@@ -697,18 +709,46 @@ install_docs({ library: "${slug}" })`
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Terminal className="size-4" />
+                  CLI Usage
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="mb-3 text-sm text-muted-foreground">
+                  Use the standalone CLI package{" "}
+                  <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                    contextqmd
+                  </code>{" "}
+                  to search, install, and read {library.displayName} docs:
+                </p>
+                <div className="relative overflow-hidden rounded-lg border bg-zinc-950 text-zinc-100">
+                  <CopyButton text={cliUsage} />
+                  <pre className="overflow-x-auto p-4 text-sm leading-relaxed">
+                    <code>{cliUsage}</code>
+                  </pre>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Terminal className="size-4" />
                   MCP Tool Usage
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="mb-3 text-sm text-muted-foreground">
-                  Use these MCP tools in your editor to install and search{" "}
-                  {library.displayName} docs:
+                  Use the MCP package{" "}
+                  <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                    contextqmd-mcp
+                  </code>{" "}
+                  in your editor to install and search {library.displayName}{" "}
+                  docs:
                 </p>
                 <div className="relative overflow-hidden rounded-lg border bg-zinc-950 text-zinc-100">
-                  <CopyButton text={mcpInstall} />
+                  <CopyButton text={mcpUsage} />
                   <pre className="overflow-x-auto p-4 text-sm leading-relaxed">
-                    <code>{mcpInstall}</code>
+                    <code>{mcpUsage}</code>
                   </pre>
                 </div>
               </CardContent>

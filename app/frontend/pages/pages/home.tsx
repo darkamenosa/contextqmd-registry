@@ -55,10 +55,14 @@ const mcpConfig = `{
   "mcpServers": {
     "contextqmd": {
       "command": "npx",
-      "args": ["-y", "contextqmd"]
+      "args": ["-y", "contextqmd-mcp"]
     }
   }
 }`
+
+const cliQuickstart = `npx -y contextqmd libraries search "kamal"
+npx -y contextqmd libraries install kamal
+npx -y contextqmd docs search "proxy" --library kamal-deploy/kamal-deploy`
 
 const features = [
   {
@@ -75,9 +79,9 @@ const features = [
   },
   {
     icon: Server,
-    title: "MCP Native",
+    title: "CLI + MCP",
     description:
-      "Works with Claude, Cursor, Windsurf and any MCP-compatible editor. Just add the server to your config.",
+      "Use the standalone CLI in your terminal or add the MCP server to Claude, Cursor, Windsurf, and other MCP-compatible editors.",
   },
   {
     icon: Globe,
@@ -95,7 +99,7 @@ const features = [
     icon: Terminal,
     title: "Developer-First API",
     description:
-      "Clean REST API for programmatic access. Resolve libraries, fetch manifests, download page bundles.",
+      "Clean REST API for programmatic access. Resolve libraries, fetch manifests, and download compressed documentation bundles.",
   },
 ]
 
@@ -203,7 +207,7 @@ export default function Home({
       title="ContextQMD — Local-First Docs for AI"
       seo={{
         description:
-          "Local-first documentation package system for MCP. Install, search, and retrieve version-aware docs for any library.",
+          "Local-first documentation package system for CLI and MCP. Install, search, and retrieve version-aware docs for any library.",
       }}
     >
       {/* Hero */}
@@ -216,8 +220,9 @@ export default function Home({
               <span className="text-muted-foreground">for your AI editor</span>
             </h1>
             <p className="mx-auto mt-2 max-w-xl text-base/relaxed text-muted-foreground sm:mt-4 sm:text-lg/relaxed">
-              Install documentation packages locally. Search offline with hybrid
-              retrieval. Version-pinned and always available.
+              Install documentation packages locally from the CLI or your MCP
+              client. Search offline with hybrid retrieval, version-pinned and
+              always available.
             </p>
 
             {/* Search bar */}
@@ -309,7 +314,7 @@ export default function Home({
         </Tabs>
       </section>
 
-      {/* MCP Quickstart */}
+      {/* CLI + MCP Quickstart */}
       <section className="border-t">
         <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-24 lg:px-8">
           <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
@@ -318,29 +323,33 @@ export default function Home({
                 Quick Start
               </Badge>
               <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                Add to your editor in seconds
+                Start in your terminal or editor
               </h2>
               <p className="mt-4 text-muted-foreground">
-                Add ContextQMD to your MCP config. Works with Claude Desktop,
-                Cursor, Windsurf, and any MCP-compatible tool.
+                Use the CLI package `contextqmd` for terminal workflows, or add
+                `contextqmd-mcp` to Claude Desktop, Cursor, Windsurf, and other
+                MCP-compatible tools.
               </p>
               <div className="mt-6 space-y-3 text-sm">
                 <div className="flex items-start gap-3">
                   <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                     1
                   </div>
-                  <span>Add the MCP server config to your editor settings</span>
+                  <span>Search the registry and install docs with `contextqmd`</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                     2
                   </div>
                   <span>
-                    Use{" "}
+                    Search and read installed docs locally with{" "}
                     <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
-                      install_docs
+                      contextqmd docs search
                     </code>{" "}
-                    to download a library&apos;s documentation
+                    and{" "}
+                    <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                      contextqmd docs get
+                    </code>
                   </span>
                 </div>
                 <div className="flex items-start gap-3">
@@ -348,25 +357,45 @@ export default function Home({
                     3
                   </div>
                   <span>
-                    Use{" "}
+                    Add{" "}
+                    <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                      contextqmd-mcp
+                    </code>{" "}
+                    to your editor if you want MCP tools like{" "}
+                    <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                      install_docs
+                    </code>{" "}
+                    and{" "}
                     <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
                       search_docs
-                    </code>{" "}
-                    to find relevant docs locally
+                    </code>
                   </span>
                 </div>
               </div>
             </div>
-            <div className="overflow-hidden rounded-xl border bg-zinc-950 text-zinc-100">
-              <div className="flex items-center gap-2 border-b border-zinc-800 px-4 py-3">
-                <div className="size-3 rounded-full bg-red-500/70" />
-                <div className="size-3 rounded-full bg-yellow-500/70" />
-                <div className="size-3 rounded-full bg-green-500/70" />
-                <span className="ml-2 text-xs text-zinc-500">mcp.json</span>
+            <div className="space-y-6">
+              <div className="overflow-hidden rounded-xl border bg-zinc-950 text-zinc-100">
+                <div className="flex items-center gap-2 border-b border-zinc-800 px-4 py-3">
+                  <div className="size-3 rounded-full bg-red-500/70" />
+                  <div className="size-3 rounded-full bg-yellow-500/70" />
+                  <div className="size-3 rounded-full bg-green-500/70" />
+                  <span className="ml-2 text-xs text-zinc-500">terminal</span>
+                </div>
+                <pre className="overflow-x-auto p-4 text-sm leading-relaxed">
+                  <code>{cliQuickstart}</code>
+                </pre>
               </div>
-              <pre className="overflow-x-auto p-4 text-sm leading-relaxed">
-                <code>{mcpConfig}</code>
-              </pre>
+              <div className="overflow-hidden rounded-xl border bg-zinc-950 text-zinc-100">
+                <div className="flex items-center gap-2 border-b border-zinc-800 px-4 py-3">
+                  <div className="size-3 rounded-full bg-red-500/70" />
+                  <div className="size-3 rounded-full bg-yellow-500/70" />
+                  <div className="size-3 rounded-full bg-green-500/70" />
+                  <span className="ml-2 text-xs text-zinc-500">mcp.json</span>
+                </div>
+                <pre className="overflow-x-auto p-4 text-sm leading-relaxed">
+                  <code>{mcpConfig}</code>
+                </pre>
+              </div>
             </div>
           </div>
         </div>
@@ -380,7 +409,9 @@ export default function Home({
               How it works
             </h2>
             <p className="mt-4 text-muted-foreground">
-              ContextQMD is a documentation package manager for AI coding tools.
+              ContextQMD is a documentation package manager for AI coding tools,
+              with a standalone CLI and an MCP server on top of the same
+              registry.
             </p>
           </div>
           <div className="mt-16 grid gap-8 md:grid-cols-2 lg:grid-cols-3">
