@@ -98,6 +98,18 @@ const features = [
   },
 ]
 
+function formatSource(lib: LibraryItem): string {
+  if (lib.sourceType === "github" || !lib.homepageUrl) {
+    return `/${lib.namespace}/${lib.name}`
+  }
+  try {
+    const u = new URL(lib.homepageUrl)
+    return u.hostname + (u.pathname === "/" ? "" : u.pathname)
+  } catch {
+    return `/${lib.namespace}/${lib.name}`
+  }
+}
+
 function LibraryTable({ libraries }: { libraries: LibraryItem[] }) {
   return (
     <Table>
@@ -137,21 +149,15 @@ function LibraryTable({ libraries }: { libraries: LibraryItem[] }) {
                   className="inline-flex items-center gap-1.5 hover:text-foreground"
                 >
                   <SourceTypeIcon sourceType={lib.sourceType} size="size-4" />
-                  <span className="hidden text-sm text-muted-foreground sm:inline">
-                    /{lib.namespace}/{lib.name}
-                  </span>
-                  <span className="text-sm text-muted-foreground sm:hidden">
-                    /{lib.name}
+                  <span className="text-sm text-muted-foreground">
+                    {formatSource(lib)}
                   </span>
                 </a>
               ) : (
                 <span className="inline-flex items-center gap-1.5">
                   <SourceTypeIcon sourceType={lib.sourceType} size="size-4" />
-                  <span className="hidden text-sm text-muted-foreground sm:inline">
+                  <span className="text-sm text-muted-foreground">
                     /{lib.namespace}/{lib.name}
-                  </span>
-                  <span className="text-sm text-muted-foreground sm:hidden">
-                    /{lib.name}
                   </span>
                 </span>
               )}

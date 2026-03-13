@@ -520,9 +520,35 @@ install_docs({ library: "${slug}" })`
                             )}
                           </div>
                           <div className="flex shrink-0 items-center gap-2">
-                            <code className="hidden rounded-xs bg-muted px-1.5 py-0.5 text-[11px]/3 font-medium text-muted-foreground sm:inline">
-                              {page.path}
-                            </code>
+                            {page.url ? (
+                              <a
+                                href={page.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="hidden items-center gap-1 rounded-xs bg-muted px-1.5 py-0.5 text-[11px]/3 font-medium text-muted-foreground transition-colors hover:text-foreground sm:inline-flex"
+                                onClick={(e) => e.stopPropagation()}
+                                title={page.url}
+                              >
+                                {(() => {
+                                  try {
+                                    const u = new URL(page.url)
+                                    const path =
+                                      u.pathname === "/" ? "" : u.pathname
+                                    const display = `${u.hostname}${path}${u.hash}`
+                                    return display.length > 50
+                                      ? display.slice(0, 47) + "..."
+                                      : display
+                                  } catch {
+                                    return page.url
+                                  }
+                                })()}
+                                <ExternalLink className="size-2.5 shrink-0 opacity-50" />
+                              </a>
+                            ) : (
+                              <code className="hidden rounded-xs bg-muted px-1.5 py-0.5 text-[11px]/3 font-medium text-muted-foreground sm:inline">
+                                {page.path}
+                              </code>
+                            )}
                             <span className="hidden min-w-12 text-right text-[11px] text-muted-foreground/70 tabular-nums sm:inline">
                               {formatBytes(page.bytes)}
                             </span>
