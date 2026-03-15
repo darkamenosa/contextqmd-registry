@@ -137,7 +137,7 @@ class CrawlRequest < ApplicationRecord
         result.name,
         name_slug,
         *(result.aliases || [])
-      ])
+      ].reject { |v| generic_alias?(v) })
 
       library ||= find_or_create_record(
         Library,
@@ -146,7 +146,7 @@ class CrawlRequest < ApplicationRecord
         slug: slug,
         display_name: result.display_name,
         homepage_url: result.homepage_url,
-        aliases: result.aliases,
+        aliases: (result.aliases || []).reject { |v| generic_alias?(v) },
         source_type: source_type
       )
 
@@ -175,7 +175,7 @@ class CrawlRequest < ApplicationRecord
         (library.aliases || []) +
         (result.aliases || []) +
         [ result.slug, slug, result.namespace, namespace_slug, result.name, name_slug ]
-      )
+      ).reject { |v| generic_alias?(v) }
 
       attrs = {
         aliases: merged_aliases
@@ -265,6 +265,10 @@ class CrawlRequest < ApplicationRecord
       raw = values.map(&:to_s).map(&:strip).reject(&:blank?)
       compact = raw.map { |value| value.downcase.gsub(/[^a-z0-9]/, "") }.reject(&:blank?)
       (raw + compact).uniq
+    end
+
+    def generic_alias?(value)
+      DocsFetcher::LibraryIdentity::GENERIC_SOURCE_NAMES.include?(value.to_s.downcase.strip)
     end
 
     def sync_pages(version, pages, prune_stale: true)

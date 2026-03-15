@@ -371,7 +371,7 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     assert_equal "Laravel", library.display_name
     assert_equal "https://laravel.com/docs", library.homepage_url
     assert_includes library.aliases, "laravel"
-    assert_includes library.aliases, "docs"
+    refute_includes library.aliases, "docs", "generic names like 'docs' must not be stored as aliases"
   end
 
   test "creates a non-personal system account instead of reusing a personal one with the same name" do
