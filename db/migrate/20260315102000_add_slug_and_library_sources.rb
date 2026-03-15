@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "set"
+
 class AddSlugAndLibrarySources < ActiveRecord::Migration[8.0]
   GENERIC_SOURCE_NAMES = %w[
     api book doc docs documentation guide guides handbook manual manuals
@@ -14,9 +16,9 @@ class AddSlugAndLibrarySources < ActiveRecord::Migration[8.0]
     add_column :libraries, :slug, :string
 
     MigrationLibrary.reset_column_information
+    taken_slugs = Set.new
     MigrationLibrary.find_each do |library|
-      candidate = preferred_slug_source(library)
-      library.update_columns(slug: slugify(candidate, fallback: "library-#{library.id}"))
+      library.update_columns(slug: backfill_slug(library, taken_slugs))
     end
 
     change_column_null :libraries, :slug, false
@@ -104,6 +106,13 @@ class AddSlugAndLibrarySources < ActiveRecord::Migration[8.0]
       slug.presence || fallback
     end
 
+    def backfill_slug(library, taken_slugs)
+      base_slug = slugify(preferred_slug_source(library), fallback: "library-#{library.id}")
+      slug = unique_slug(base_slug, library, taken_slugs)
+      taken_slugs << slug
+      slug
+    end
+
     def preferred_slug_source(library)
       name = library.name.to_s
       namespace = library.namespace.to_s
@@ -111,5 +120,29 @@ class AddSlugAndLibrarySources < ActiveRecord::Migration[8.0]
       return namespace if GENERIC_SOURCE_NAMES.include?(name.downcase)
 
       name.presence || namespace.presence
+    end
+
+    def unique_slug(base_slug, library, taken_slugs)
+      return base_slug unless taken_slugs.include?(base_slug)
+
+      namespace_slug = slugify(library.namespace, fallback: "library-#{library.id}")
+      name_slug = slugify(library.name, fallback: "library-#{library.id}")
+      candidates = []
+      namespace_name_slug = [ namespace_slug, name_slug ].uniq.join("-")
+      candidates << namespace_name_slug unless namespace_name_slug == base_slug
+      candidates << "#{namespace_slug}-#{base_slug}" unless namespace_slug == base_slug
+      candidates << "#{base_slug}-#{library.id}"
+
+      candidates.each do |candidate|
+        return candidate unless taken_slugs.include?(candidate)
+      end
+
+      suffix = 2
+      loop do
+        candidate = "#{base_slug}-#{library.id}-#{suffix}"
+        return candidate unless taken_slugs.include?(candidate)
+
+        suffix += 1
+      end
     end
 end

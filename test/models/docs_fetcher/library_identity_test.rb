@@ -53,6 +53,18 @@ class DocsFetcher::LibraryIdentityTest < ActiveSupport::TestCase
     assert_includes identity[:aliases], "apiexamplecom"
   end
 
+  test "openapi identities fall back to the host slug for generic titles" do
+    identity = DocsFetcher::LibraryIdentity.from_openapi(
+      uri: URI.parse("https://payments.example.com/openapi.json"),
+      title: "API Reference"
+    )
+
+    assert_equal "payments", identity[:slug]
+    assert_equal "payments", identity[:namespace]
+    assert_equal "payments", identity[:name]
+    assert_equal "Payments", identity[:display_name]
+  end
+
   test "generic two-label docs hosts fall back to the first meaningful path segment" do
     identity = DocsFetcher::LibraryIdentity.from_llms(
       uri: URI.parse("https://docs.rs/serde/llms.txt"),

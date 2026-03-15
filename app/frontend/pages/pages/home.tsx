@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from "react"
 import { Link, router } from "@inertiajs/react"
-import type { PaginationData } from "@/types"
 import {
   ArrowRight,
   BookOpen,
@@ -29,7 +28,6 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { PaginationFooter } from "@/components/shared/pagination-footer"
 import { SourceTypeIcon } from "@/components/shared/source-type-icon"
 import PublicLayout from "@/layouts/public-layout"
 
@@ -45,7 +43,6 @@ interface LibraryItem {
 interface Props {
   libraryCount: number
   libraries: LibraryItem[]
-  pagination: PaginationData
   activeTab: string
 }
 
@@ -181,12 +178,7 @@ function TableFooter({ libraryCount }: { libraryCount: number }) {
   )
 }
 
-export default function Home({
-  libraryCount,
-  libraries,
-  pagination,
-  activeTab,
-}: Props) {
+export default function Home({ libraryCount, libraries, activeTab }: Props) {
   const [search, setSearch] = useState("")
 
   function handleSearch(e: FormEvent) {
@@ -298,13 +290,7 @@ export default function Home({
                   </Button>
                 </div>
               ) : (
-                <>
-                  <LibraryTable libraries={libraries} />
-                  <PaginationFooter
-                    pagination={pagination}
-                    buildParams={(page) => ({ tab: activeTab, page })}
-                  />
-                </>
+                <LibraryTable libraries={libraries} />
               )}
               <TableFooter libraryCount={libraryCount} />
             </div>

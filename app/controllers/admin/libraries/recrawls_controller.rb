@@ -8,7 +8,7 @@ module Admin
         url = params[:url].presence
 
         unless url
-          redirect_to admin_library_path(library), alert: "No crawl URL provided."
+          redirect_to admin_library_path(id: library.id), alert: "No crawl URL provided."
           return
         end
 
@@ -20,9 +20,9 @@ module Admin
         )
 
         if crawl_request.save
-          redirect_to admin_library_path(library), notice: "Re-crawl queued for #{library.display_name}."
+          redirect_to admin_library_path(id: library.id), notice: "Re-crawl queued for #{library.display_name}."
         else
-          redirect_to admin_library_path(library),
+          redirect_to admin_library_path(id: library.id),
                       alert: crawl_request.errors.full_messages.join(", ")
         end
       end

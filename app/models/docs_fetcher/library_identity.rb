@@ -68,13 +68,13 @@ module DocsFetcher
       host_slug = product_slug_from_uri(uri)
       cleaned_title = clean_title(title)
       title_slug = slugify(cleaned_title)
-      product_slug = title_slug.presence || host_slug
+      product_slug = generic_title_slug?(title_slug) ? host_slug : (title_slug.presence || host_slug)
 
       {
         slug: product_slug,
         namespace: product_slug,
         name: product_slug,
-        display_name: cleaned_title.presence || humanize_slug(product_slug),
+        display_name: generic_title_slug?(title_slug) ? humanize_slug(product_slug) : (cleaned_title.presence || humanize_slug(product_slug)),
         aliases: alias_set(product_slug, host_slug, uri.host)
       }
     end
@@ -120,6 +120,11 @@ module DocsFetcher
 
     def generic_source_name?(value)
       GENERIC_SOURCE_NAMES.include?(value.to_s.downcase)
+    end
+
+    def generic_title_slug?(value)
+      parts = value.to_s.split("-").reject(&:blank?)
+      parts.present? && parts.all? { |part| generic_source_name?(part) }
     end
 
     def generic_host_label?(value)

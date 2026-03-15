@@ -69,7 +69,7 @@ class DocsFetcher::Website::NodeRunnerTest < ActiveSupport::TestCase
     assert_empty proxy_lease.failures
     assert_equal 1, proxy_lease.releases
     assert_includes progress_events, [ "Rendering browser page", 1, 2 ]
-    assert_equal "Guide", result.display_name
+    assert_equal "Example", result.display_name
     assert_equal 1, result.pages.size
     assert_equal "guide", result.pages.first[:page_uid]
     assert_includes result.pages.first[:content], "Hello from the browser."

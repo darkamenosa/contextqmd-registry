@@ -740,16 +740,28 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
       "# Page\n\nBody"
     end
 
-    pages, complete = fetcher.send(
-      :fetch_linked_pages,
-      URI.parse("https://example.com/llms.txt"),
-      index_content
-    )
+    safe_uri_calls = 0
+    original_safe_uri = SsrfGuard.method(:safe_uri?)
+    SsrfGuard.define_singleton_method(:safe_uri?) do |uri|
+      safe_uri_calls += 1
+      uri.host == "example.com"
+    end
 
-    assert_equal 505, pages.size
-    assert complete
-    assert_equal "docs/page-1", pages.first[:path]
-    assert_equal "docs/page-505", pages.last[:path]
+    begin
+      pages, complete = fetcher.send(
+        :fetch_linked_pages,
+        URI.parse("https://example.com/llms.txt"),
+        index_content
+      )
+
+      assert_equal 505, pages.size
+      assert complete
+      assert_equal "docs/page-1", pages.first[:path]
+      assert_equal "docs/page-505", pages.last[:path]
+      assert_equal 1, safe_uri_calls
+    ensure
+      SsrfGuard.define_singleton_method(:safe_uri?, original_safe_uri)
+    end
   end
 
   test "fetch resolves version from llms-full metadata" do

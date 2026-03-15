@@ -2,6 +2,8 @@
 
 module Admin
   class LibrariesController < BaseController
+    before_action :set_library, only: %i[show edit update destroy]
+
     def index
       base = if params[:query].present?
         Library.search_by_query(params[:query])
@@ -29,49 +31,45 @@ module Admin
     end
 
     def show
-      library = Library.includes(:account, :source_policy, versions: :pages)
-                       .find(params[:id])
-      versions = library.versions.ordered
-      crawl_requests = CrawlRequest.where(library: library).recent.limit(10)
+      versions = @library.versions.includes(:pages).ordered
+      crawl_requests = CrawlRequest.where(library: @library).recent.limit(10)
 
       render inertia: "admin/libraries/show", props: {
-        library: library_detail_props(library),
+        library: library_detail_props(@library),
         versions: versions.map { |v| version_props(v) },
         crawl_requests: crawl_requests.map { |cr| crawl_props(cr) }
       }
     end
 
     def edit
-      library = Library.includes(:versions).find(params[:id])
-
       render inertia: "admin/libraries/edit", props: {
-        library: library_edit_props(library),
-        versions: library.versions.ordered.pluck(:version)
+        library: library_edit_props(@library),
+        versions: @library.versions.ordered.pluck(:version)
       }
     end
 
     def update
-      library = Library.find(params[:id])
-
-      if library.update(library_params.merge(metadata_locked: true))
-        redirect_to admin_library_path(library), notice: "Library updated."
+      if @library.update(library_params.merge(metadata_locked: true))
+        redirect_to admin_library_path(id: @library.id), notice: "Library updated."
       else
-        redirect_to edit_admin_library_path(library),
-                    alert: library.errors.full_messages.join(", ")
+        redirect_to edit_admin_library_path(id: @library.id),
+                    alert: @library.errors.full_messages.join(", ")
       end
     end
 
     def destroy
-      library = Library.find(params[:id])
-
       # Nullify crawl_request references before destroying
-      CrawlRequest.where(library: library).update_all(library_id: nil)
+      CrawlRequest.where(library: @library).update_all(library_id: nil)
 
-      library.destroy!
-      redirect_to admin_libraries_path, notice: "Library \"#{library.display_name}\" deleted."
+      @library.destroy!
+      redirect_to admin_libraries_path, notice: "Library \"#{@library.display_name}\" deleted."
     end
 
     private
+
+      def set_library
+        @library = Library.includes(:account, :source_policy, :versions).find(params[:id])
+      end
 
       def sort_column
         %w[slug display_name updated_at created_at].include?(params[:sort]) ? params[:sort] : "updated_at"

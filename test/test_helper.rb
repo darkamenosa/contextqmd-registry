@@ -1,6 +1,7 @@
 ENV["RAILS_ENV"] ||= "test"
 require_relative "../config/environment"
 require "rails/test_help"
+require "fileutils"
 
 Dir[Rails.root.join("test/support/**/*.rb")].each { |f| require f }
 
@@ -10,5 +11,18 @@ module ActiveSupport
     teardown { Current.reset }
 
     parallelize(workers: :number_of_processors)
+
+    parallelize_setup do |worker|
+      storage_root = Rails.root.join("tmp/storage-#{worker}")
+      FileUtils.rm_rf(storage_root)
+      FileUtils.mkdir_p(storage_root)
+
+      ActiveStorage::Blob.services.fetch(:test).root = storage_root
+      ActiveStorage::Blob.service.root = storage_root if ActiveStorage::Blob.service.respond_to?(:root=)
+    end
+
+    parallelize_teardown do |worker|
+      FileUtils.rm_rf(Rails.root.join("tmp/storage-#{worker}"))
+    end
   end
 end

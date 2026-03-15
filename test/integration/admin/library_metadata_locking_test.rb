@@ -27,7 +27,7 @@ class Admin::LibraryMetadataLockingTest < ActionDispatch::IntegrationTest
 
     sign_in(staff_identity)
 
-    patch admin_library_path(library), params: {
+    patch admin_library_path(id: library.id), params: {
       library: {
         display_name: "Laravel",
         homepage_url: "https://laravel.com/docs",
@@ -36,7 +36,7 @@ class Admin::LibraryMetadataLockingTest < ActionDispatch::IntegrationTest
       }
     }
 
-    assert_redirected_to admin_library_path(library)
+    assert_redirected_to admin_library_path(id: library.id)
     assert_predicate library.reload, :metadata_locked?
     assert_equal "Laravel", library.display_name
     assert_equal "https://laravel.com/docs", library.homepage_url
@@ -67,7 +67,7 @@ class Admin::LibraryMetadataLockingTest < ActionDispatch::IntegrationTest
 
     sign_in(staff_identity)
 
-    patch admin_library_path(library), params: {
+    patch admin_library_path(id: library.id), params: {
       library: {
         slug: "laravel",
         display_name: "Laravel",
@@ -77,7 +77,7 @@ class Admin::LibraryMetadataLockingTest < ActionDispatch::IntegrationTest
       }
     }
 
-    assert_redirected_to admin_library_path(library)
+    assert_redirected_to admin_library_path(id: library.id)
     assert_equal "laravel", library.reload.slug
     assert_predicate library, :metadata_locked?
   ensure

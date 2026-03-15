@@ -277,9 +277,7 @@ get_doc({ library: "${slug}", version: "${sampleVersion}", doc_path: "${samplePa
             <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
               {library.displayName}
             </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {library.slug}
-            </p>
+            <p className="mt-1 text-sm text-muted-foreground">{library.slug}</p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {library.sourceType && (
                 <Badge variant="outline" className="gap-1 text-xs">

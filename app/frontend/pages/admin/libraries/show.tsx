@@ -489,7 +489,7 @@ export default function AdminLibraryShow({
               <MoreHorizontal className="size-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem
+              <DropdownMenuItem
                 onClick={() => router.visit(`/libraries/${library.slug}`)}
               >
                 <ExternalLink className="mr-2 size-4" />
@@ -535,11 +535,7 @@ export default function AdminLibraryShow({
               variant="ghost"
               size="sm"
               nativeButton={false}
-              render={
-                <Link
-                  href={`/libraries/${library.slug}`}
-                />
-              }
+              render={<Link href={`/libraries/${library.slug}`} />}
             >
               <ExternalLink className="size-3.5" />
               Public page

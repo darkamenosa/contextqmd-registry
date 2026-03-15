@@ -127,6 +127,7 @@ module DocsFetcher
         slug_counts = Hash.new(0)
         total_links = links.size
         hit_cap = false
+        safe_hosts = {}
 
         links.each_with_index do |link, index|
           if total_bytes >= MAX_TOTAL_BYTES
@@ -140,7 +141,7 @@ module DocsFetcher
 
           resolved_uri = resolve_link(base_uri, link[:path])
           next unless resolved_uri
-          next unless SsrfGuard.safe_uri?(resolved_uri)
+          next unless safe_host_uri?(resolved_uri, safe_hosts)
 
           raw = http_get(resolved_uri)
           next unless raw
@@ -168,6 +169,15 @@ module DocsFetcher
         end
 
         [ pages, !hit_cap ]
+      end
+
+      def safe_host_uri?(uri, safe_hosts)
+        host = uri.host.to_s.downcase
+        return false if host.blank?
+
+        safe_hosts.fetch(host) do
+          safe_hosts[host] = SsrfGuard.safe_uri?(uri)
+        end
       end
 
       def resolve_link(base_uri, path)

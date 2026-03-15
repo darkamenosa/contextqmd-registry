@@ -1,20 +1,16 @@
 # frozen_string_literal: true
 
 class HomepagesController < InertiaController
-  include Pagy::Method
-
   allow_unauthenticated_access
   disallow_account_scope
 
   def show
     libraries = Library.includes(versions: :pages).all
     sorted = sort_libraries(libraries, params[:tab] || "popular")
-    pagy, paginated = pagy(sorted.map { |lib| home_library_props(lib) }, limit: 10)
 
     render inertia: "pages/home", props: {
       library_count: Library.count,
-      libraries: paginated,
-      pagination: pagination_props(pagy),
+      libraries: sorted.first(10).map { |lib| home_library_props(lib) },
       active_tab: params[:tab] || "popular"
     }
   end
