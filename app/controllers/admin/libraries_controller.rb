@@ -53,7 +53,7 @@ module Admin
     def update
       library = Library.find(params[:id])
 
-      if library.update(library_params)
+      if library.update(library_params.merge(metadata_locked: true))
         redirect_to admin_library_path(library), notice: "Library updated."
       else
         redirect_to edit_admin_library_path(library),
@@ -74,7 +74,7 @@ module Admin
     private
 
       def sort_column
-        %w[namespace name display_name updated_at created_at].include?(params[:sort]) ? params[:sort] : "updated_at"
+        %w[slug display_name updated_at created_at].include?(params[:sort]) ? params[:sort] : "updated_at"
       end
 
       def sort_direction
@@ -82,7 +82,7 @@ module Admin
       end
 
       def library_params
-        permitted = params.expect(library: [ :display_name, :homepage_url, :default_version, aliases: [] ])
+        permitted = params.expect(library: [ :slug, :display_name, :homepage_url, :default_version, aliases: [] ])
 
         # Merge crawl_rules from separate form fields (one entry per line, textarea)
         if params[:library]&.key?(:crawl_rules)
@@ -101,6 +101,7 @@ module Admin
       def library_row_props(library)
         {
           id: library.id,
+          slug: library.slug,
           namespace: library.namespace,
           name: library.name,
           display_name: library.display_name,
@@ -119,6 +120,7 @@ module Admin
         last_crawl = CrawlRequest.where(library: library).completed.recent.first
         {
           id: library.id,
+          slug: library.slug,
           namespace: library.namespace,
           name: library.name,
           display_name: library.display_name,
@@ -140,6 +142,7 @@ module Admin
       def library_edit_props(library)
         {
           id: library.id,
+          slug: library.slug,
           namespace: library.namespace,
           name: library.name,
           display_name: library.display_name,
@@ -147,6 +150,7 @@ module Admin
           default_version: library.default_version,
           source_type: library.source_type,
           aliases: library.aliases,
+          metadata_locked: library.metadata_locked,
           crawl_rules: library.crawl_rules || {}
         }
       end

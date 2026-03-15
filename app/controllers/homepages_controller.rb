@@ -37,8 +37,7 @@ class HomepagesController < InertiaController
       best_version = library.versions.max_by { |v| v.pages.size }
       latest_version = library.versions.max_by(&:created_at)
       {
-        namespace: library.namespace,
-        name: library.name,
+        slug: library.slug,
         display_name: library.display_name,
         page_count: best_version&.pages&.size || 0,
         source_type: library.source_type,

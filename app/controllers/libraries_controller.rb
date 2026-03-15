@@ -13,7 +13,7 @@ class LibrariesController < InertiaController
     else
       Library.all
     end
-    libraries = libraries.includes(:source_policy, versions: :pages).order(:namespace, :name)
+    libraries = libraries.includes(:source_policy, versions: :pages).order(:slug)
 
     pagy, paginated = pagy(libraries, limit: 10)
 
@@ -25,7 +25,7 @@ class LibrariesController < InertiaController
   end
 
   def show
-    library = Library.includes(versions: :pages, source_policy: []).find_by!(namespace: params[:namespace], name: params[:name])
+    library = Library.includes(versions: :pages, source_policy: [], library_sources: []).find_by!(slug: params[:slug])
     versions = library.versions.ordered
 
     selected_version = library.best_version(requested: params[:version])
@@ -62,11 +62,11 @@ class LibrariesController < InertiaController
       return
     end
 
-    library = Library.new(library_params)
+    library = Library.new(manual_library_params)
     library.account = account
 
     if library.save
-      redirect_to detail_libraries_path(namespace: library.namespace, name: library.name),
+      redirect_to "/libraries/#{library.slug}",
                   notice: "Library submitted successfully!"
     else
       redirect_to new_library_path, alert: library.errors.full_messages.join(", ")
@@ -84,8 +84,7 @@ class LibrariesController < InertiaController
 
     def library_props(library)
       {
-        namespace: library.namespace,
-        name: library.name,
+        slug: library.slug,
         display_name: library.display_name,
         aliases: library.aliases,
         homepage_url: library.homepage_url,
@@ -93,7 +92,8 @@ class LibrariesController < InertiaController
         license_status: library.source_policy&.license_status,
         version_count: library.versions.size,
         page_count: library.versions.sum { |v| v.pages.size },
-        source_type: library.source_type
+        source_type: library.source_type,
+        source_count: library.library_sources.size
       }
     end
 
@@ -123,7 +123,14 @@ class LibrariesController < InertiaController
       content.length > 5000 ? "#{content[0, 5000]}..." : content
     end
 
-    def library_params
-      params.expect(library: [ :namespace, :name, :display_name, :homepage_url, :default_version, aliases: [] ])
+    def manual_library_params
+      permitted = params.expect(library: [ :slug, :display_name, :homepage_url, :default_version, aliases: [] ])
+      slug = permitted[:slug].to_s.tr("_", "-").parameterize(separator: "-")
+
+      permitted.merge(
+        slug: slug,
+        namespace: slug,
+        name: slug
+      )
     end
 end

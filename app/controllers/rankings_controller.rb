@@ -37,8 +37,7 @@ class RankingsController < InertiaController
       freshness = [ 1.0 - (days_since_update / 365.0), 0.0 ].max
 
       {
-        namespace: library.namespace,
-        name: library.name,
+        slug: library.slug,
         display_name: library.display_name,
         homepage_url: library.homepage_url,
         source_type: library.source_type,

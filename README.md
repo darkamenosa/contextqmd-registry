@@ -85,9 +85,9 @@ All read endpoints are public (no auth). Write endpoints use Bearer token authen
 
 ### Primary install flow
 
-1. `POST /api/v1/resolve` — resolve library name/alias to canonical namespace + version
-2. `GET /api/v1/libraries/:ns/:name/versions/:v/manifest` — get version manifest with page checksums
-3. `GET /api/v1/libraries/:ns/:name/versions/:v/bundles/:profile` — download docs bundle
+1. `POST /api/v1/resolve` — resolve a query to the canonical library slug + version
+2. `GET /api/v1/libraries/:slug/versions/:v/manifest` — get version manifest with page checksums
+3. `GET /api/v1/libraries/:slug/versions/:v/bundles/:profile` — download docs bundle
 
 ### All endpoints
 
@@ -96,14 +96,14 @@ All read endpoints are public (no auth). Write endpoints use Bearer token authen
 | GET | `/api/v1/health` | No | Health check |
 | GET | `/api/v1/capabilities` | No | Server capabilities and supported source types |
 | GET | `/api/v1/libraries` | No | List/search libraries (cursor pagination) |
-| GET | `/api/v1/libraries/:ns/:name` | No | Library details with stats |
-| GET | `/api/v1/libraries/:ns/:name/versions` | No | List versions (cursor pagination, channel filter) |
-| GET | `/api/v1/libraries/:ns/:name/versions/:v/manifest` | No | Version manifest (pages, checksums, source policy) |
-| GET | `/api/v1/libraries/:ns/:name/versions/:v/bundles/:profile` | No | Binary docs bundle download |
-| GET | `/api/v1/libraries/:ns/:name/versions/:v/page-index` | No | Paginated page index |
-| GET | `/api/v1/libraries/:ns/:name/versions/:v/pages/:uid` | No | Single page content |
+| GET | `/api/v1/libraries/:slug` | No | Library details with stats |
+| GET | `/api/v1/libraries/:slug/versions` | No | List versions (cursor pagination, channel filter) |
+| GET | `/api/v1/libraries/:slug/versions/:v/manifest` | No | Version manifest (pages, checksums, source policy) |
+| GET | `/api/v1/libraries/:slug/versions/:v/bundles/:profile` | No | Binary docs bundle download |
+| GET | `/api/v1/libraries/:slug/versions/:v/page-index` | No | Paginated page index |
+| GET | `/api/v1/libraries/:slug/versions/:v/pages/:uid` | No | Single page content |
 | POST | `/api/v1/resolve` | No | Resolve library name/alias to canonical ID |
-| POST | `/api/v1/libraries/:ns/:name/versions/:v/query` | No | Semantic doc search (debug/experimental) |
+| POST | `/api/v1/libraries/:slug/versions/:v/query` | No | Semantic doc search (debug/experimental) |
 | POST | `/api/v1/crawl` | Yes | Submit a URL to crawl |
 
 ## Crawl Pipeline

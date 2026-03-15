@@ -104,6 +104,31 @@ class LibraryTest < ActiveSupport::TestCase
     assert_nil Library.resolve("nonexistent-library-xyz")
   end
 
+  test "populate_slug defaults to name when slug is blank" do
+    library = Library.create!(
+      account: accounts(:personal),
+      namespace: "vercel",
+      name: "nextjs-docs",
+      aliases: [ "next", "next.js" ],
+      display_name: "Next.js Docs"
+    )
+
+    assert_equal "nextjs-docs", library.slug
+  end
+
+  test "slug is unique" do
+    duplicate = Library.new(
+      account: accounts(:organization),
+      namespace: "another-org",
+      name: "another-lib",
+      slug: "nextjs",
+      display_name: "Another Library"
+    )
+
+    assert_not duplicate.valid?
+    assert duplicate.errors[:slug].present?
+  end
+
   # -- Library#best_version ---------------------------------------------------
 
   test "best_version returns nil for library with no versions" do

@@ -3,15 +3,15 @@
 module App
   class DashboardsController < BaseController
     def show
-      recent_crawls = account_crawl_requests.includes(:library).recent.limit(5)
-      recent_libraries = account_libraries.order(created_at: :desc).limit(5)
+      recent_crawls = my_crawl_requests.includes(:library).recent.limit(5)
+      recent_libraries = my_libraries.order(created_at: :desc).limit(5)
 
       render inertia: "app/dashboard/show", props: {
         stats: {
-          library_count: account_libraries.count,
-          version_count: account_versions.count,
-          page_count: account_pages.count,
-          crawl_pending: account_crawl_requests.pending.count
+          library_count: my_libraries.count,
+          version_count: my_versions.count,
+          page_count: my_pages.count,
+          crawl_pending: my_crawl_requests.pending.count
         },
         recent_crawls: recent_crawls.map { |cr| crawl_props(cr) },
         recent_libraries: recent_libraries.map { |lib| library_props(lib) }
@@ -20,20 +20,20 @@ module App
 
     private
 
-      def account_libraries
-        Library.where(account: Current.account)
+      def my_crawl_requests
+        Current.identity.crawl_requests
       end
 
-      def account_versions
-        Version.joins(:library).where(libraries: { account_id: Current.account.id })
+      def my_libraries
+        Library.where(id: my_crawl_requests.select(:library_id))
       end
 
-      def account_pages
-        Page.joins(version: :library).where(libraries: { account_id: Current.account.id })
+      def my_versions
+        Version.where(library_id: my_libraries.select(:id))
       end
 
-      def account_crawl_requests
-        Current.identity.crawl_requests.joins(:library).where(libraries: { account_id: Current.account.id })
+      def my_pages
+        Page.where(version_id: my_versions.select(:id))
       end
 
       def crawl_props(cr)
@@ -43,15 +43,14 @@ module App
           source_type: cr.source_type,
           status: cr.status,
           library_name: cr.library&.display_name,
-          library_slug: cr.library ? "#{cr.library.namespace}/#{cr.library.name}" : nil,
+          library_slug: cr.library&.slug,
           created_at: cr.created_at.iso8601
         }
       end
 
       def library_props(lib)
         {
-          namespace: lib.namespace,
-          name: lib.name,
+          slug: lib.slug,
           display_name: lib.display_name,
           default_version: lib.default_version,
           created_at: lib.created_at.iso8601

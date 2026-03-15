@@ -50,7 +50,7 @@ class CrawlRequestsController < InertiaController
         source_type: cr.source_type,
         status: cr.status,
         library_name: cr.library&.display_name,
-        library_slug: cr.library ? "#{cr.library.namespace}/#{cr.library.name}" : nil,
+        library_slug: cr.library&.slug,
         created_at: cr.created_at.iso8601,
         updated_at: cr.updated_at.iso8601
       }

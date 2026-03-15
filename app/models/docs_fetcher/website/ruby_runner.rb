@@ -55,23 +55,18 @@ module DocsFetcher
         pages = crawl(seed_uri, on_progress: on_progress)
         raise DocsFetcher::PermanentFetchError, "No content found at #{url}" if pages.empty?
 
-        host = @domain.gsub(/^www\./, "")
-        parts = host.split(".")
-
-        namespace = if %w[docs api www dev].include?(parts.first) && parts.length >= 3
-          parts[1].downcase
-        else
-          parts.first.downcase
-        end
-        name = namespace
-        site_title = pages.first&.dig(:title) || @domain
+        identity = LibraryIdentity.from_website(
+          uri: seed_uri,
+          title: pages.first&.dig(:title)
+        )
 
         CrawlResult.new(
-          namespace: namespace,
-          name: name,
-          display_name: site_title,
+          slug: identity[:slug],
+          namespace: identity[:namespace],
+          name: identity[:name],
+          display_name: identity[:display_name],
           homepage_url: url,
-          aliases: [ name ],
+          aliases: identity[:aliases],
           version: nil,
           pages: pages,
           complete: false  # website crawl is always bounded/partial

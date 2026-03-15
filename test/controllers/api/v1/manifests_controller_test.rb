@@ -21,7 +21,7 @@ module Api
       end
 
       test "show returns contract-conforming manifest" do
-        get "/api/v1/libraries/vercel/nextjs/versions/16.1.6/manifest"
+        get "/api/v1/libraries/nextjs/versions/16.1.6/manifest"
 
         assert_response :ok
 
@@ -32,8 +32,7 @@ module Api
 
         # Flat top-level fields per API contract
         assert_equal "1.0", data["schema_version"]
-        assert_equal "vercel", data["namespace"]
-        assert_equal "nextjs", data["name"]
+        assert_equal "nextjs", data["slug"]
         assert_equal "Next.js", data["display_name"]
         assert_equal "16.1.6", data["version"]
         assert_equal "stable", data["channel"]
@@ -49,13 +48,13 @@ module Api
 
         # Page index — object with url, not flat string
         assert_not_nil data["page_index"]
-        assert_equal "/api/v1/libraries/vercel/nextjs/versions/16.1.6/page-index", data["page_index"]["url"]
+        assert_equal "/api/v1/libraries/nextjs/versions/16.1.6/page-index", data["page_index"]["url"]
 
         # Profiles — hash of profile => { bundle: { format, url, sha256 } }
         assert data["profiles"].is_a?(Hash), "profiles should be a hash"
         assert_equal "tar.gz", data["profiles"]["full"]["bundle"]["format"]
         assert_equal @full_bundle.sha256, data["profiles"]["full"]["bundle"]["sha256"]
-        assert_equal "/api/v1/libraries/vercel/nextjs/versions/16.1.6/bundles/full?sha256=#{ERB::Util.url_encode(@full_bundle.sha256)}",
+        assert_equal "/api/v1/libraries/nextjs/versions/16.1.6/bundles/full?sha256=#{ERB::Util.url_encode(@full_bundle.sha256)}",
           data["profiles"]["full"]["bundle"]["url"]
         assert_not data["profiles"].key?("slim"), "undeliverable ready bundles should not be advertised"
 
@@ -70,7 +69,7 @@ module Api
       end
 
       test "show returns 404 for nonexistent library or version" do
-        get "/api/v1/libraries/vercel/nextjs/versions/99.0.0/manifest"
+        get "/api/v1/libraries/nextjs/versions/99.0.0/manifest"
 
         assert_response :not_found
 
@@ -79,7 +78,7 @@ module Api
       end
 
       test "GET manifest with 'latest' resolves to default version" do
-        get "/api/v1/libraries/vercel/nextjs/versions/latest/manifest"
+        get "/api/v1/libraries/nextjs/versions/latest/manifest"
 
         assert_response :ok
 
@@ -87,8 +86,17 @@ module Api
         assert_equal "16.1.6", body["data"]["version"]
       end
 
+      test "show resolves manifest by canonical slug when slug differs from legacy name" do
+        @version.library.update!(slug: "next")
+
+        get "/api/v1/libraries/next/versions/16.1.6/manifest"
+
+        assert_response :ok
+        assert_equal "next", response.parsed_body.dig("data", "slug")
+      end
+
       test "GET manifest with 'stable' resolves to stable channel version" do
-        get "/api/v1/libraries/vercel/nextjs/versions/stable/manifest"
+        get "/api/v1/libraries/nextjs/versions/stable/manifest"
 
         assert_response :ok
 
@@ -100,7 +108,7 @@ module Api
       test "show only advertises ready bundles" do
         @version.bundles.create!(profile: "compact", status: "pending")
 
-        get "/api/v1/libraries/vercel/nextjs/versions/16.1.6/manifest"
+        get "/api/v1/libraries/nextjs/versions/16.1.6/manifest"
 
         assert_response :ok
 
@@ -111,7 +119,7 @@ module Api
       test "show does not advertise private bundles" do
         @full_bundle.update!(visibility: "private")
 
-        get "/api/v1/libraries/vercel/nextjs/versions/16.1.6/manifest"
+        get "/api/v1/libraries/nextjs/versions/16.1.6/manifest"
 
         assert_response :ok
 

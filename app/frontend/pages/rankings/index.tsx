@@ -11,7 +11,6 @@ import {
 } from "lucide-react"
 
 import { formatTimeAgo } from "@/lib/format-date"
-import { formatSource } from "@/lib/format-source"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import {
@@ -27,8 +26,7 @@ import PublicLayout from "@/layouts/public-layout"
 
 interface RankedLibrary {
   rank: number
-  namespace: string
-  name: string
+  slug: string
   displayName: string
   homepageUrl: string | null
   sourceType: string | null
@@ -195,13 +193,13 @@ export default function RankingsIndex({
               </TableHeader>
               <TableBody>
                 {libraries.map((lib) => (
-                  <TableRow key={`${lib.namespace}/${lib.name}`}>
+                  <TableRow key={lib.slug}>
                     <TableCell className="pl-4">
                       <RankBadge rank={lib.rank} />
                     </TableCell>
                     <TableCell>
                       <Link
-                        href={`/libraries/${lib.namespace}/${lib.name}`}
+                        href={`/libraries/${lib.slug}`}
                         className="group flex items-center gap-2"
                       >
                         <div>
@@ -209,7 +207,7 @@ export default function RankingsIndex({
                             {lib.displayName}
                           </span>
                           <span className="ml-2 hidden text-sm text-muted-foreground sm:inline">
-                            {formatSource(lib)}
+                            {lib.slug}
                           </span>
                         </div>
                         <ArrowUpRight className="size-3.5 opacity-0 transition-opacity group-hover:opacity-100" />

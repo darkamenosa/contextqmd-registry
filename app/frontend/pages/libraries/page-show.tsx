@@ -19,8 +19,7 @@ import { MarkdownContent } from "@/components/shared/markdown-content"
 import PublicLayout from "@/layouts/public-layout"
 
 interface LibrarySummary {
-  namespace: string
-  name: string
+  slug: string
   displayName: string
 }
 
@@ -67,7 +66,7 @@ function CopyMarkdownButton({ content }: { content: string }) {
 }
 
 export default function LibraryPageShow({ library, version, page }: Props) {
-  const slug = `${library.namespace}/${library.name}`
+  const slug = library.slug
 
   return (
     <PublicLayout title={`${page.title} - ${library.displayName} — ContextQMD`}>

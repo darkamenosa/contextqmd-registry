@@ -21,8 +21,7 @@ import PublicLayout from "@/layouts/public-layout"
 
 export default function LibrariesNew() {
   const { data, setData, post, processing, transform } = useForm({
-    namespace: "",
-    name: "",
+    slug: "",
     displayName: "",
     homepageUrl: "",
     defaultVersion: "",
@@ -33,8 +32,7 @@ export default function LibrariesNew() {
     e.preventDefault()
     transform((data) => ({
       library: {
-        namespace: data.namespace,
-        name: data.name,
+        slug: data.slug,
         display_name: data.displayName,
         homepage_url: data.homepageUrl || null,
         default_version: data.defaultVersion || null,
@@ -68,44 +66,27 @@ export default function LibrariesNew() {
           <CardHeader>
             <CardTitle className="text-2xl">Submit a Library</CardTitle>
             <CardDescription>
-              Add a new library to the ContextQMD registry. All fields marked
-              with * are required.
+              Add a canonical library package to the ContextQMD registry. All
+              fields marked with * are required.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit}>
               <FieldGroup className="gap-5">
                 <Field>
-                  <FieldLabel htmlFor="namespace">Namespace *</FieldLabel>
+                  <FieldLabel htmlFor="slug">Slug *</FieldLabel>
                   <Input
-                    id="namespace"
+                    id="slug"
                     type="text"
-                    placeholder="e.g. react"
-                    value={data.namespace}
-                    onChange={(e) => setData("namespace", e.target.value)}
+                    placeholder="e.g. laravel"
+                    value={data.slug}
+                    onChange={(e) => setData("slug", e.target.value)}
                     pattern="[a-z0-9-]+"
                     title="Lowercase alphanumeric characters and hyphens only"
                     required
                   />
                   <FieldDescription>
-                    Lowercase alphanumeric characters and hyphens only.
-                  </FieldDescription>
-                </Field>
-
-                <Field>
-                  <FieldLabel htmlFor="name">Name *</FieldLabel>
-                  <Input
-                    id="name"
-                    type="text"
-                    placeholder="e.g. react-dom"
-                    value={data.name}
-                    onChange={(e) => setData("name", e.target.value)}
-                    pattern="[a-z0-9-]+"
-                    title="Lowercase alphanumeric characters and hyphens only"
-                    required
-                  />
-                  <FieldDescription>
-                    Lowercase alphanumeric characters and hyphens only.
+                    Canonical install name used in URLs, CLI, and MCP.
                   </FieldDescription>
                 </Field>
 

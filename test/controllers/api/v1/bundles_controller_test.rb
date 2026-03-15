@@ -21,7 +21,7 @@ module Api
       end
 
       test "show returns a binary bundle download for checksum-addressed URLs" do
-        get "/api/v1/libraries/vercel/nextjs/versions/16.1.6/bundles/full?sha256=#{@bundle.sha256}"
+        get "/api/v1/libraries/nextjs/versions/16.1.6/bundles/full?sha256=#{@bundle.sha256}"
 
         assert_response :ok
         assert_equal "application/octet-stream", response.media_type
@@ -33,15 +33,24 @@ module Api
       end
 
       test "show does not mark mutable bundle URLs as immutable" do
-        get "/api/v1/libraries/vercel/nextjs/versions/16.1.6/bundles/full"
+        get "/api/v1/libraries/nextjs/versions/16.1.6/bundles/full"
 
         assert_response :ok
         assert_includes response.headers["Cache-Control"], "public"
         assert_not_includes response.headers["Cache-Control"], "immutable"
       end
 
+      test "show resolves bundle download by canonical slug when slug differs from legacy name" do
+        @version.library.update!(slug: "next")
+
+        get "/api/v1/libraries/next/versions/16.1.6/bundles/full?sha256=#{@bundle.sha256}"
+
+        assert_response :ok
+        assert_equal @bundle.sha256, response.headers["X-Bundle-SHA256"]
+      end
+
       test "show returns 404 for nonexistent bundle profile" do
-        get "/api/v1/libraries/vercel/nextjs/versions/16.1.6/bundles/nonexistent"
+        get "/api/v1/libraries/nextjs/versions/16.1.6/bundles/nonexistent"
 
         assert_response :not_found
 
@@ -53,7 +62,7 @@ module Api
         @bundle.update!(status: "pending", sha256: nil, size_bytes: nil)
         FileUtils.rm_f(@bundle.file_path)
 
-        get "/api/v1/libraries/vercel/nextjs/versions/16.1.6/bundles/full"
+        get "/api/v1/libraries/nextjs/versions/16.1.6/bundles/full"
 
         assert_response :conflict
         body = response.parsed_body
@@ -64,7 +73,7 @@ module Api
         expected_body = File.binread(@bundle.file_path)
         FileUtils.rm_f(@bundle.file_path)
 
-        get "/api/v1/libraries/vercel/nextjs/versions/16.1.6/bundles/full?sha256=#{@bundle.sha256}"
+        get "/api/v1/libraries/nextjs/versions/16.1.6/bundles/full?sha256=#{@bundle.sha256}"
 
         assert_response :ok
         assert_equal expected_body, response.body
@@ -74,7 +83,7 @@ module Api
       test "show returns 404 for private bundles" do
         @bundle.update!(visibility: "private")
 
-        get "/api/v1/libraries/vercel/nextjs/versions/16.1.6/bundles/full"
+        get "/api/v1/libraries/nextjs/versions/16.1.6/bundles/full"
 
         assert_response :not_found
         body = response.parsed_body

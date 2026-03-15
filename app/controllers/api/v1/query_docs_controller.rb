@@ -9,7 +9,7 @@ module Api
 
       before_action :find_library_and_version!
 
-      # POST /api/v1/libraries/:namespace/:name/versions/:version/query
+      # POST /api/v1/libraries/:slug/versions/:version/query
       #
       # Params:
       #   query      - search query string (required)

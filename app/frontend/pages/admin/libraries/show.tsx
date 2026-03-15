@@ -441,7 +441,7 @@ export default function AdminLibraryShow({
   const [deleting, setDeleting] = useState(false)
   const [recrawling, setRecrawling] = useState(false)
 
-  const slug = `${library.namespace}/${library.name}`
+  const slug = library.slug
 
   function handleDelete() {
     setDeleting(true)
@@ -489,12 +489,8 @@ export default function AdminLibraryShow({
               <MoreHorizontal className="size-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem
-                onClick={() =>
-                  router.visit(
-                    `/libraries/${library.namespace}/${library.name}`
-                  )
-                }
+                <DropdownMenuItem
+                onClick={() => router.visit(`/libraries/${library.slug}`)}
               >
                 <ExternalLink className="mr-2 size-4" />
                 View public page
@@ -541,7 +537,7 @@ export default function AdminLibraryShow({
               nativeButton={false}
               render={
                 <Link
-                  href={`/libraries/${library.namespace}/${library.name}`}
+                  href={`/libraries/${library.slug}`}
                 />
               }
             >

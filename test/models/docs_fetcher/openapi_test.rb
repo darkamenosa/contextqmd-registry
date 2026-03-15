@@ -80,9 +80,10 @@ class DocsFetcher::OpenapiTest < ActiveSupport::TestCase
     result = fetcher.fetch(Struct.new(:url).new("https://api.example.com/openapi.json"))
 
     assert_instance_of CrawlResult, result
-    assert_equal "api", result.namespace
-    assert_equal "pet-store-api", result.name
-    assert_equal "Pet Store API", result.display_name
+    assert_equal "pet-store", result.slug
+    assert_equal "pet-store", result.namespace
+    assert_equal "pet-store", result.name
+    assert_equal "Pet Store", result.display_name
     assert_equal "1.0.0", result.version
 
     page_uids = result.pages.map { |p| p[:page_uid] }
@@ -151,9 +152,10 @@ class DocsFetcher::OpenapiTest < ActiveSupport::TestCase
     uri = URI.parse("https://api.example.com/spec.json")
     metadata = @fetcher.send(:extract_metadata, spec, uri)
 
-    assert_equal "api", metadata[:namespace]
-    assert_equal "my-api", metadata[:name]
-    assert_equal "My API", metadata[:display_name]
+    assert_equal "my", metadata[:slug]
+    assert_equal "my", metadata[:namespace]
+    assert_equal "my", metadata[:name]
+    assert_equal "My", metadata[:display_name]
     assert_equal "2.0", metadata[:version]
   end
 

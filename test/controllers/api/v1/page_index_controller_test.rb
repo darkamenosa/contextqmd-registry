@@ -24,7 +24,7 @@ module Api
       # -- index (page-index) --
 
       test "index with auth returns paginated page listing" do
-        get "/api/v1/libraries/vercel/nextjs/versions/16.1.6/page-index", headers: auth_headers
+        get "/api/v1/libraries/nextjs/versions/16.1.6/page-index", headers: auth_headers
 
         assert_response :ok
 
@@ -46,7 +46,7 @@ module Api
       end
 
       test "index without auth returns 200" do
-        get "/api/v1/libraries/vercel/nextjs/versions/16.1.6/page-index"
+        get "/api/v1/libraries/nextjs/versions/16.1.6/page-index"
 
         assert_response :ok
 
@@ -55,8 +55,17 @@ module Api
         assert_kind_of Array, body["data"]
       end
 
+      test "index resolves by canonical slug when slug differs from legacy name" do
+        libraries(:nextjs).update!(slug: "next")
+
+        get "/api/v1/libraries/next/versions/16.1.6/page-index", headers: auth_headers
+
+        assert_response :ok
+        assert_equal 2, response.parsed_body["data"].size
+      end
+
       test "index returns 404 for nonexistent version" do
-        get "/api/v1/libraries/vercel/nextjs/versions/99.0.0/page-index", headers: auth_headers
+        get "/api/v1/libraries/nextjs/versions/99.0.0/page-index", headers: auth_headers
 
         assert_response :not_found
 
@@ -67,7 +76,7 @@ module Api
       # -- show (single page) --
 
       test "show with auth returns single page content" do
-        get "/api/v1/libraries/vercel/nextjs/versions/16.1.6/pages/pg_install_001", headers: auth_headers
+        get "/api/v1/libraries/nextjs/versions/16.1.6/pages/pg_install_001", headers: auth_headers
 
         assert_response :ok
 
@@ -83,7 +92,7 @@ module Api
       end
 
       test "show without auth returns 200" do
-        get "/api/v1/libraries/vercel/nextjs/versions/16.1.6/pages/pg_install_001"
+        get "/api/v1/libraries/nextjs/versions/16.1.6/pages/pg_install_001"
 
         assert_response :ok
 
@@ -93,7 +102,7 @@ module Api
       end
 
       test "show returns 404 for nonexistent page" do
-        get "/api/v1/libraries/vercel/nextjs/versions/16.1.6/pages/pg_nonexistent", headers: auth_headers
+        get "/api/v1/libraries/nextjs/versions/16.1.6/pages/pg_nonexistent", headers: auth_headers
 
         assert_response :not_found
 

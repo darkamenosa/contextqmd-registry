@@ -92,7 +92,7 @@ export default function AdminLibrariesIndex({
       headerClassName: "pl-4",
       cellClassName: "pl-4",
     },
-    { id: "namespace", label: "Slug", sortable: true },
+    { id: "slug", label: "Slug", sortable: true },
     {
       id: "account_name",
       label: "Account",
@@ -205,7 +205,7 @@ export default function AdminLibrariesIndex({
                 key="slug"
                 className="font-mono text-xs text-muted-foreground"
               >
-                {lib.namespace}/{lib.name}
+                {lib.slug}
               </span>,
               lib.accountName,
               lib.versionCount,

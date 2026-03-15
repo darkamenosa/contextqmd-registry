@@ -3,7 +3,6 @@ import { Link, router } from "@inertiajs/react"
 import type { PaginationData } from "@/types"
 import { BookOpen, FileText, Library, Plus, Search } from "lucide-react"
 
-import { formatSource } from "@/lib/format-source"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,8 +13,7 @@ import { SourceTypeIcon } from "@/components/shared/source-type-icon"
 import PublicLayout from "@/layouts/public-layout"
 
 interface LibraryItem {
-  namespace: string
-  name: string
+  slug: string
   displayName: string
   aliases: string[]
   homepageUrl: string | null
@@ -121,8 +119,8 @@ export default function LibrariesIndex({
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {libraries.map((lib) => (
                 <Link
-                  key={`${lib.namespace}/${lib.name}`}
-                  href={`/libraries/${lib.namespace}/${lib.name}`}
+                  key={lib.slug}
+                  href={`/libraries/${lib.slug}`}
                   className="block"
                 >
                   <Card className="h-full transition-colors hover:border-foreground/20">
@@ -133,7 +131,7 @@ export default function LibrariesIndex({
                             {lib.displayName}
                           </CardTitle>
                           <p className="mt-1 text-xs text-muted-foreground">
-                            {formatSource(lib)}
+                            {lib.slug}
                           </p>
                         </div>
                         <LicenseBadge status={lib.licenseStatus} />

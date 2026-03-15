@@ -3,6 +3,7 @@
 # Immutable value object returned by doc fetchers.
 # Shared contract between fetchers and CrawlRequest import pipeline.
 CrawlResult = Data.define(
+  :slug,          # e.g. "turbo-rails"
   :namespace,     # e.g. "hotwired"
   :name,          # e.g. "turbo-rails"
   :display_name,  # e.g. "Turbo Rails"
@@ -12,7 +13,7 @@ CrawlResult = Data.define(
   :pages,         # array of { page_uid:, path:, title:, url:, content:, headings: }
   :complete       # true = full harvest, false = bounded/partial (don't prune stale pages)
 ) do
-  def initialize(complete: true, **rest)
-    super(complete: complete, **rest)
+  def initialize(slug: nil, complete: true, **rest)
+    super(slug: slug || rest[:name], complete: complete, **rest)
   end
 end

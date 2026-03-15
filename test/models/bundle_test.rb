@@ -173,7 +173,7 @@ class BundleTest < ActiveSupport::TestCase
     )
 
     assert_equal(
-      "bundles/public/vercel/nextjs/16.1.6/full/abc123.tar.gz",
+      "bundles/public/nextjs/16.1.6/full/abc123.tar.gz",
       bundle.package_key(checksum: "sha256:abc123")
     )
   end

@@ -359,6 +359,19 @@ class DocsFetcher::GitTest < ActiveSupport::TestCase
     assert_includes result.aliases, "mylib"
   end
 
+  test "build_result prefers owner naming for generic docs repos" do
+    pages = [
+      { page_uid: "readme", path: "README.md", title: "Readme", url: "https://example.com", content: "# Hi", headings: [] }
+    ]
+    result = @github.send(:build_result, "laravel", "docs", "https://github.com/laravel/docs", pages, "12.x")
+
+    assert_equal "laravel", result.namespace
+    assert_equal "docs", result.name
+    assert_equal "Laravel", result.display_name
+    assert_equal "laravel", result.aliases.first
+    assert_includes result.aliases, "docs"
+  end
+
   # --- Fetcher dispatch ---
 
   test "DocsFetcher.for returns GitHub instance for github source_type" do

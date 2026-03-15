@@ -29,8 +29,7 @@ module Api
 
           {
             schema_version: "1.0",
-            namespace: @library.namespace,
-            name: @library.name,
+            slug: @library.slug,
             display_name: @library.display_name,
             version: @version.version,
             channel: @version.channel,
@@ -38,7 +37,7 @@ module Api
             doc_count: @version.pages.count,
             source: source_json(recipe),
             page_index: {
-              url: "/api/v1/libraries/#{@library.namespace}/#{@library.name}/versions/#{@version.version}/page-index",
+              url: "/api/v1/libraries/#{@library.slug}/versions/#{@version.version}/page-index",
               sha256: nil
             },
             profiles: profiles_json,
@@ -102,7 +101,7 @@ module Api
         def bundle_url(bundle)
           return bundle.manifest_url if bundle.manifest_url.present?
 
-          path = "/api/v1/libraries/#{@library.namespace}/#{@library.name}/versions/#{@version.version}/bundles/#{bundle.profile}"
+          path = "/api/v1/libraries/#{@library.slug}/versions/#{@version.version}/bundles/#{bundle.profile}"
           return path if bundle.sha256.blank?
 
           "#{path}?sha256=#{ERB::Util.url_encode(bundle.sha256)}"

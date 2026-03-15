@@ -48,10 +48,9 @@ module Api
         assert_kind_of Array, body["data"]
         assert_operator body["data"].size, :>=, 2
 
-        lib = body["data"].find { |l| l["name"] == "nextjs" }
+        lib = body["data"].find { |l| l["slug"] == "nextjs" }
         assert_not_nil lib, "Should include nextjs library"
-        assert_equal "vercel", lib["namespace"]
-        assert_equal "nextjs", lib["name"]
+        assert_equal "nextjs", lib["slug"]
         assert_equal "Next.js", lib["display_name"]
         assert_includes lib["aliases"], "next"
         assert_includes lib["aliases"], "next.js"
@@ -67,9 +66,9 @@ module Api
         assert_response :ok
 
         body = response.parsed_body
-        names = body["data"].map { |l| l["name"] }
-        assert_includes names, "nextjs"
-        refute_includes names, "rails"
+        slugs = body["data"].map { |l| l["slug"] }
+        assert_includes slugs, "nextjs"
+        refute_includes slugs, "rails"
       end
 
       test "index with query filters results by alias" do
@@ -78,9 +77,9 @@ module Api
         assert_response :ok
 
         body = response.parsed_body
-        names = body["data"].map { |l| l["name"] }
-        assert_includes names, "rails"
-        refute_includes names, "nextjs"
+        slugs = body["data"].map { |l| l["slug"] }
+        assert_includes slugs, "rails"
+        refute_includes slugs, "nextjs"
       end
 
       test "index returns cursor in meta" do
@@ -98,24 +97,24 @@ module Api
         assert_response :ok
 
         body = response.parsed_body
-        assert_equal [ "rails" ], body["data"].map { |lib| lib["name"] }
+        assert_equal [ "rails" ], body["data"].map { |lib| lib["slug"] }
         assert_nil body["meta"]["cursor"]
       end
 
-      # -- GET /api/v1/libraries/:namespace/:name (show) --
+      # -- GET /api/v1/libraries/:slug (show) --
 
       test "show without auth returns 200" do
-        get api_v1_library_detail_path(namespace: "vercel", name: "nextjs")
+        get "/api/v1/libraries/nextjs"
 
         assert_response :ok
 
         body = response.parsed_body
         assert body.key?("data"), "Response should include 'data' key"
-        assert_equal "nextjs", body["data"]["name"]
+        assert_equal "nextjs", body["data"]["slug"]
       end
 
       test "show with auth returns 200 with single library" do
-        get api_v1_library_detail_path(namespace: "vercel", name: "nextjs"),
+        get "/api/v1/libraries/nextjs",
           headers: auth_headers
 
         assert_response :ok
@@ -125,8 +124,7 @@ module Api
         assert body.key?("meta"), "Response should include 'meta' key"
 
         lib = body["data"]
-        assert_equal "vercel", lib["namespace"]
-        assert_equal "nextjs", lib["name"]
+        assert_equal "nextjs", lib["slug"]
         assert_equal "Next.js", lib["display_name"]
         assert_includes lib["aliases"], "next"
         assert_equal "https://nextjs.org", lib["homepage_url"]
@@ -135,8 +133,18 @@ module Api
         assert_equal "verified", lib["license_status"]
       end
 
+      test "show resolves by canonical slug when slug differs from legacy name" do
+        @nextjs.update!(slug: "next")
+
+        get "/api/v1/libraries/next", headers: auth_headers
+
+        assert_response :ok
+        assert_equal "next", response.parsed_body.dig("data", "slug")
+        assert_equal "Next.js", response.parsed_body.dig("data", "display_name")
+      end
+
       test "show includes stats for library with versions" do
-        get api_v1_library_detail_path(namespace: "vercel", name: "nextjs")
+        get "/api/v1/libraries/nextjs"
 
         assert_response :ok
         lib = response.parsed_body["data"]
@@ -153,7 +161,7 @@ module Api
       end
 
       test "show returns 404 for nonexistent library" do
-        get api_v1_library_detail_path(namespace: "unknown", name: "nope"),
+        get "/api/v1/libraries/nope",
           headers: auth_headers
 
         assert_response :not_found

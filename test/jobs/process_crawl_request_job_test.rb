@@ -278,6 +278,102 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     assert_equal existing.id, @crawl_request.library_id
   end
 
+  test "does not merge unrelated github libraries during import" do
+    laravel_result = CrawlResult.new(
+      slug: "laravel",
+      namespace: "laravel",
+      name: "docs",
+      display_name: "Laravel",
+      homepage_url: "https://github.com/laravel/docs",
+      aliases: [ "laravel", "docs", "laravel/docs", "github.com" ],
+      version: "12.x",
+      pages: [
+        { page_uid: "intro", path: "intro.md", title: "Intro",
+          url: "https://github.com/laravel/docs/blob/12.x/intro.md", content: "Laravel", headings: [] }
+      ]
+    )
+
+    with_stub_fetcher(laravel_result) do
+      ProcessCrawlRequestJob.perform_now(@crawl_request)
+    end
+
+    first_library = @crawl_request.reload.library
+    assert_equal "laravel", first_library.slug
+
+    second_request = CrawlRequest.create!(
+      identity: @identity,
+      url: "https://github.com/basecamp/kamal-site",
+      source_type: "github",
+      status: "pending"
+    )
+    kamal_result = CrawlResult.new(
+      slug: "kamal-site",
+      namespace: "basecamp",
+      name: "kamal-site",
+      display_name: "Kamal Site",
+      homepage_url: "https://github.com/basecamp/kamal-site",
+      aliases: [ "kamal-site", "basecamp/kamal-site" ],
+      version: "latest",
+      pages: [
+        { page_uid: "intro", path: "intro.md", title: "Intro",
+          url: "https://github.com/basecamp/kamal-site/blob/main/intro.md", content: "Kamal", headings: [] }
+      ]
+    )
+
+    with_stub_fetcher(kamal_result) do
+      assert_difference -> { Library.count }, 1 do
+        ProcessCrawlRequestJob.perform_now(second_request)
+      end
+    end
+
+    first_library.reload
+    second_library = second_request.reload.library
+
+    assert_equal "laravel", first_library.slug
+    refute_equal first_library.id, second_library.id
+    assert_equal "kamal-site", second_library.slug
+    refute_includes second_library.aliases, "laravel"
+  end
+
+  test "reuses the attached library and preserves locked metadata on recrawl" do
+    existing = Library.create!(
+      account: @account,
+      namespace: "laravel",
+      name: "laravel",
+      display_name: "Laravel",
+      homepage_url: "https://laravel.com/docs",
+      aliases: [ "laravel" ],
+      metadata_locked: true
+    )
+    @crawl_request.update!(library: existing)
+
+    result = CrawlResult.new(
+      namespace: "laravel",
+      name: "docs",
+      display_name: "Docs",
+      homepage_url: "https://github.com/laravel/docs",
+      aliases: [ "docs" ],
+      version: nil,
+      pages: [
+        { page_uid: "intro", path: "intro.md", title: "Intro",
+          url: "https://github.com/laravel/docs/blob/12.x/intro.md", content: "Hello", headings: [] }
+      ]
+    )
+
+    with_stub_fetcher(result) do
+      assert_no_difference -> { Library.count } do
+        ProcessCrawlRequestJob.perform_now(@crawl_request)
+      end
+    end
+
+    library = @crawl_request.reload.library
+    assert_equal existing.id, library.id
+    assert_equal "Laravel", library.display_name
+    assert_equal "https://laravel.com/docs", library.homepage_url
+    assert_includes library.aliases, "laravel"
+    assert_includes library.aliases, "docs"
+  end
+
   test "creates a non-personal system account instead of reusing a personal one with the same name" do
     Account.where(name: "ContextQMD System", personal: false).destroy_all
     Account.create!(name: "ContextQMD System", personal: true)

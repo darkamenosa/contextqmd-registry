@@ -33,8 +33,7 @@ interface CrawlItem {
 }
 
 interface LibraryItem {
-  namespace: string
-  name: string
+  slug: string
   displayName: string
   defaultVersion: string | null
   createdAt: string
@@ -214,8 +213,8 @@ export default function AppDashboard({
               <div className="space-y-3">
                 {recentLibraries.map((lib) => (
                   <Link
-                    key={`${lib.namespace}/${lib.name}`}
-                    href={`/libraries/${lib.namespace}/${lib.name}`}
+                    key={lib.slug}
+                    href={`/libraries/${lib.slug}`}
                     className="flex items-center justify-between gap-2 rounded-lg border p-3 transition-colors hover:bg-muted/50"
                   >
                     <div className="min-w-0">
@@ -223,7 +222,7 @@ export default function AppDashboard({
                         {lib.displayName}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {lib.namespace}/{lib.name}
+                        {lib.slug}
                       </p>
                     </div>
                     {lib.defaultVersion && (

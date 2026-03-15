@@ -12,7 +12,6 @@ module DocsFetcher
   # Also serves as the fallback for unknown git hosts (source_type="git").
   class Git
     DOC_EXTENSIONS = %w[.md .mdx .html .rst .ipynb].freeze
-
     # Default directory prefixes to exclude (relative path segments).
     # Per-library config adds to these (union). Include prefixes override excludes.
     DEFAULT_EXCLUDE_PREFIXES = %w[
@@ -382,15 +381,19 @@ module DocsFetcher
       # --- Result building ---
 
       def build_result(owner, repo_name, source_url, pages, version)
-        display_name = repo_name.tr("-", " ").split.map(&:capitalize).join(" ")
-        aliases = [ repo_name, repo_name.tr("-", ""), repo_name.tr(".", "-") ].map(&:downcase).uniq
+        identity = LibraryIdentity.from_git(
+          owner: owner,
+          repo_name: repo_name,
+          source_url: source_url
+        )
 
         CrawlResult.new(
-          namespace: owner,
-          name: repo_name,
-          display_name: display_name,
+          slug: identity[:slug],
+          namespace: identity[:namespace],
+          name: identity[:name],
+          display_name: identity[:display_name],
           homepage_url: normalize_homepage_url(source_url),
-          aliases: aliases,
+          aliases: identity[:aliases],
           version: version,
           pages: pages
         )

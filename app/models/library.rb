@@ -7,8 +7,14 @@ class Library < ApplicationRecord
 
   belongs_to :account
   has_many :versions, dependent: :destroy
+  has_many :library_sources, dependent: :destroy
   has_one :source_policy, dependent: :destroy
 
+  before_validation :populate_slug
+
+  validates :slug, presence: true,
+    format: { with: PATH_SAFE_SLUG, message: "must be lowercase alphanumeric with hyphens" },
+    uniqueness: true
   validates :namespace, presence: true,
     format: { with: PATH_SAFE_SLUG, message: "must be lowercase alphanumeric with hyphens" }
   validates :name, presence: true,
@@ -17,11 +23,18 @@ class Library < ApplicationRecord
   validates :namespace, uniqueness: { scope: :name }
 
   pg_search_scope :search_by_query,
-    against: %i[namespace name display_name],
+    against: %i[slug display_name],
     using: { tsearch: { prefix: true } }
+
+  def to_param
+    slug
+  end
 
   # Resolve a query string to a library by alias match, then full-text search.
   def self.resolve(query)
+    by_slug = find_by(slug: query)
+    return by_slug if by_slug
+
     by_alias = where("aliases @> ?", [ query ].to_json)
     return by_alias.first if by_alias.exists?
 
@@ -54,4 +67,11 @@ class Library < ApplicationRecord
       richest_v || versions.first
     end
   end
+
+  private
+
+    def populate_slug
+      candidate = slug.presence || name
+      self.slug = candidate.to_s.tr("_", "-").parameterize(separator: "-") if candidate.present?
+    end
 end

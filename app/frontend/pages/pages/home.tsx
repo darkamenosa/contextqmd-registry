@@ -16,7 +16,6 @@ import {
 } from "lucide-react"
 
 import { formatCount, formatTimeAgo } from "@/lib/format-date"
-import { formatSource } from "@/lib/format-source"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -35,8 +34,7 @@ import { SourceTypeIcon } from "@/components/shared/source-type-icon"
 import PublicLayout from "@/layouts/public-layout"
 
 interface LibraryItem {
-  namespace: string
-  name: string
+  slug: string
   displayName: string
   sourceType: string | null
   homepageUrl: string | null
@@ -62,7 +60,7 @@ const mcpConfig = `{
 
 const cliQuickstart = `npx -y contextqmd libraries search "kamal"
 npx -y contextqmd libraries install kamal
-npx -y contextqmd docs search "proxy" --library kamal-deploy/kamal-deploy`
+npx -y contextqmd docs search "proxy" --library kamal`
 
 const features = [
   {
@@ -112,7 +110,7 @@ function LibraryTable({ libraries }: { libraries: LibraryItem[] }) {
             LIBRARY
           </TableHead>
           <TableHead className="text-xs font-medium tracking-wider text-muted-foreground/70">
-            SOURCE
+            SLUG
           </TableHead>
           <TableHead className="pr-4 text-right text-xs font-medium tracking-wider text-muted-foreground/70 sm:pr-2">
             PAGES
@@ -124,10 +122,10 @@ function LibraryTable({ libraries }: { libraries: LibraryItem[] }) {
       </TableHeader>
       <TableBody>
         {libraries.map((lib) => (
-          <TableRow key={`${lib.namespace}/${lib.name}`}>
+          <TableRow key={lib.slug}>
             <TableCell className="py-2 pl-4">
               <Link
-                href={`/libraries/${lib.namespace}/${lib.name}`}
+                href={`/libraries/${lib.slug}`}
                 className="font-medium text-primary hover:underline"
               >
                 {lib.displayName}
@@ -143,14 +141,14 @@ function LibraryTable({ libraries }: { libraries: LibraryItem[] }) {
                 >
                   <SourceTypeIcon sourceType={lib.sourceType} size="size-4" />
                   <span className="text-sm text-muted-foreground">
-                    {formatSource(lib)}
+                    {lib.slug}
                   </span>
                 </a>
               ) : (
                 <span className="inline-flex items-center gap-1.5">
                   <SourceTypeIcon sourceType={lib.sourceType} size="size-4" />
                   <span className="text-sm text-muted-foreground">
-                    {formatSource(lib)}
+                    {lib.slug}
                   </span>
                 </span>
               )}

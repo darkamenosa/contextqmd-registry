@@ -5,11 +5,11 @@ class Libraries::PagesController < InertiaController
   disallow_account_scope
 
   def show
-    library = Library.includes(versions: :pages).find_by!(namespace: params[:namespace], name: params[:name])
+    library = Library.includes(versions: :pages).find_by!(slug: params[:slug])
     version = library.versions.find { |v| v.version == params[:version] }
 
     unless version
-      redirect_to detail_libraries_path(namespace: library.namespace, name: library.name), alert: "Version not found"
+      redirect_to "/libraries/#{library.slug}", alert: "Version not found"
       return
     end
 
@@ -28,8 +28,7 @@ class Libraries::PagesController < InertiaController
 
     def library_summary(library)
       {
-        namespace: library.namespace,
-        name: library.name,
+        slug: library.slug,
         display_name: library.display_name
       }
     end

@@ -19,29 +19,22 @@ module Api
         render_data({
           library: serialize_library_summary(library),
           version: serialize_version_summary(version),
-          manifest_url: "/api/v1/libraries/#{library.namespace}/#{library.name}/versions/#{version.version}/manifest"
+          manifest_url: "/api/v1/libraries/#{library.slug}/versions/#{version.version}/manifest"
         })
       end
 
       private
 
         def find_library(query)
-          # 1. Try namespace/name exact match
-          if query.include?("/")
-            namespace, name = query.split("/", 2)
-            found = Library.find_by(namespace: namespace, name: name)
-            return found if found
-          end
-
-          # 2. Try exact name match
-          found = Library.find_by(name: query)
+          # 1. Try exact canonical slug match
+          found = Library.find_by(slug: query)
           return found if found
 
-          # 3. Try alias match (jsonb containment)
+          # 2. Try alias match (jsonb containment)
           found = Library.where("aliases @> ?", [ query ].to_json)
           return found.first if found.exists?
 
-          # 4. Fall back to pg_search
+          # 3. Fall back to pg_search
           results = Library.search_by_query(query)
           results.first
         end

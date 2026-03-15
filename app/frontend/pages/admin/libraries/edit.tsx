@@ -115,12 +115,14 @@ const WEBSITE_DEFAULT_EXCLUDE_PATHS = [
 
 interface LibraryEdit {
   id: number
+  slug: string
   namespace: string
   name: string
   displayName: string
   homepageUrl: string | null
   defaultVersion: string | null
   aliases: string[]
+  metadataLocked: boolean
   crawlRules: CrawlRules
   sourceType: string | null
 }
@@ -154,6 +156,7 @@ export default function AdminLibraryEdit({ library, versions }: Props) {
   const hasBothSources = isGit && isWebsite
 
   const { data, setData, patch, processing, transform } = useForm({
+    slug: library.slug,
     displayName: library.displayName,
     homepageUrl: library.homepageUrl || "",
     defaultVersion: library.defaultVersion || "",
@@ -171,6 +174,7 @@ export default function AdminLibraryEdit({ library, versions }: Props) {
     e.preventDefault()
     transform((data) => ({
       library: {
+        slug: data.slug,
         display_name: data.displayName,
         homepage_url: data.homepageUrl || null,
         default_version: data.defaultVersion || null,
@@ -213,7 +217,7 @@ export default function AdminLibraryEdit({ library, versions }: Props) {
             variant="outline"
             className="font-mono text-[11px] font-normal"
           >
-            {library.namespace}/{library.name}
+            {library.slug}
           </Badge>
         </div>
 
@@ -223,9 +227,30 @@ export default function AdminLibraryEdit({ library, versions }: Props) {
             <h2 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
               Metadata
             </h2>
+            <span className="text-[10px] text-muted-foreground/60">
+              Saving here preserves metadata on future re-crawls
+            </span>
           </div>
           <FieldGroup className="gap-4">
+            {library.metadataLocked && (
+              <FieldDescription>
+                This library&apos;s display name, homepage, and aliases are
+                currently locked and will stay stable across re-crawls.
+              </FieldDescription>
+            )}
             <div className="grid gap-4 @lg/main:grid-cols-2">
+              <Field>
+                <FieldLabel htmlFor="slug">Slug</FieldLabel>
+                <Input
+                  id="slug"
+                  value={data.slug}
+                  onChange={(e) => setData("slug", e.target.value)}
+                  required
+                />
+                <FieldDescription>
+                  Canonical install name used by CLI, MCP, and public URLs.
+                </FieldDescription>
+              </Field>
               <Field>
                 <FieldLabel htmlFor="displayName">Display Name</FieldLabel>
                 <Input

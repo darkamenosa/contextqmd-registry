@@ -35,7 +35,7 @@ module Admin
           error_message: cr.error_message,
           submitted_by: cr.identity.email,
           library_name: cr.library&.display_name,
-          library_slug: cr.library ? "#{cr.library.namespace}/#{cr.library.name}" : nil,
+          library_slug: cr.library&.slug,
           created_at: cr.created_at.iso8601
         }
       end

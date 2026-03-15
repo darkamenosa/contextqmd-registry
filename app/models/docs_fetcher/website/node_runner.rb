@@ -123,24 +123,19 @@ module DocsFetcher
           converted_pages = pages.filter_map { |page| build_page(page) }
           raise DocsFetcher::PermanentFetchError, "No content found at #{source_url}" if converted_pages.empty?
 
-          domain = URI.parse(source_url).host
-          host = domain.to_s.gsub(/^www\./, "")
-          parts = host.split(".")
-
-          namespace = if %w[docs api www dev].include?(parts.first) && parts.length >= 3
-            parts[1].downcase
-          else
-            parts.first.to_s.downcase
-          end
-          name = namespace
-          site_title = converted_pages.first[:title].presence || domain
+          uri = URI.parse(source_url)
+          identity = LibraryIdentity.from_website(
+            uri: uri,
+            title: converted_pages.first[:title]
+          )
 
           CrawlResult.new(
-            namespace: namespace,
-            name: name,
-            display_name: site_title,
+            slug: identity[:slug],
+            namespace: identity[:namespace],
+            name: identity[:name],
+            display_name: identity[:display_name],
             homepage_url: source_url,
-            aliases: [ name ],
+            aliases: identity[:aliases],
             version: nil,
             pages: converted_pages,
             complete: false

@@ -6,27 +6,36 @@ require "json"
 class App::DashboardScopingTest < ActionDispatch::IntegrationTest
   include Devise::Test::IntegrationHelpers
 
-  test "dashboard props are scoped to the current account" do
+  test "dashboard props show the identity's crawl requests and resulting libraries" do
     identity, account, = create_tenant(
       email: "dashboard-scope-#{SecureRandom.hex(4)}@example.com",
       name: "Dashboard User"
     )
 
-    other_account = Account.create!(name: "Other Account", personal: false)
-    other_account.users.create!(name: "System", role: :system)
-    other_account.users.create!(identity: identity, name: "Dashboard User", role: :member)
+    other_identity = Identity.create!(
+      email: "other-#{SecureRandom.hex(4)}@example.com",
+      password: "password123456"
+    )
+    other_account = Account.create!(name: "Other Account", personal: true)
+    other_account.users.create!(identity: other_identity, name: "Other User", role: :owner)
 
+    system_account = Account.find_or_create_by!(name: "ContextQMD System", personal: false)
+    system_account.users.find_or_create_by!(role: :system) { |u| u.name = "System" }
+
+    hex = SecureRandom.hex(4)
     library = Library.create!(
-      account: account,
-      namespace: "account-a-#{SecureRandom.hex(4)}",
-      name: "docs",
-      display_name: "Account A Docs"
+      account: system_account,
+      namespace: "my-lib-#{hex}",
+      name: "docs-#{hex}",
+      slug: "my-lib-docs-#{hex}",
+      display_name: "My Lib Docs"
     )
     other_library = Library.create!(
-      account: other_account,
-      namespace: "account-b-#{SecureRandom.hex(4)}",
-      name: "docs",
-      display_name: "Account B Docs"
+      account: system_account,
+      namespace: "other-lib-#{hex}",
+      name: "other-#{hex}",
+      slug: "other-lib-docs-#{hex}",
+      display_name: "Other Lib Docs"
     )
 
     version = library.versions.create!(version: "1.0.0", channel: "stable")
@@ -36,13 +45,13 @@ class App::DashboardScopingTest < ActionDispatch::IntegrationTest
       page_uid: "intro",
       path: "intro.md",
       title: "Intro",
-      description: "Account A content"
+      description: "My content"
     )
     other_version.pages.create!(
       page_uid: "intro",
       path: "intro.md",
       title: "Intro",
-      description: "Account B content"
+      description: "Other content"
     )
 
     CrawlRequest.create!(
@@ -53,7 +62,7 @@ class App::DashboardScopingTest < ActionDispatch::IntegrationTest
       status: "pending"
     )
     CrawlRequest.create!(
-      identity: identity,
+      identity: other_identity,
       library: other_library,
       url: "https://b.example/docs",
       source_type: "website",
@@ -69,8 +78,8 @@ class App::DashboardScopingTest < ActionDispatch::IntegrationTest
     assert_equal 1, page_props.dig("props", "stats", "versionCount")
     assert_equal 1, page_props.dig("props", "stats", "pageCount")
     assert_equal 1, page_props.dig("props", "stats", "crawlPending")
-    assert_equal [ "Account A Docs" ], page_props.dig("props", "recentLibraries").map { |lib| lib["displayName"] }
-    assert_equal [ "Account A Docs" ], page_props.dig("props", "recentCrawls").map { |crawl| crawl["libraryName"] }
+    assert_equal [ "My Lib Docs" ], page_props.dig("props", "recentLibraries").map { |lib| lib["displayName"] }
+    assert_equal [ "My Lib Docs" ], page_props.dig("props", "recentCrawls").map { |crawl| crawl["libraryName"] }
   ensure
     Current.reset
   end

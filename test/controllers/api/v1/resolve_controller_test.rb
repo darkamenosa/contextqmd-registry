@@ -21,6 +21,7 @@ module Api
           account: @account,
           namespace: "vercel-#{@hex}",
           name: "nextjs-#{@hex}",
+          slug: "nextjs-#{@hex}",
           display_name: "Next.js",
           aliases: [ "nextalias-#{@hex}", "nextdot-#{@hex}" ],
           homepage_url: "https://nextjs.org",
@@ -48,13 +49,13 @@ module Api
       # -- Authentication --
 
       test "POST /resolve without auth returns 200" do
-        post api_v1_resolve_path, params: { query: "nextjs-#{@hex}" }, as: :json
+        post api_v1_resolve_path, params: { query: @nextjs.slug }, as: :json
 
         assert_response :ok
 
         body = response.parsed_body
         assert body.key?("data"), "Response should include 'data' key"
-        assert_equal "nextjs-#{@hex}", body["data"]["library"]["name"]
+        assert_equal "nextjs-#{@hex}", body["data"]["library"]["slug"]
       end
 
       # -- Validation --
@@ -72,11 +73,11 @@ module Api
         assert_match(/query/i, body["error"]["message"])
       end
 
-      # -- Exact name match --
+      # -- Canonical slug match --
 
-      test "POST /resolve with exact name returns library and version" do
+      test "POST /resolve with canonical slug returns library and version" do
         post api_v1_resolve_path,
-          params: { query: "nextjs-#{@hex}" },
+          params: { query: @nextjs.slug },
           headers: auth_headers,
           as: :json
 
@@ -86,8 +87,7 @@ module Api
         assert body.key?("data"), "Response should include 'data' key"
 
         library = body["data"]["library"]
-        assert_equal "vercel-#{@hex}", library["namespace"]
-        assert_equal "nextjs-#{@hex}", library["name"]
+        assert_equal "nextjs-#{@hex}", library["slug"]
         assert_equal "Next.js", library["display_name"]
         assert_equal "16.1.6", library["default_version"]
 
@@ -100,18 +100,16 @@ module Api
         assert_includes body["data"]["manifest_url"], @nextjs_stable.version
       end
 
-      test "POST /resolve with namespace/name format returns library" do
+      test "POST /resolve returns manifest url keyed by slug" do
         post api_v1_resolve_path,
-          params: { query: "vercel-#{@hex}/nextjs-#{@hex}" },
+          params: { query: @nextjs.slug },
           headers: auth_headers,
           as: :json
 
         assert_response :ok
 
         body = response.parsed_body
-        library = body["data"]["library"]
-        assert_equal "vercel-#{@hex}", library["namespace"]
-        assert_equal "nextjs-#{@hex}", library["name"]
+        assert_equal "/api/v1/libraries/#{@nextjs.slug}/versions/16.1.6/manifest", body["data"]["manifest_url"]
       end
 
       # -- Alias match --
@@ -126,15 +124,14 @@ module Api
 
         body = response.parsed_body
         library = body["data"]["library"]
-        assert_equal "vercel-#{@hex}", library["namespace"]
-        assert_equal "nextjs-#{@hex}", library["name"]
+        assert_equal "nextjs-#{@hex}", library["slug"]
       end
 
       # -- Version hint: stable --
 
       test "POST /resolve with version_hint stable returns stable version" do
         post api_v1_resolve_path,
-          params: { query: "nextjs-#{@hex}", version_hint: "stable" },
+          params: { query: @nextjs.slug, version_hint: "stable" },
           headers: auth_headers,
           as: :json
 
@@ -150,7 +147,7 @@ module Api
 
       test "POST /resolve with exact version_hint returns that version" do
         post api_v1_resolve_path,
-          params: { query: "nextjs-#{@hex}", version_hint: "17.0.0-canary.1" },
+          params: { query: @nextjs.slug, version_hint: "17.0.0-canary.1" },
           headers: auth_headers,
           as: :json
 
@@ -166,7 +163,7 @@ module Api
 
       test "POST /resolve with version_hint canary returns canary version" do
         post api_v1_resolve_path,
-          params: { query: "nextjs-#{@hex}", version_hint: "canary" },
+          params: { query: @nextjs.slug, version_hint: "canary" },
           headers: auth_headers,
           as: :json
 
@@ -194,7 +191,7 @@ module Api
 
       test "POST /resolve with known library but unknown version returns 404" do
         post api_v1_resolve_path,
-          params: { query: "nextjs-#{@hex}", version_hint: "99.0.0" },
+          params: { query: @nextjs.slug, version_hint: "99.0.0" },
           headers: auth_headers,
           as: :json
 

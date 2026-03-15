@@ -9,13 +9,13 @@ module Api
         private
 
           def find_library!
-            @library = Library.includes(:source_policy, :versions).find_by!(namespace: params[:namespace], name: params[:name])
+            @library = Library.includes(:source_policy, :versions).find_by!(slug: params[:slug])
           rescue ActiveRecord::RecordNotFound
             render_error(code: "not_found", message: "Library not found", status: :not_found)
           end
 
           def find_library_and_version!
-            @library = Library.find_by!(namespace: params[:namespace], name: params[:name])
+            @library = Library.find_by!(slug: params[:slug])
             @version = resolve_url_version(@library, params[:version])
             raise ActiveRecord::RecordNotFound unless @version
           rescue ActiveRecord::RecordNotFound
@@ -25,11 +25,7 @@ module Api
           def resolve_url_version(library, version_param)
             case version_param
             when "latest"
-              if library.default_version.present?
-                library.versions.find_by(version: library.default_version) || library.versions.ordered.first
-              else
-                library.versions.ordered.first
-              end
+              library.versions.find_by(version: library.default_version) || library.versions.ordered.first
             when "stable"
               library.versions.stable.ordered.first
             else
@@ -42,8 +38,7 @@ module Api
 
           def serialize_library_summary(library)
             {
-              namespace: library.namespace,
-              name: library.name,
+              slug: library.slug,
               display_name: library.display_name,
               aliases: library.aliases,
               homepage_url: library.homepage_url,

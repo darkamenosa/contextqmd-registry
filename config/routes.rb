@@ -76,11 +76,9 @@ Rails.application.routes.draw do
 
   # Library browsing (public) + submission (authenticated)
   resources :libraries, only: [ :index, :new, :create ], param: :slug do
-    collection do
-      get ":namespace/:name", action: :show, as: :detail, constraints: { namespace: /[a-z0-9-]+/, name: /[a-z0-9-]+/ }
-      get ":namespace/:name/versions/:version/pages/:page_uid",
-        to: "libraries/pages#show", as: :page_detail,
-        constraints: { namespace: /[a-z0-9-]+/, name: /[a-z0-9-]+/, version: /[^\/]+/ }
+    member do
+      get "", action: :show
+      get "versions/:version/pages/:page_uid", to: "libraries/pages#show", as: :page_detail, version: /[^\/]+/
     end
   end
 
@@ -104,14 +102,14 @@ Rails.application.routes.draw do
     namespace :v1 do
       get "health", to: "health#show"
       get "capabilities", to: "capabilities#show"
-      resources :libraries, only: [ :index ], param: :slug
-      get "libraries/:namespace/:name", to: "libraries#show", as: :library_detail
-      get "libraries/:namespace/:name/versions", to: "versions#index"
-      get "libraries/:namespace/:name/versions/:version/manifest", to: "manifests#show", version: /[^\/]+/
-      get "libraries/:namespace/:name/versions/:version/page-index", to: "page_index#index", version: /[^\/]+/
-      get "libraries/:namespace/:name/versions/:version/pages/:page_uid", to: "page_index#show", version: /[^\/]+/
-      get "libraries/:namespace/:name/versions/:version/bundles/:profile", to: "bundles#show", version: /[^\/]+/
-      post "libraries/:namespace/:name/versions/:version/query", to: "query_docs#create", version: /[^\/]+/
+      resources :libraries, only: [ :index, :show ], param: :slug do
+        get "versions", to: "versions#index", on: :member
+        get "versions/:version/manifest", to: "manifests#show", on: :member, version: /[^\/]+/
+        get "versions/:version/page-index", to: "page_index#index", on: :member, version: /[^\/]+/
+        get "versions/:version/pages/:page_uid", to: "page_index#show", on: :member, version: /[^\/]+/
+        get "versions/:version/bundles/:profile", to: "bundles#show", on: :member, version: /[^\/]+/
+        post "versions/:version/query", to: "query_docs#create", on: :member, version: /[^\/]+/
+      end
       post "resolve", to: "resolve#create"
       post "crawl", to: "crawl_requests#create"
     end

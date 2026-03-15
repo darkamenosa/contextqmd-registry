@@ -66,6 +66,7 @@ module DocsFetcher
       end
 
       CrawlResult.new(
+        slug: metadata[:slug],
         namespace: metadata[:namespace],
         name: metadata[:name],
         display_name: metadata[:display_name],
@@ -210,32 +211,9 @@ module DocsFetcher
       # --- Metadata extraction ---
 
       def extract_metadata(uri, content)
-        host = uri.host.gsub(/^www\./, "")
-        parts = host.split(".")
-
-        # Derive the library identity from the domain:
-        #   docs.astro.build    → namespace=astro, name=astro
-        #   nextjs.org          → namespace=nextjs, name=nextjs
-        #   inertia-rails.dev   → namespace=inertia-rails, name=inertia-rails
-        #   api.stripe.com      → namespace=stripe, name=stripe
-        namespace = if %w[docs api www dev].include?(parts.first) && parts.length >= 3
-          parts[1].downcase
-        else
-          parts.first.downcase
-        end
-        name = namespace
-
         h1 = extract_first_h1(metadata_content(content))
-        title = h1 && library_title?(h1) ? h1 : namespace.tr("-", " ").gsub(/\b\w/, &:upcase)
-
-        aliases = [ namespace, name, host ].uniq
-
-        {
-          namespace: namespace,
-          name: name,
-          display_name: title,
-          aliases: aliases
-        }
+        title = h1 if h1 && library_title?(h1)
+        LibraryIdentity.from_llms(uri: uri, title: title)
       end
 
       def extract_first_h1(content)

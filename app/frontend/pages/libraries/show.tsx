@@ -18,7 +18,6 @@ import {
 } from "lucide-react"
 
 import { formatBytes } from "@/lib/format-date"
-import { formatSource } from "@/lib/format-source"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -45,8 +44,7 @@ import { SourceTypeIcon } from "@/components/shared/source-type-icon"
 import PublicLayout from "@/layouts/public-layout"
 
 interface LibraryDetail {
-  namespace: string
-  name: string
+  slug: string
   displayName: string
   aliases: string[]
   homepageUrl: string | null
@@ -190,7 +188,7 @@ export default function LibraryShow({
 }: Props) {
   const [expandedPage, setExpandedPage] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState(initialSearch)
-  const slug = `${library.namespace}/${library.name}`
+  const slug = library.slug
 
   const selectedVersionData = versions.find(
     (v) => v.version === selectedVersion
@@ -236,7 +234,7 @@ export default function LibraryShow({
     )
   }
 
-  const installQuery = library.aliases[0] || library.name
+  const installQuery = library.slug
   const sampleVersion = selectedVersion || library.defaultVersion || "latest"
   const samplePagePath = pages[0]?.path || "docs/getting-started.md"
   const sampleSearchQuery =
@@ -280,7 +278,7 @@ get_doc({ library: "${slug}", version: "${sampleVersion}", doc_path: "${samplePa
               {library.displayName}
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              {formatSource(library)}
+              {library.slug}
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {library.sourceType && (

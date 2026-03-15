@@ -46,12 +46,11 @@ class PublicDefaultMembershipTest < ActionDispatch::IntegrationTest
 
     sign_in(identity)
 
-    namespace = "public-lib-#{SecureRandom.hex(4)}"
+    slug = "public-docs-#{SecureRandom.hex(4)}"
 
     post libraries_path, params: {
       library: {
-        namespace: namespace,
-        name: "docs",
+        slug: slug,
         display_name: "Public Docs",
         homepage_url: "https://example.com/docs",
         default_version: "1.0.0",
@@ -59,9 +58,11 @@ class PublicDefaultMembershipTest < ActionDispatch::IntegrationTest
       }
     }
 
-    library = Library.find_by!(namespace: namespace, name: "docs")
+    library = Library.find_by!(slug: slug)
     assert_equal admin_account.id, library.account_id
-    assert_redirected_to detail_libraries_path(namespace: library.namespace, name: library.name)
+    assert_equal slug, library.namespace
+    assert_equal slug, library.name
+    assert_redirected_to "/libraries/#{library.slug}"
   ensure
     Current.reset
   end

@@ -138,6 +138,7 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
 
     metadata = @fetcher.send(:extract_metadata, uri, content)
 
+    assert_equal "example", metadata[:slug]
     assert_equal "example", metadata[:namespace]
     assert_equal "example", metadata[:name]
     assert_equal "My Great Lib", metadata[:display_name]
@@ -150,9 +151,10 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
 
     metadata = @fetcher.send(:extract_metadata, uri, content)
 
+    assert_equal "react", metadata[:slug]
     assert_equal "react", metadata[:namespace]
     assert_equal "react", metadata[:name]
-    assert_equal "React Documentation", metadata[:display_name]
+    assert_equal "React", metadata[:display_name]
   end
 
   test "falls back to namespace for display name when no H1" do
@@ -161,6 +163,7 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
 
     metadata = @fetcher.send(:extract_metadata, uri, content)
 
+    assert_equal "tailwindcss", metadata[:slug]
     assert_equal "Tailwindcss", metadata[:display_name]
   end
 
@@ -170,6 +173,7 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
 
     metadata = @fetcher.send(:extract_metadata, uri, content)
 
+    assert_equal "example", metadata[:slug]
     assert_equal "example", metadata[:namespace]
   end
 
@@ -183,6 +187,7 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
 
     metadata = @fetcher.send(:extract_metadata, uri, content)
 
+    assert_equal "inertia-rails", metadata[:slug]
     assert_equal "inertia-rails", metadata[:namespace]
     assert_equal "Inertia Rails", metadata[:display_name]
   end
@@ -199,6 +204,7 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
 
     metadata = @fetcher.send(:extract_metadata, uri, content)
 
+    assert_equal "vite", metadata[:slug]
     assert_equal "vite", metadata[:namespace]
     assert_equal "Vite", metadata[:display_name]
   end
@@ -768,9 +774,10 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
 
     result = fetcher.fetch(Struct.new(:url).new("https://nextjs.org/docs/llms-full.txt"))
 
+    assert_equal "nextjs", result.slug
     assert_equal "nextjs", result.namespace
     assert_equal "nextjs", result.name
-    assert_equal "Next.js Documentation", result.display_name
+    assert_equal "Next.js", result.display_name
     assert_equal "16.1.6", result.version
     assert_equal "https://nextjs.org/docs", result.homepage_url
     assert_equal 1, result.pages.size

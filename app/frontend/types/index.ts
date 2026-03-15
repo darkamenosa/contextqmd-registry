@@ -60,6 +60,7 @@ export type AccessToken = {
 // Admin library types
 export type AdminLibrary = {
   id: number
+  slug: string
   namespace: string
   name: string
   displayName: string
@@ -83,6 +84,7 @@ export type CrawlRules = {
 
 export type AdminLibraryDetail = {
   id: number
+  slug: string
   namespace: string
   name: string
   displayName: string

@@ -50,7 +50,7 @@ class Bundle < ApplicationRecord
   end
 
   def filename
-    "#{version.library.name}-#{version.version}-#{profile}.#{format}"
+    "#{version.library.slug}-#{version.version}-#{profile}.#{format}"
   end
 
   def available_locally?
@@ -87,8 +87,7 @@ class Bundle < ApplicationRecord
     [
       "bundles",
       visibility,
-      version.library.namespace,
-      version.library.name,
+      version.library.slug,
       version.version,
       profile,
       "#{checksum_value(checksum)}.#{format}"

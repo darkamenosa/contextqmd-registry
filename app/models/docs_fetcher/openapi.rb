@@ -35,6 +35,7 @@ module DocsFetcher
       raise DocsFetcher::PermanentFetchError, "No API documentation found in #{url}" if pages.empty?
 
       CrawlResult.new(
+        slug: metadata[:slug],
         namespace: metadata[:namespace],
         name: metadata[:name],
         display_name: metadata[:display_name],
@@ -57,17 +58,17 @@ module DocsFetcher
 
       def extract_metadata(spec, uri)
         info = spec["info"] || {}
-        host = uri.host.gsub(/^www\./, "")
-        namespace = host.split(".").first.downcase
-        title = info["title"] || namespace.capitalize
+        title = info["title"]
+        identity = LibraryIdentity.from_openapi(uri: uri, title: title)
 
         {
-          namespace: namespace,
-          name: slugify(title),
-          display_name: title,
+          slug: identity[:slug],
+          namespace: identity[:namespace],
+          name: identity[:name],
+          display_name: identity[:display_name],
           homepage_url: info["termsOfService"] || spec.dig("externalDocs", "url"),
           version: info["version"],
-          aliases: [ slugify(title), namespace ].uniq
+          aliases: identity[:aliases]
         }
       end
 

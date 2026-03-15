@@ -48,7 +48,7 @@ module Api
       end
 
       test "returns matching pages for a query" do
-        post "/api/v1/libraries/#{@library.namespace}/#{@library.name}/versions/1.0.0/query",
+        post "/api/v1/libraries/#{@library.slug}/versions/1.0.0/query",
           params: { query: "install configure", max_tokens: 50_000 },
           as: :json
 
@@ -67,7 +67,7 @@ module Api
       end
 
       test "returns error when query is missing" do
-        post "/api/v1/libraries/#{@library.namespace}/#{@library.name}/versions/1.0.0/query",
+        post "/api/v1/libraries/#{@library.slug}/versions/1.0.0/query",
           params: {},
           as: :json
 
@@ -78,7 +78,7 @@ module Api
       end
 
       test "respects max_tokens budget" do
-        post "/api/v1/libraries/#{@library.namespace}/#{@library.name}/versions/1.0.0/query",
+        post "/api/v1/libraries/#{@library.slug}/versions/1.0.0/query",
           params: { query: "library", max_tokens: 500 },
           as: :json
 
@@ -89,7 +89,7 @@ module Api
       end
 
       test "returns 404 for nonexistent library" do
-        post "/api/v1/libraries/no-such/lib/versions/1.0.0/query",
+        post "/api/v1/libraries/no-such/versions/1.0.0/query",
           params: { query: "test" },
           as: :json
 
@@ -97,7 +97,7 @@ module Api
       end
 
       test "clamps max_tokens to valid range" do
-        post "/api/v1/libraries/#{@library.namespace}/#{@library.name}/versions/1.0.0/query",
+        post "/api/v1/libraries/#{@library.slug}/versions/1.0.0/query",
           params: { query: "install", max_tokens: 1 },
           as: :json
 
@@ -106,7 +106,7 @@ module Api
       end
 
       test "fast mode returns whole pages without chunk splitting" do
-        post "/api/v1/libraries/#{@library.namespace}/#{@library.name}/versions/1.0.0/query",
+        post "/api/v1/libraries/#{@library.slug}/versions/1.0.0/query",
           params: { query: "install configure", max_tokens: 50_000, mode: "fast" },
           as: :json
 
@@ -121,7 +121,7 @@ module Api
       end
 
       test "full mode is the default" do
-        post "/api/v1/libraries/#{@library.namespace}/#{@library.name}/versions/1.0.0/query",
+        post "/api/v1/libraries/#{@library.slug}/versions/1.0.0/query",
           params: { query: "install", max_tokens: 50_000 },
           as: :json
 

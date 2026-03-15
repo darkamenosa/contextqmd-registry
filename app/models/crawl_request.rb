@@ -8,6 +8,7 @@ class CrawlRequest < ApplicationRecord
 
   belongs_to :identity
   belongs_to :library, optional: true
+  belongs_to :library_source, optional: true
 
   SOURCE_TYPES = %w[github gitlab bitbucket git website openapi llms_txt].freeze
   STATUSES = %w[pending processing completed failed cancelled].freeze
@@ -53,9 +54,9 @@ class CrawlRequest < ApplicationRecord
     result = DocsFetcher.for(source_type).fetch(self, on_progress: method(:update_progress))
 
     update_progress("Importing #{result.pages.size} pages")
-    library = import_result(result)
+    library, source = import_result(result)
 
-    mark_completed(library)
+    mark_completed(library, source)
   rescue DocsFetcher::TransientFetchError
     # Let job framework retry — don't mark as failed yet
     update_progress("Waiting to retry")
@@ -71,9 +72,9 @@ class CrawlRequest < ApplicationRecord
     update!(status: "processing", started_at: Time.current, status_message: "Starting")
   end
 
-  def mark_completed(library)
+  def mark_completed(library, source = nil)
     raise "Cannot complete from #{status}" unless processing?
-    update!(status: "completed", library: library, error_message: nil,
+    update!(status: "completed", library: library, library_source: source, error_message: nil,
             completed_at: Time.current, status_message: "Completed")
   end
 
@@ -107,10 +108,12 @@ class CrawlRequest < ApplicationRecord
     # --- Import pipeline (invocation order) ---
 
     def import_result(result)
-      library = find_or_create_library(result)
+      existing_source = find_existing_library_source
+      library = find_or_create_library(result, existing_source: existing_source)
+      source = find_or_create_library_source(library, existing_source: existing_source)
       version = find_or_create_version(library, result)
       sync_pages(version, result.pages, prune_stale: result.complete)
-      record_fetch_recipe(version)
+      record_fetch_recipe(version, source)
       update_manifest_checksum(version)
       schedule_full_bundle(version)
 
@@ -118,43 +121,97 @@ class CrawlRequest < ApplicationRecord
         library.update!(default_version: version.version)
       end
 
-      library
+      [ library, source ]
     end
 
-    def find_or_create_library(result)
-      system_account = ensure_system_account
+    def find_or_create_library(result, existing_source: nil)
+      slug = library_slug(result.slug, prefix: "lib")
       namespace_slug = library_slug(result.namespace, prefix: "ns")
       name_slug = library_slug(result.name, prefix: "lib")
 
-      library = Library.find_by(namespace: namespace_slug, name: name_slug)
-
-      unless library
-        candidates = (result.aliases || []) + [ result.name, name_slug ]
-        candidates.each do |candidate|
-          library = Library.where("aliases @> ?", [ candidate ].to_json).first
-          break if library
-        end
-      end
+      library = self.library || existing_source&.library || find_existing_library([
+        slug,
+        result.slug,
+        result.namespace,
+        namespace_slug,
+        result.name,
+        name_slug,
+        *(result.aliases || [])
+      ])
 
       library ||= find_or_create_record(
         Library,
         { namespace: namespace_slug, name: name_slug },
-        account: system_account,
+        account: ensure_system_account,
+        slug: slug,
         display_name: result.display_name,
         homepage_url: result.homepage_url,
         aliases: result.aliases,
         source_type: source_type
       )
 
-      merged_aliases = normalized_aliases((library.aliases || []) + (result.aliases || []) + [ result.name, name_slug ])
-      library.update!(
-        display_name: result.display_name.presence || library.display_name,
-        aliases: merged_aliases,
-        homepage_url: result.homepage_url.presence || library.homepage_url,
-        source_type: source_type
-      )
+      sync_library_metadata(library, result, slug: slug, namespace_slug: namespace_slug, name_slug: name_slug)
 
       library
+    end
+
+    def find_or_create_library_source(library, existing_source: nil)
+      normalized_url = LibrarySource.normalize_url(url, source_type: source_type)
+      source = library_source || existing_source || library.library_sources.find_or_initialize_by(url: normalized_url)
+      source.assign_attributes(
+        url: normalized_url,
+        source_type: source_type,
+        active: true,
+        primary: library.library_sources.where(primary: true).none? || source.primary?
+      )
+      source.crawl_rules = library.crawl_rules if source.crawl_rules.blank? && library.crawl_rules.present?
+      source.last_crawled_at = Time.current
+      source.save!
+      source
+    end
+
+    def sync_library_metadata(library, result, slug:, namespace_slug:, name_slug:)
+      merged_aliases = normalized_aliases(
+        (library.aliases || []) +
+        (result.aliases || []) +
+        [ result.slug, slug, result.namespace, namespace_slug, result.name, name_slug ]
+      )
+
+      attrs = {
+        aliases: merged_aliases
+      }
+      attrs[:slug] = slug if library.slug.blank?
+      attrs[:source_type] = source_type if library.source_type.blank?
+
+      unless library.metadata_locked?
+        attrs[:display_name] = result.display_name.presence || library.display_name
+      end
+
+      attrs[:homepage_url] = if library.metadata_locked? && library.homepage_url.present?
+        library.homepage_url
+      else
+        result.homepage_url.presence || library.homepage_url
+      end
+
+      library.update!(attrs)
+    end
+
+    def find_existing_library(values)
+      normalized_aliases(values).each do |candidate|
+        library = Library.find_by(slug: candidate)
+        return library if library
+
+        library = Library.where("aliases @> ?", [ candidate ].to_json).first
+        return library if library
+      end
+
+      nil
+    end
+
+    def find_existing_library_source
+      return library_source if library_source.present?
+
+      LibrarySource.find_matching(url: url, source_type: source_type)
     end
 
     def find_or_create_version(library, result)
@@ -271,9 +328,10 @@ class CrawlRequest < ApplicationRecord
       headings.map { |h| h.gsub(/\s*\{\/\*.*?\*\/\}/, "").strip }.reject(&:blank?)
     end
 
-    def record_fetch_recipe(version)
+    def record_fetch_recipe(version, source)
       recipe = version.fetch_recipe || version.build_fetch_recipe
       recipe.assign_attributes(
+        library_source: source,
         source_type: source_type,
         url: url,
         normalizer_version: "1.0",

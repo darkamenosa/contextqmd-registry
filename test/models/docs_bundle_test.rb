@@ -63,7 +63,7 @@ class DocsBundleTest < ActiveSupport::TestCase
     assert bundle.package.attached?, "Expected bundle package to be attached"
     assert_equal "test", bundle.package.blob.service_name
     assert_equal(
-      "bundles/public/#{@library.namespace}/#{@library.name}/#{@version.version}/full/#{bundle.sha256.delete_prefix("sha256:")}.tar.gz",
+      "bundles/public/#{@library.slug}/#{@version.version}/full/#{bundle.sha256.delete_prefix("sha256:")}.tar.gz",
       bundle.package.blob.key
     )
     assert File.exist?(bundle.file_path), "Expected bundle file to exist"
@@ -82,8 +82,7 @@ class DocsBundleTest < ActiveSupport::TestCase
 
     manifest = JSON.parse(entries.fetch("manifest.json"))
     assert_equal @library.display_name, manifest["display_name"]
-    assert_equal @library.namespace, manifest["namespace"]
-    assert_equal @library.name, manifest["name"]
+    assert_equal @library.slug, manifest["slug"]
     assert_equal @version.version, manifest["version"]
     assert_equal 2, manifest["doc_count"]
     assert_equal "page-index.json", manifest.dig("page_index", "path")
@@ -127,7 +126,7 @@ class DocsBundleTest < ActiveSupport::TestCase
     assert_not_equal first_bundle.sha256, second_bundle.sha256
     assert_not_equal first_key, second_bundle.package.blob.key
     assert_equal(
-      "bundles/public/#{@library.namespace}/#{@library.name}/#{@version.version}/full/#{second_bundle.sha256.delete_prefix("sha256:")}.tar.gz",
+      "bundles/public/#{@library.slug}/#{@version.version}/full/#{second_bundle.sha256.delete_prefix("sha256:")}.tar.gz",
       second_bundle.package.blob.key
     )
   end

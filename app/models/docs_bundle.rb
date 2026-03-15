@@ -31,8 +31,7 @@ class DocsBundle
 
   def self.path_for(version:, profile:, format: FORMAT)
     storage_root.join(
-      safe_path_component(version.library.namespace),
-      safe_path_component(version.library.name),
+      safe_path_component(version.library.slug),
       safe_path_component(version.version),
       "#{safe_path_component(profile)}.#{safe_path_component(format)}"
     )
@@ -102,8 +101,7 @@ class DocsBundle
       JSON.generate(
         {
           schema_version: "1.0",
-          namespace: version.library.namespace,
-          name: version.library.name,
+          slug: version.library.slug,
           display_name: version.library.display_name,
           version: version.version,
           channel: version.channel,

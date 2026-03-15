@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_13_010003) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_15_102000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -154,6 +154,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_13_010003) do
     t.text "error_message"
     t.bigint "identity_id", null: false
     t.bigint "library_id"
+    t.bigint "library_source_id"
     t.jsonb "metadata", default: {}
     t.string "requested_bundle_visibility", default: "public", null: false
     t.string "source_type", default: "website", null: false
@@ -164,6 +165,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_13_010003) do
     t.string "url", null: false
     t.index ["identity_id"], name: "index_crawl_requests_on_identity_id"
     t.index ["library_id"], name: "index_crawl_requests_on_library_id"
+    t.index ["library_source_id"], name: "index_crawl_requests_on_library_source_id"
     t.index ["status"], name: "index_crawl_requests_on_status"
   end
 
@@ -171,6 +173,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_13_010003) do
     t.jsonb "allowed_hosts"
     t.jsonb "content_types"
     t.datetime "created_at", null: false
+    t.bigint "library_source_id"
     t.bigint "max_bytes"
     t.string "normalizer_version"
     t.text "signature"
@@ -179,6 +182,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_13_010003) do
     t.datetime "updated_at", null: false
     t.string "url"
     t.bigint "version_id", null: false
+    t.index ["library_source_id"], name: "index_fetch_recipes_on_library_source_id"
     t.index ["version_id"], name: "index_fetch_recipes_on_version_id", unique: true
   end
 
@@ -213,13 +217,31 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_13_010003) do
     t.string "default_version"
     t.string "display_name", null: false
     t.string "homepage_url"
+    t.boolean "metadata_locked", default: false, null: false
     t.string "name", null: false
     t.string "namespace", null: false
+    t.string "slug", null: false
     t.string "source_type"
     t.datetime "updated_at", null: false
     t.index ["account_id"], name: "index_libraries_on_account_id"
     t.index ["aliases"], name: "index_libraries_on_aliases", using: :gin
     t.index ["namespace", "name"], name: "index_libraries_on_namespace_and_name", unique: true
+    t.index ["slug"], name: "index_libraries_on_slug", unique: true
+  end
+
+  create_table "library_sources", force: :cascade do |t|
+    t.boolean "active", default: true, null: false
+    t.jsonb "crawl_rules", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "last_crawled_at"
+    t.bigint "library_id", null: false
+    t.boolean "primary", default: false, null: false
+    t.string "source_type", null: false
+    t.datetime "updated_at", null: false
+    t.string "url", null: false
+    t.index ["library_id", "primary"], name: "index_library_sources_on_library_id_and_primary", unique: true, where: "(\"primary\" = true)"
+    t.index ["library_id"], name: "index_library_sources_on_library_id"
+    t.index ["url"], name: "index_library_sources_on_url", unique: true
   end
 
   create_table "pages", force: :cascade do |t|
@@ -297,8 +319,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_13_010003) do
   add_foreign_key "crawl_proxy_leases", "crawl_proxy_configs"
   add_foreign_key "crawl_requests", "identities"
   add_foreign_key "crawl_requests", "libraries"
+  add_foreign_key "crawl_requests", "library_sources"
+  add_foreign_key "fetch_recipes", "library_sources"
   add_foreign_key "fetch_recipes", "versions"
   add_foreign_key "libraries", "accounts"
+  add_foreign_key "library_sources", "libraries"
   add_foreign_key "pages", "versions"
   add_foreign_key "source_policies", "libraries"
   add_foreign_key "users", "accounts"

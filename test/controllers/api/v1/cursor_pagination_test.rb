@@ -51,11 +51,11 @@ module Api
 
         body2 = response.parsed_body
         assert_equal 1, body2["data"].size, "Second page should return 1 library"
-        assert_not_equal first_lib["name"], body2["data"].first["name"], "Should return a different library"
+        assert_not_equal first_lib["slug"], body2["data"].first["slug"], "Should return a different library"
       end
 
       test "libraries index cursor walks through all records" do
-        all_names = []
+        all_slugs = []
         cursor = nil
 
         3.times do
@@ -67,15 +67,15 @@ module Api
           assert_response :ok
 
           body = response.parsed_body
-          all_names.concat(body["data"].map { |l| l["name"] })
+          all_slugs.concat(body["data"].map { |l| l["slug"] })
           cursor = body["meta"]["cursor"]
 
           break if cursor.nil?
         end
 
         assert_nil cursor, "Cursor should be nil after exhausting all pages"
-        assert_includes all_names, "nextjs"
-        assert_includes all_names, "rails"
+        assert_includes all_slugs, "nextjs"
+        assert_includes all_slugs, "rails"
       end
 
       test "libraries index with invalid cursor returns results from beginning" do
@@ -90,7 +90,7 @@ module Api
       # -- Versions pagination --
 
       test "versions index returns null cursor when all results fit in one page" do
-        get "/api/v1/libraries/vercel/nextjs/versions"
+        get "/api/v1/libraries/nextjs/versions"
 
         assert_response :ok
 
@@ -100,7 +100,7 @@ module Api
       end
 
       test "versions index paginates with per_page=1 via cursor" do
-        get "/api/v1/libraries/vercel/nextjs/versions", params: { per_page: 1 }
+        get "/api/v1/libraries/nextjs/versions", params: { per_page: 1 }
 
         assert_response :ok
 
@@ -112,7 +112,7 @@ module Api
 
         first_version = body["data"].first["version"]
 
-        get "/api/v1/libraries/vercel/nextjs/versions", params: { cursor: body["meta"]["cursor"], per_page: 1 }
+        get "/api/v1/libraries/nextjs/versions", params: { cursor: body["meta"]["cursor"], per_page: 1 }
 
         assert_response :ok
 
@@ -125,7 +125,7 @@ module Api
       # -- Page index pagination --
 
       test "page index returns null cursor when all results fit in one page" do
-        get "/api/v1/libraries/vercel/nextjs/versions/16.1.6/page-index"
+        get "/api/v1/libraries/nextjs/versions/16.1.6/page-index"
 
         assert_response :ok
 
@@ -135,7 +135,7 @@ module Api
       end
 
       test "page index paginates with per_page=1 via cursor" do
-        get "/api/v1/libraries/vercel/nextjs/versions/16.1.6/page-index", params: { per_page: 1 }
+        get "/api/v1/libraries/nextjs/versions/16.1.6/page-index", params: { per_page: 1 }
 
         assert_response :ok
 
@@ -145,7 +145,7 @@ module Api
 
         first_uid = body["data"].first["page_uid"]
 
-        get "/api/v1/libraries/vercel/nextjs/versions/16.1.6/page-index",
+        get "/api/v1/libraries/nextjs/versions/16.1.6/page-index",
           params: { cursor: body["meta"]["cursor"], per_page: 1 }
 
         assert_response :ok

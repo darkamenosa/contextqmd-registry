@@ -24,7 +24,7 @@ module Api
       teardown { Current.reset }
 
       test "index with auth returns versions for a library" do
-        get "/api/v1/libraries/vercel/nextjs/versions", headers: auth_headers
+        get "/api/v1/libraries/nextjs/versions", headers: auth_headers
 
         assert_response :ok
 
@@ -42,7 +42,7 @@ module Api
       end
 
       test "index without auth returns 200" do
-        get "/api/v1/libraries/vercel/nextjs/versions"
+        get "/api/v1/libraries/nextjs/versions"
 
         assert_response :ok
 
@@ -52,7 +52,7 @@ module Api
       end
 
       test "index filters by channel when param provided" do
-        get "/api/v1/libraries/vercel/nextjs/versions", params: { channel: "stable" }
+        get "/api/v1/libraries/nextjs/versions", params: { channel: "stable" }
 
         assert_response :ok
         body = response.parsed_body
@@ -61,7 +61,7 @@ module Api
       end
 
       test "index returns all channels when no filter" do
-        get "/api/v1/libraries/vercel/nextjs/versions"
+        get "/api/v1/libraries/nextjs/versions"
 
         assert_response :ok
         body = response.parsed_body
@@ -69,7 +69,7 @@ module Api
       end
 
       test "index returns 404 for nonexistent library" do
-        get "/api/v1/libraries/unknown/nope/versions", headers: auth_headers
+        get "/api/v1/libraries/nope/versions", headers: auth_headers
 
         assert_response :not_found
 
