@@ -11,6 +11,10 @@ module Api
 
       before_action :authenticate_api_token!
 
+      rescue_from ActionController::ParameterMissing do |e|
+        render_error(code: "bad_request", message: e.message, status: :bad_request)
+      end
+
       private
         def authenticate_api_token!
           authenticate_or_request_with_http_token do |token|

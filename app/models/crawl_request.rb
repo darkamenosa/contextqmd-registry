@@ -19,7 +19,8 @@ class CrawlRequest < ApplicationRecord
   validates :requested_bundle_visibility, presence: true, inclusion: { in: BUNDLE_VISIBILITIES }
   validate :url_not_private, if: -> { url.present? }
 
-  before_validation :strip_url
+  normalizes :url, with: -> { it.to_s.strip }
+
   before_validation :detect_source_type, if: -> { url.present? }
   after_create_commit :enqueue_processing
 
@@ -299,10 +300,6 @@ class CrawlRequest < ApplicationRecord
     end
 
     # --- Callbacks ---
-
-    def strip_url
-      self.url = url.strip if url.present?
-    end
 
     def detect_source_type
       self.source_type = DocsFetcher.detect_source_type(url)

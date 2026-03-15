@@ -25,6 +25,6 @@ class SsrfGuard
     addrs = Resolv.getaddresses(host)
     addrs.none? { |addr| PRIVATE_RANGES.any? { |range| range.include?(IPAddr.new(addr)) rescue false } }
   rescue Resolv::ResolvError
-    true # can't resolve — allow (will fail at connect time)
+    false # can't resolve — block (fail closed, not open)
   end
 end

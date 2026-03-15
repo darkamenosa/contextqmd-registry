@@ -20,13 +20,9 @@ module Api
       # In "fast" mode, returns whole pages without chunk splitting (~2x faster).
       # In "full" mode (default), large pages are split into ~800-token chunks.
       def create
-        query = params[:query].to_s.strip
+        query = params.expect(:query).to_s.strip
         max_tokens = (params[:max_tokens] || 5000).to_i.clamp(500, 50_000)
         mode = params[:mode].to_s == "fast" ? :fast : :full
-
-        if query.blank?
-          return render_error(code: "invalid_query", message: "query parameter is required", status: :unprocessable_entity)
-        end
 
         pages = search_pages(query)
 

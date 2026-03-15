@@ -1,13 +1,12 @@
 # frozen_string_literal: true
 
-class StaticPagesController < InertiaController
+class HomepagesController < InertiaController
   include Pagy::Method
 
-  # Public marketing/static pages: allow guests and reject accidental /app/:account_id scoping.
   allow_unauthenticated_access
   disallow_account_scope
 
-  def home
+  def show
     libraries = Library.includes(versions: :pages).all
     sorted = sort_libraries(libraries, params[:tab] || "popular")
     pagy, paginated = pagy(sorted.map { |lib| home_library_props(lib) }, limit: 10)
@@ -18,22 +17,6 @@ class StaticPagesController < InertiaController
       pagination: pagination_props(pagy),
       active_tab: params[:tab] || "popular"
     }
-  end
-
-  def about
-    render inertia: "pages/about"
-  end
-
-  def privacy
-    render inertia: "pages/privacy"
-  end
-
-  def terms
-    render inertia: "pages/terms"
-  end
-
-  def contact
-    render inertia: "pages/contact"
   end
 
   private

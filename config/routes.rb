@@ -91,11 +91,10 @@ Rails.application.routes.draw do
   get "rankings", to: "rankings#index"
 
   # Public pages
-  root "static_pages#home"
-  get "about", to: "static_pages#about"
-  get "privacy", to: "static_pages#privacy"
-  get "terms", to: "static_pages#terms"
-  get "contact", to: "static_pages#contact"
+  root "homepages#show"
+  %w[about privacy terms contact].each do |slug|
+    get slug, to: "pages#show", defaults: { id: slug }
+  end
 
   # Error pages
   get "errors/:status", to: "errors#show", as: :error

@@ -35,14 +35,14 @@ module Api
         assert_equal "queued", body["meta"]["status"]
       end
 
-      test "returns validation error for missing URL" do
+      test "returns error for missing URL" do
         post "/api/v1/crawl",
           params: {},
           headers: auth_headers
 
-        assert_response :unprocessable_entity
+        assert_response :bad_request
         body = response.parsed_body
-        assert_equal "validation_error", body["error"]["code"]
+        assert_equal "bad_request", body["error"]["code"]
       end
 
       test "requires authentication" do

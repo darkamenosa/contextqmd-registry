@@ -66,15 +66,15 @@ module Api
         assert first.key?("content_md")
       end
 
-      test "returns error when query is blank" do
+      test "returns error when query is missing" do
         post "/api/v1/libraries/#{@library.namespace}/#{@library.name}/versions/1.0.0/query",
-          params: { query: "" },
+          params: {},
           as: :json
 
-        assert_response :unprocessable_entity
+        assert_response :bad_request
 
         body = response.parsed_body
-        assert_equal "invalid_query", body["error"]["code"]
+        assert_equal "bad_request", body["error"]["code"]
       end
 
       test "respects max_tokens budget" do

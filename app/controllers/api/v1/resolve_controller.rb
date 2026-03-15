@@ -8,8 +8,7 @@ module Api
       rate_limit to: 120, within: 1.minute, by: -> { request.remote_ip }, only: :create
 
       def create
-        query = params[:query]
-        return render_error(code: "bad_request", message: "Query parameter is required", status: :bad_request) if query.blank?
+        query = params.expect(:query)
 
         library = find_library(query)
         return render_error(code: "not_found", message: "No library found for '#{query}'", status: :not_found) unless library

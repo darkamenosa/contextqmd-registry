@@ -8,7 +8,7 @@ module Api
       # Params:
       #   url - URL to crawl (required). source_type is auto-detected.
       def create
-        crawl_request = Current.identity.crawl_requests.new(url: params[:url])
+        crawl_request = Current.identity.crawl_requests.new(crawl_request_params)
 
         if crawl_request.save
           render_data(crawl_request_json(crawl_request), meta: { status: "queued" })
@@ -22,6 +22,10 @@ module Api
       end
 
       private
+
+        def crawl_request_params
+          { url: params.expect(:url) }
+        end
 
         def crawl_request_json(cr)
           {

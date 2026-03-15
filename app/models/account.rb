@@ -34,6 +34,20 @@ class Account < ApplicationRecord
     incinerate_accounts(due_for_incineration)
   end
 
+  # Dispatches the right incineration scope and returns failed IDs (if any).
+  # Raises on failure so job framework can retry.
+  def self.incinerate_now(orphaned_account_ids: nil)
+    failed_account_ids = if orphaned_account_ids.present?
+      incinerate_orphaned_now(orphaned_account_ids)
+    else
+      incinerate_due_now
+    end
+
+    if failed_account_ids.present?
+      raise "Failed to incinerate accounts: #{failed_account_ids.join(', ')}"
+    end
+  end
+
   def slug = "/app/#{AccountSlug.encode(external_account_id)}"
 
   def owner = users.find_by(role: :owner)
