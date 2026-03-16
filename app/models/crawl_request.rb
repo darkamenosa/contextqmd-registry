@@ -54,9 +54,10 @@ class CrawlRequest < ApplicationRecord
     result = DocsFetcher.for(source_type).fetch(self, on_progress: method(:update_progress))
 
     update_progress("Importing #{result.pages.size} pages")
-    library, source = import_result(result)
-
-    mark_completed(library, source)
+    self.class.transaction do
+      library, source = import_result(result)
+      mark_completed(library, source)
+    end
   rescue DocsFetcher::TransientFetchError
     # Let job framework retry — don't mark as failed yet
     update_progress("Waiting to retry")
@@ -222,7 +223,7 @@ class CrawlRequest < ApplicationRecord
         url: normalized_url,
         source_type: source_type,
         active: true,
-        primary: library.library_sources.where(primary: true).none? || source.primary?
+        primary: primary_library_source?(library, source)
       )
       source.crawl_rules = library.crawl_rules if source.crawl_rules.blank? && library.crawl_rules.present?
       source.last_crawled_at = Time.current
@@ -272,6 +273,10 @@ class CrawlRequest < ApplicationRecord
       return library_source if library_source.present?
 
       LibrarySource.find_matching(url: url, source_type: source_type)
+    end
+
+    def primary_library_source?(library, source)
+      !library.library_sources.where(primary: true).where.not(id: source.id).exists?
     end
 
     def next_available_library_slug(base_slug, namespace_slug:, name_slug:)

@@ -205,6 +205,58 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     assert_includes @crawl_request.error_message, "Network error"
   end
 
+  test "rolls back partial import rows when page import fails" do
+    crawl_request = CrawlRequest.create!(
+      identity: @identity,
+      url: "https://github.com/example/docs-repo",
+      source_type: "github",
+      status: "pending"
+    )
+
+    result = CrawlResult.new(
+      slug: "example",
+      namespace: "example",
+      name: "docs-repo",
+      display_name: "Example",
+      homepage_url: "https://github.com/example/docs-repo",
+      aliases: [ "example", "example/docs-repo" ],
+      version: "latest",
+      pages: [
+        {
+          page_uid: "intro",
+          path: "intro.md",
+          title: "Intro",
+          url: "https://github.com/example/docs-repo/blob/main/intro.md",
+          content: "First page",
+          headings: []
+        },
+        {
+          page_uid: "intro",
+          path: "duplicate.md",
+          title: "Duplicate",
+          url: "https://github.com/example/docs-repo/blob/main/duplicate.md",
+          content: "Duplicate uid",
+          headings: []
+        }
+      ]
+    )
+
+    with_stub_fetcher(result) do
+      assert_raises(ActiveRecord::RecordInvalid) do
+        ProcessCrawlRequestJob.perform_now(crawl_request)
+      end
+    end
+
+    crawl_request.reload
+    assert_equal "failed", crawl_request.status
+    assert_nil crawl_request.library_id
+    assert_nil crawl_request.library_source_id
+    assert_nil LibrarySource.find_matching(url: crawl_request.url, source_type: crawl_request.source_type)
+    refute Library.exists?(slug: "example")
+    assert_equal 0, Version.where(version: "latest").joins(:library).where(libraries: { slug: "example" }).count
+    assert_equal 0, Page.joins(version: :library).where(libraries: { slug: "example" }).count
+  end
+
   test "skips processing when crawl request is not pending" do
     @crawl_request.update!(status: "completed")
 
@@ -491,6 +543,83 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
 
     assert_equal canonical.id, crawl_request.reload.library_id
     assert_equal canonical.id, source.reload.library_id
+  end
+
+  test "canonical metadata reassigns a source onto the canonical library without duplicating primary sources" do
+    canonical = Library.create!(
+      account: @account,
+      namespace: "redis",
+      name: "redis",
+      slug: "redis",
+      display_name: "Redis",
+      homepage_url: "https://github.com/redis/redis",
+      aliases: [ "redis" ]
+    )
+    primary_source = canonical.library_sources.create!(
+      url: "https://github.com/redis/redis",
+      source_type: "github",
+      active: true,
+      primary: true
+    )
+
+    wrong = Library.create!(
+      account: @account,
+      namespace: "redis",
+      name: "docs",
+      slug: "redis-docs",
+      display_name: "Redis",
+      homepage_url: "https://github.com/redis/docs",
+      aliases: [ "redis", "redis/docs", "redisdocs" ]
+    )
+    docs_source = wrong.library_sources.create!(
+      url: "https://github.com/redis/docs",
+      source_type: "github",
+      active: true,
+      primary: true
+    )
+
+    crawl_request = CrawlRequest.create!(
+      identity: @identity,
+      url: "https://github.com/redis/docs",
+      source_type: "github",
+      status: "pending",
+      metadata: {
+        "canonical_slug" => "redis",
+        "canonical_display_name" => "Redis"
+      }
+    )
+
+    result = CrawlResult.new(
+      slug: "redis-docs",
+      namespace: "redis",
+      name: "docs",
+      display_name: "Redis",
+      homepage_url: "https://github.com/redis/docs",
+      aliases: [ "redis", "redis/docs", "redisdocs" ],
+      version: "latest",
+      pages: [
+        {
+          page_uid: "intro",
+          path: "intro.md",
+          title: "Intro",
+          url: "https://github.com/redis/docs/blob/main/intro.md",
+          content: "Redis docs",
+          headings: []
+        }
+      ]
+    )
+
+    with_stub_fetcher(result) do
+      assert_no_difference -> { Library.count } do
+        ProcessCrawlRequestJob.perform_now(crawl_request)
+      end
+    end
+
+    assert_equal canonical.id, crawl_request.reload.library_id
+    assert_equal canonical.id, docs_source.reload.library_id
+    assert_equal false, docs_source.primary
+    assert_equal true, primary_source.reload.primary
+    assert_equal 1, canonical.library_sources.where(primary: true).count
   end
 
   test "does not merge git libraries that share an owner" do
