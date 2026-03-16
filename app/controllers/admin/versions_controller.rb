@@ -10,9 +10,9 @@ module Admin
 
     def update
       if @version.update(version_params)
-        redirect_to admin_library_path(@version.library), notice: "Version updated."
+        redirect_to admin_library_path(id: @version.library.id), notice: "Version updated."
       else
-        redirect_to admin_library_path(@version.library),
+        redirect_to admin_library_path(id: @version.library.id),
           alert: @version.errors.full_messages.join(", ")
       end
     end
@@ -20,7 +20,7 @@ module Admin
     def destroy
       library = @version.library
       @version.destroy!
-      redirect_to admin_library_path(library), notice: "Version \"#{@version.version}\" deleted."
+      redirect_to admin_library_path(id: library.id), notice: "Version \"#{@version.version}\" deleted."
     end
 
     private
