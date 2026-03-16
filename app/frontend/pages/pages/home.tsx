@@ -392,12 +392,11 @@ export default function Home({ libraryCount, libraries, activeTab }: Props) {
         <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-24 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              How it works
+              What you get
             </h2>
             <p className="mt-4 text-muted-foreground">
-              ContextQMD is a documentation package manager for AI coding tools,
-              with a standalone CLI and an MCP server on top of the same
-              registry.
+              A documentation package manager with a standalone CLI and an MCP
+              server, both backed by the same open registry.
             </p>
           </div>
           <div className="mt-16 grid gap-8 md:grid-cols-2 lg:grid-cols-3">
@@ -428,13 +427,20 @@ export default function Home({ libraryCount, libraries, activeTab }: Props) {
         <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-24 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              Start using ContextQMD
+              Try it now
             </h2>
             <p className="mt-4 text-lg text-muted-foreground">
-              Browse the registry, install docs, and give your AI coding tools
-              the context they need.
+              Install a library in one command. Give your AI coding tools the
+              context they need.
             </p>
-            <div className="mt-8 flex items-center justify-center gap-4">
+            <div className="mx-auto mt-6 max-w-md">
+              <div className="overflow-hidden rounded-lg border bg-zinc-950 text-zinc-100">
+                <pre className="px-4 py-3 text-sm">
+                  <code>npx -y contextqmd libraries install react</code>
+                </pre>
+              </div>
+            </div>
+            <div className="mt-6 flex items-center justify-center gap-3">
               <Button
                 size="lg"
                 nativeButton={false}

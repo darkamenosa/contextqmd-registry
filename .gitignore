@@ -57,3 +57,4 @@ node_modules
 *.swp
 .playwright-mcp/
 docs/superpowers/
+.gstack/

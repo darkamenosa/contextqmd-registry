@@ -28,19 +28,19 @@ const techStack = [
     icon: Server,
     title: "Registry",
     description:
-      "Free, open API serving documentation packages. Browse libraries, resolve versions, fetch manifests, and download compressed bundles.",
+      "Free, open API at contextqmd.com. Browse libraries, resolve versions, fetch manifests, and download compressed documentation bundles.",
   },
   {
     icon: Code2,
-    title: "CLI + MCP",
+    title: "CLI + MCP Server",
     description:
-      "Use `contextqmd` in your terminal or `contextqmd-mcp` inside Claude, Cursor, Windsurf, and other MCP clients.",
+      "Use the `contextqmd` CLI in your terminal for install and search workflows, or add `contextqmd-mcp` to Claude, Cursor, Windsurf, and other MCP-compatible editors.",
   },
   {
     icon: BookOpen,
     title: "QMD Engine",
     description:
-      "Local hybrid search combining full-text and semantic retrieval. Zero-config setup, SQLite-backed, works offline.",
+      "Local hybrid search combining BM25 full-text and semantic vector retrieval. Zero-config, SQLite-backed, works fully offline.",
   },
 ]
 
@@ -57,15 +57,20 @@ export default function About() {
           </h1>
           <div className="mt-4 space-y-6 text-base/relaxed text-muted-foreground sm:mt-8 sm:text-lg/relaxed">
             <p>
-              ContextQMD is a documentation package system for local AI
-              workflows. Instead of hitting APIs for every query, you install
-              documentation packages locally and search them with QMD, a hybrid
-              engine that combines full-text and semantic retrieval.
+              AI coding tools work best when they have accurate, up-to-date
+              documentation. But most approaches either hit an API on every
+              query or dump an entire docs site into context.
             </p>
             <p>
-              The registry is free and open. The CLI and MCP server both run
-              locally. Your docs stay on your machine, version-pinned and always
-              available, even offline.
+              ContextQMD takes a different approach: install documentation
+              packages locally, search them with QMD — a hybrid engine combining
+              BM25 full-text and semantic vector retrieval — and get
+              version-pinned results without network calls.
+            </p>
+            <p>
+              The registry is free and open. The CLI and MCP server both run on
+              your machine. Your docs stay local, version-pinned, and available
+              even offline.
             </p>
           </div>
         </div>

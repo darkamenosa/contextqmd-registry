@@ -258,7 +258,8 @@ export default function CrawlRequestsIndex({
               Documentation Queue
             </h1>
             <p className="mt-2 text-base text-muted-foreground sm:mt-4 sm:text-lg">
-              Documentation crawling and indexing tasks.
+              Track active and completed documentation crawl jobs submitted to
+              the registry.
             </p>
           </div>
           <div className="flex gap-2">

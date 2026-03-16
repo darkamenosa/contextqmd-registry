@@ -5,7 +5,30 @@ module DocsFetcher
     GENERIC_SOURCE_NAMES = %w[
       api book doc docs documentation guide guides handbook manual manuals
       reference references site website wiki
+      core app client server sdk framework runtime engine lib utils tools
+      cli ui web js
     ].freeze
+
+    # Suffixes on repo names that indicate a docs/website repo rather than the
+    # actual project repo. Stripped to derive the product slug.
+    # e.g. "docs.nestjs.com" → "nestjs", "kamal-site" → "kamal"
+    # Only TLDs that are overwhelmingly used for docs websites, not product names.
+    # Excluded: .io (socket.io), .org (many projects use org in name)
+    DOCS_REPO_SUFFIXES = /
+      (?:[-.](?:com|dev|net|site|website|pages|book))
+      \z
+    /ix
+
+    # Repo names ending with "-docs" → strip to get product slug.
+    DOCS_REPO_SUFFIX_STRIP = /[-.]docs?\z/i
+
+    # Programming language names that are too generic ONLY when the owner is a
+    # "bindings/SDK" org — NOT when the owner IS the language project itself.
+    # e.g. clerk/javascript → clerk, but rust-lang/rust → rust (not rust-lang)
+    GENERIC_LANG_NAMES = %w[
+      javascript typescript python ruby go rust java kotlin swift elixir
+      php csharp scala clojure haskell erlang lua perl r julia
+    ].to_set.freeze
     GENERIC_HOST_LABELS = (GENERIC_SOURCE_NAMES + %w[www dev developer developers help support]).uniq.freeze
     LOCALE_PATH_SEGMENT = /\A[a-z]{2}(?:-[a-z]{2})?\z/i
     TITLE_SEPARATORS = /\s+[–—:-]\s+/
@@ -22,7 +45,7 @@ module DocsFetcher
     def from_git(owner:, repo_name:, source_url:)
       owner_slug = slugify(owner, fallback: "library")
       repo_slug = slugify(repo_name, fallback: owner_slug)
-      product_slug = generic_source_name?(repo_slug) ? owner_slug : repo_slug
+      product_slug = derive_git_product_slug(owner_slug, repo_slug, repo_name)
 
       {
         slug: product_slug,
@@ -115,6 +138,66 @@ module DocsFetcher
     def slugify(value, fallback: nil)
       slug = value.to_s.tr("_", "-").parameterize(separator: "-")
       slug.presence || fallback
+    end
+
+    # Derives the product slug for a git repo. Handles:
+    # 1. Generic repo names (docs, core, cli) → use owner
+    # 2. Docs website repos (nestjs/docs.nestjs.com, tailwindlabs/tailwindcss.com) → strip domain suffix
+    # 3. Docs repos (drizzle-team/drizzle-orm-docs) → strip -docs suffix
+    # 4. Generic language names (clerk/javascript) → use owner
+    # 5. Normal repos → use repo name as-is
+    def derive_git_product_slug(owner_slug, repo_slug, raw_repo_name)
+      return owner_slug if generic_source_name?(repo_slug)
+
+      # Generic language name (javascript, python, etc.) → use owner,
+      # BUT only when the owner is clearly NOT the language project itself.
+      # e.g. clerk/javascript → clerk, but rust-lang/rust → rust
+      if GENERIC_LANG_NAMES.include?(repo_slug) && !owner_is_language_project?(owner_slug, repo_slug)
+        return owner_slug
+      end
+
+      # Docs website repo: "docs.nestjs.com" → "nestjs", "tailwindcss.com" → "tailwindcss"
+      if raw_repo_name.match?(DOCS_REPO_SUFFIXES)
+        extracted = extract_product_from_docs_repo(raw_repo_name, owner_slug)
+        return extracted if extracted.present?
+      end
+
+      # Docs repo: "drizzle-orm-docs" → "drizzle-orm"
+      # Only strip when owner ≠ repo (terraform-docs/terraform-docs should stay as-is)
+      if repo_slug.match?(DOCS_REPO_SUFFIX_STRIP) && owner_slug != repo_slug
+        stripped = slugify(repo_slug.sub(DOCS_REPO_SUFFIX_STRIP, ""))
+        return stripped if stripped.present? && !generic_source_name?(stripped)
+      end
+
+      repo_slug
+    end
+
+    # Check if the owner org is the language project itself.
+    # e.g. rust-lang owns rust, golang owns go, swiftlang owns swift
+    def owner_is_language_project?(owner_slug, repo_slug)
+      # Owner contains the repo name (rust-lang contains rust, golang contains go)
+      owner_slug.include?(repo_slug) ||
+        # Or owner is a well-known language org pattern
+        owner_slug.end_with?("-lang") ||
+        owner_slug.end_with?("lang")
+    end
+
+    # Extract the product name from a docs website repo name.
+    # "docs.nestjs.com" → "nestjs", "expressjs.com" → "expressjs",
+    # "react.dev" → "react", "kamal-site" → "kamal"
+    def extract_product_from_docs_repo(raw_repo_name, owner_slug)
+      # Strip known suffixes: .com, .dev, .io, -site, -website, -pages, -book
+      cleaned = raw_repo_name.sub(DOCS_REPO_SUFFIXES, "")
+      # If it had dots (like docs.nestjs.com), split and find the product part
+      parts = cleaned.split(".")
+      # Filter out generic parts like "docs", "www"
+      meaningful = parts.map { |p| slugify(p) }.reject { |p| generic_source_name?(p) || p.blank? }
+
+      candidate = meaningful.last # innermost meaningful part (e.g. "nestjs" from "docs.nestjs")
+      return candidate if candidate.present?
+
+      # Fallback: use owner if nothing meaningful found
+      owner_slug
     end
 
     def generic_source_name?(value)

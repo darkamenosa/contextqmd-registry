@@ -53,8 +53,8 @@ export default function LibrariesIndex({
             Libraries
           </h1>
           <p className="mt-2 text-base text-muted-foreground sm:mt-4 sm:text-lg">
-            Browse documentation packages available through the ContextQMD
-            registry.
+            Search and install version-aware documentation for your AI coding
+            tools.
           </p>
         </div>
 

@@ -48,7 +48,7 @@ Rails.application.routes.draw do
           resource :default_version, only: :update
         end
       end
-      resources :versions, only: [ :update, :destroy ] do
+      resources :versions, only: [ :show, :update, :destroy ] do
         resources :pages, only: :index, module: :libraries, controller: :pages
       end
       resources :pages, only: [ :show, :edit, :update, :destroy ]

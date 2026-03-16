@@ -223,6 +223,31 @@ class DocsFetcher::GitTest < ActiveSupport::TestCase
     assert_equal "v1.10.0", @generic.send(:resolve_latest_tag, "https://example.com/org/repo.git")
   end
 
+  test "resolve_latest_tag skips absurd version tags" do
+    @generic.define_singleton_method(:list_remote_tags) do |_repo_url|
+      %w[v1.2.0 v0.999999.0 v999.9.9 v54011 v3.0.0]
+    end
+
+    assert_equal "v3.0.0", @generic.send(:resolve_latest_tag, "https://example.com/org/repo.git")
+  end
+
+  test "absurd_version? rejects high numeric segments" do
+    assert @generic.send(:absurd_version?, "0.999999.0")
+    assert @generic.send(:absurd_version?, "0.9999-temporary")
+    assert @generic.send(:absurd_version?, "999.9.9")
+    assert @generic.send(:absurd_version?, "54011")
+    assert @generic.send(:absurd_version?, "2024.1.300751-latest")
+  end
+
+  test "absurd_version? allows normal versions" do
+    refute @generic.send(:absurd_version?, "3.14.2")
+    refute @generic.send(:absurd_version?, "2026.3.1")
+    refute @generic.send(:absurd_version?, "16.1.6")
+    refute @generic.send(:absurd_version?, "0.135.1")
+    refute @generic.send(:absurd_version?, "0.227.1")
+    refute @generic.send(:absurd_version?, "1.0.0-beta.1")
+  end
+
   # --- Title extraction ---
 
   test "extract_title finds ATX heading" do
@@ -267,10 +292,73 @@ class DocsFetcher::GitTest < ActiveSupport::TestCase
     assert_nil title
   end
 
-  test "convert_content passes through rst" do
-    content, title = @generic.send(:convert_content, "Hello\n=====\n\nWorld", ".rst")
-    assert_equal "Hello\n=====\n\nWorld", content
+  test "convert_content extracts title from rst underline heading" do
+    content, title = @generic.send(:convert_content, "Hello World\n===========\n\nSome text.", ".rst")
+    assert_equal "Hello World\n===========\n\nSome text.", content
+    assert_equal "Hello World", title
+  end
+
+  test "convert_content extracts rst title with link markup stripped" do
+    rst = "`fish <https://fishshell.com/>`__ - the friendly interactive shell |Build Status|\n" \
+          "=================================================================================\n\nContent."
+    _content, title = @generic.send(:convert_content, rst, ".rst")
+    assert_equal "fish - the friendly interactive shell", title
+  end
+
+  test "convert_content returns nil title for rst without heading" do
+    content, title = @generic.send(:convert_content, "Just plain text\nno underline here", ".rst")
+    assert_equal "Just plain text\nno underline here", content
     assert_nil title
+  end
+
+  test "extract_rst_headings returns sub-headings skipping the title" do
+    rst = <<~RST
+      Document Title
+      ==============
+
+      Some intro.
+
+      Section One
+      -----------
+
+      Content here.
+
+      Section Two
+      -----------
+
+      More content.
+
+      Subsection
+      ~~~~~~~~~~
+
+      Details.
+    RST
+    headings = @generic.send(:extract_rst_headings, rst, "Document Title")
+    assert_equal [ "Section One", "Section Two", "Subsection" ], headings
+  end
+
+  test "extract_rst_headings returns empty for single-heading rst" do
+    rst = "Title Only\n==========\n\nJust content, no sub-headings."
+    headings = @generic.send(:extract_rst_headings, rst, "Title Only")
+    assert_empty headings
+  end
+
+  test "extract_rst_headings keeps first section when title differs" do
+    rst = "Intro\n=====\n\nUsage\n-----\n"
+    headings = @generic.send(:extract_rst_headings, rst, "Something Else")
+    assert_equal [ "Intro", "Usage" ], headings
+  end
+
+  test "extract_rst_headings strips RST role markup" do
+    rst = "Title\n=====\n\n:mod:`jsonschema`\n=================\n"
+    headings = @generic.send(:extract_rst_headings, rst, "Title")
+    assert_equal [ "jsonschema" ], headings
+  end
+
+  test "extract_rst_headings handles same-char sections" do
+    rst = "Title\n=====\n\nSection One\n===========\n\nSection Two\n===========\n"
+    headings = @generic.send(:extract_rst_headings, rst, "Title")
+    assert_equal [ "Section One", "Section Two" ], headings
   end
 
   test "convert_content converts ipynb" do
@@ -400,7 +488,7 @@ class DocsFetcher::GitTest < ActiveSupport::TestCase
     Dir.mktmpdir("test-git-") do |tmpdir|
       # Create files in excluded dirs
       %w[vendor/lib.md node_modules/readme.md test/helper.md archive/old.md
-         build/output.md .github/ci.md examples/demo.md i18n/fr.md].each do |rel|
+         build/output.md .github/ci.md demo/quickstart.md i18n/fr.md].each do |rel|
         path = File.join(tmpdir, rel)
         FileUtils.mkdir_p(File.dirname(path))
         File.write(path, "# Content")
@@ -421,7 +509,7 @@ class DocsFetcher::GitTest < ActiveSupport::TestCase
       assert_not rel_paths.any? { |p| p.start_with?("archive/") }
       assert_not rel_paths.any? { |p| p.start_with?("build/") }
       assert_not rel_paths.any? { |p| p.start_with?(".github/") }
-      assert_not rel_paths.any? { |p| p.start_with?("examples/") }
+      assert_not rel_paths.any? { |p| p.start_with?("demo/") }
       assert_not rel_paths.any? { |p| p.start_with?("i18n/") }
     end
   end
@@ -534,5 +622,42 @@ class DocsFetcher::GitTest < ActiveSupport::TestCase
 
   test "detect_source_type returns gitlab for self-hosted gitlab" do
     assert_equal "gitlab", DocsFetcher.detect_source_type("https://gitlab.mycompany.com/team/project")
+  end
+
+  # --- New exclude patterns ---
+
+  test "discover_doc_files skips .changeset and AI config files" do
+    Dir.mktmpdir("test-git-") do |tmpdir|
+      FileUtils.mkdir_p(File.join(tmpdir, ".changeset"))
+      File.write(File.join(tmpdir, ".changeset", "README.md"), "# Changeset")
+      File.write(File.join(tmpdir, "CLAUDE.md"), "# Claude config")
+      File.write(File.join(tmpdir, "AGENTS.md"), "# Agents config")
+      File.write(File.join(tmpdir, "GEMINI.md"), "# Gemini config")
+      File.write(File.join(tmpdir, "README.md"), "# Real docs")
+
+      candidates = @generic.send(:discover_doc_files, tmpdir)
+      rel_paths = candidates.map { |c| c.sub("#{tmpdir}/", "") }
+      basenames = candidates.map { |c| File.basename(c) }
+
+      assert_includes rel_paths, "README.md"
+      assert_not rel_paths.any? { |p| p.start_with?(".changeset/") }
+      assert_not_includes basenames, "CLAUDE.md"
+      assert_not_includes basenames, "AGENTS.md"
+      assert_not_includes basenames, "GEMINI.md"
+    end
+  end
+
+  test "discover_doc_files skips i18n-guides directory" do
+    Dir.mktmpdir("test-git-") do |tmpdir|
+      FileUtils.mkdir_p(File.join(tmpdir, "i18n-guides"))
+      File.write(File.join(tmpdir, "i18n-guides", "français.md"), "# Guide français")
+      File.write(File.join(tmpdir, "README.md"), "# Real docs")
+
+      candidates = @generic.send(:discover_doc_files, tmpdir)
+      rel_paths = candidates.map { |c| c.sub("#{tmpdir}/", "") }
+
+      assert_includes rel_paths, "README.md"
+      assert_not rel_paths.any? { |p| p.start_with?("i18n-guides/") }
+    end
   end
 end

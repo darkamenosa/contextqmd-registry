@@ -4,6 +4,10 @@ module Admin
   class VersionsController < BaseController
     before_action :set_version
 
+    def show
+      redirect_to admin_version_pages_path(@version)
+    end
+
     def update
       if @version.update(version_params)
         redirect_to admin_library_path(@version.library), notice: "Version updated."

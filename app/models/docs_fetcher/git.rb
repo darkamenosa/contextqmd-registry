@@ -18,10 +18,13 @@ module DocsFetcher
       dist build out _build _site .next .nuxt target
       vendor node_modules .bundle bower_components
       .github .gitlab .circleci .husky .devcontainer .vscode .claude .codex
+      .changeset .changesets .factory .cloudflare
       test tests spec specs __tests__ __mocks__ fixtures testdata
       archive archived deprecated legacy obsolete outdated superseded old previous
-      examples example demo demos sample samples
-      i18n l10n locales translations
+      demo demos sample samples
+      integration-tests benchmarks bench perf evals
+      legal nix
+      i18n l10n locales translations i18n-guides
       ar bg bn cs da de el es et fa fi fr he hi hr hu id it ja ka kk km
       ko lt lv mk mn ms my nl no pl pt ro ru sk sl sq sr sv sw ta te th
       tl tr uk ur vi zh
@@ -36,22 +39,27 @@ module DocsFetcher
       CONTRIBUTING.md contributing.md
       SECURITY.md security.md
       NEWS.md
+      CLAUDE.md AGENTS.md GEMINI.md
     ].freeze
 
     def fetch(crawl_request, on_progress: nil)
       url = crawl_request.url
       repo_url = normalize_git_url(url)
       explicit_ref = extract_branch_from_url(url)
-      branch_or_tag = explicit_ref.presence || resolve_latest_tag(repo_url)
       @crawl_rules = load_crawl_rules(crawl_request)
+
+      # Always clone the default branch for docs content — docs on main/master
+      # represent the latest state. Resolve the latest tag separately for
+      # version labeling only. If the user specified an explicit ref (e.g.
+      # /tree/v2.0), honour that for both content and version.
+      resolved_tag = explicit_ref.presence || resolve_latest_tag(repo_url)
+      clone_ref = explicit_ref # nil = default branch; explicit ref = user's choice
 
       Dir.mktmpdir("contextqmd-git-") do |tmpdir|
         on_progress&.call("Cloning repository")
-        clone_repository(repo_url, tmpdir, branch_or_tag: branch_or_tag)
+        clone_repository(repo_url, tmpdir, branch_or_tag: clone_ref)
 
-        # When no explicit ref was used, detect the actual default branch
-        # from the cloned repo (e.g. "master" instead of assuming "main").
-        branch_or_tag ||= detect_head_branch(tmpdir)
+        branch_or_tag = clone_ref || detect_head_branch(tmpdir)
 
         files = discover_doc_files(tmpdir)
         raise DocsFetcher::PermanentFetchError, "No documentation found in #{repo_url}" if files.empty?
@@ -61,7 +69,14 @@ module DocsFetcher
         raise DocsFetcher::PermanentFetchError, "No documentation content fetched from #{repo_url}" if pages.empty?
 
         owner, repo_name = extract_owner_repo(url)
-        version = extract_version(branch_or_tag)
+        # When cloning an explicit ref, use that as the version.
+        # When cloning HEAD (clone_ref is nil), label as "latest" — the content
+        # is from the default branch, not from the resolved tag.
+        version = if clone_ref
+          extract_version(clone_ref)
+        else
+          extract_version(resolved_tag) || "latest"
+        end
 
         build_result(owner, repo_name, url, pages, version)
       end
@@ -189,7 +204,9 @@ module DocsFetcher
           end
 
           next unless File.file?(path)
-          next unless File.size(path) > 0
+          file_size = File.size(path)
+          next unless file_size > 0
+          next if file_size > 5_000_000 # Skip files > 5MB (auto-generated dumps)
           next unless DOC_EXTENSIONS.include?(File.extname(path).downcase)
 
           basename = File.basename(path)
@@ -214,17 +231,25 @@ module DocsFetcher
         files.filter_map do |full_path|
           rel = full_path.sub("#{tmpdir}/", "")
           raw_content = File.read(full_path, encoding: "UTF-8")
+          raw_content.delete_prefix!("\xEF\xBB\xBF") # Strip UTF-8 BOM
           next if raw_content.strip.empty?
 
           ext = File.extname(full_path).downcase
           content, extra_title = convert_content(raw_content, ext)
           next if content.nil? || content.strip.empty?
 
-          title = extra_title || extract_title(content, rel)
+          title = extra_title.presence || extract_title(content, rel)
+          title = humanize_filename(rel) if title.blank?
+          title = File.basename(rel, File.extname(rel)) if title.blank?
+          title = "Untitled" if title.blank?
           content = strip_frontmatter(content) if ext == ".md" || ext == ".mdx"
           next if content.strip.empty?
 
-          headings = content.scan(/^\#{2,4}\s+(.+)$/).flatten.map(&:strip)
+          headings = if ext == ".rst"
+            extract_rst_headings(content, title)
+          else
+            content.scan(/^\#{2,4}\s+(.+)$/).flatten.map(&:strip)
+          end
           slug = rel.delete_suffix(File.extname(rel)).tr("/", "-").downcase
 
           {
@@ -250,7 +275,7 @@ module DocsFetcher
         when ".ipynb"
           convert_ipynb(raw_content)
         when ".rst"
-          [ raw_content, nil ]
+          [ raw_content, extract_rst_title(raw_content) ]
         else
           [ raw_content, nil ]
         end
@@ -282,6 +307,74 @@ module DocsFetcher
       rescue JSON::ParserError => e
         Rails.logger.warn("Failed to parse .ipynb: #{e.message}")
         [ nil, nil ]
+      end
+
+      # --- RST title extraction ---
+
+      # RST headings use underline (and optional overline) with characters like = - ~ ^ "
+      # Example: "fish - the friendly interactive shell\n====================================="
+      RST_UNDERLINE_CHARS = %r{\A[=\-~^"+#*`.':!_]{3,}\z}
+
+      def extract_rst_title(content)
+        lines = content.lines.map(&:rstrip)
+        lines.each_with_index do |line, i|
+          next_line = lines[i + 1]
+          next unless next_line&.match?(RST_UNDERLINE_CHARS)
+          next unless next_line.length >= line.length
+
+          # Skip if line is blank, a directive, or itself an underline
+          title = line.strip
+          next if title.empty?
+          next if title.start_with?("..")
+          next if title.match?(RST_UNDERLINE_CHARS)
+
+          # Strip RST inline markup from the title (links like `text <url>`_ or `text <url>`__)
+          title = title.gsub(/`([^<`]+)\s*<[^>]+>`_{1,2}/, '\1').strip
+          # Strip RST role-like badges (|Build Status| etc.)
+          title = title.gsub(/\|[^|]+\|/, "").strip
+          # Clean up leftover whitespace and punctuation artifacts
+          title = title.squish
+          return title if title.present?
+        end
+
+        nil
+      end
+
+      # Extract sub-headings (not the title) from RST content.
+      # Skips the heading that matches the page title, keeps all others.
+      # Strips RST role markup from heading text.
+      def extract_rst_headings(content, page_title)
+        headings = []
+        lines = content.lines.map(&:rstrip)
+
+        lines.each_with_index do |line, i|
+          next_line = lines[i + 1]
+          next unless next_line&.match?(RST_UNDERLINE_CHARS)
+          next unless next_line.length >= line.length
+
+          heading = line.strip
+          next if heading.empty? || heading.start_with?("..") || heading.match?(RST_UNDERLINE_CHARS)
+
+          # Clean RST role markup: :doc:`ref` → ref, :mod:`name` → name
+          heading = clean_rst_heading(heading)
+          next if heading.blank?
+
+          # Skip the heading that matches the extracted page title
+          next if page_title.present? && heading == page_title
+
+          headings << heading
+        end
+
+        headings
+      end
+
+      # Strip RST inline roles and markup from heading text.
+      def clean_rst_heading(text)
+        text
+          .gsub(/:[a-z]+:`([^`]+)`/, '\1')  # :doc:`ref` → ref, :mod:`name` → name
+          .gsub(/`([^<`]+)\s*<[^>]+>`_{1,2}/, '\1')  # `text <url>`_ → text
+          .gsub(/\|[^|]+\|/, "")             # |substitution| → remove
+          .squish
       end
 
       # --- Content extraction ---
@@ -346,6 +439,7 @@ module DocsFetcher
         list_remote_tags(repo_url).each do |tag|
           version = extract_version(tag)
           next unless version
+          next if absurd_version?(version)
 
           parsed = Version.parse(version)
           next unless parsed
@@ -377,6 +471,29 @@ module DocsFetcher
       rescue StandardError => e
         Rails.logger.warn("Failed to list remote tags for #{repo_url}: #{e.message}")
         []
+      end
+
+      # Reject versions with absurdly high numeric components (test tags,
+      # build numbers, commit-hash dates, etc.).
+      # Examples rejected: "0.999999.0", "999.9.9", "54011", "2234",
+      #                    "20240203-110809-5046fc22", "2024.1.300751-latest"
+      # Examples allowed:  "3.14.2", "2026.3.1", "16.1.6", "0.135.1"
+      def absurd_version?(version)
+        segments = version.split(/[.\-]/)
+        numeric_segments = segments.filter_map { |s| s.to_i if s.match?(/\A\d+\z/) }
+        return false if numeric_segments.empty?
+
+        # Any segment >= 9999 is always absurd (e.g. 999999, 9999, 300751, 54011)
+        return true if numeric_segments.any? { |n| n >= 9999 }
+
+        # Leading segment > 999 is absurd unless it's a plausible year (2000–2099)
+        first = numeric_segments.first
+        return true if first > 999 && !(first >= 2000 && first <= 2099)
+
+        # Multiple 9s pattern: major version of exactly 999 (test placeholder)
+        return true if first == 999
+
+        false
       end
 
       def select_highest_tag(candidates)

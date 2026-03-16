@@ -11,6 +11,7 @@ import {
   Shield,
 } from "lucide-react"
 
+import { withAccountScope } from "@/lib/account-scope"
 import { userInitials } from "@/lib/user-initials"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -38,9 +39,17 @@ const navLinks = [
 ]
 
 export function SiteHeader() {
-  const { currentIdentity } = usePage<SharedProps>().props
-  const currentUrl = usePage().url
+  const page = usePage<SharedProps>()
+  const { currentIdentity } = page.props
+  const currentUrl = page.url
   const [open, setOpen] = useState(false)
+  const settingsPath = currentIdentity
+    ? withAccountScope(
+        currentUrl,
+        "/app/settings",
+        currentIdentity.defaultAccountId
+      )
+    : "/app/settings"
 
   const isActive = (href: string) => {
     if (href === "/") return currentUrl === "/"
@@ -124,9 +133,7 @@ export function SiteHeader() {
                     <LayoutDashboard />
                     Dashboard
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => router.visit("/app/settings")}
-                  >
+                  <DropdownMenuItem onClick={() => router.visit(settingsPath)}>
                     <Settings />
                     Settings
                   </DropdownMenuItem>
@@ -249,7 +256,7 @@ export function SiteHeader() {
                       Dashboard
                     </Link>
                     <Link
-                      href="/app/settings"
+                      href={settingsPath}
                       className="flex items-center gap-3 rounded-lg px-4 py-3 text-[15px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                       onClick={() => setOpen(false)}
                     >
