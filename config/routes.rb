@@ -78,7 +78,7 @@ Rails.application.routes.draw do
   resources :libraries, only: [ :index, :new, :create ], param: :slug do
     member do
       get "", action: :show
-      get "versions/:version/pages/:page_uid", to: "libraries/pages#show", as: :page_detail, version: /[^\/]+/
+      get "versions/:version/pages/*page_uid", to: "libraries/pages#show", as: :page_detail, version: /[^\/]+/, format: false
     end
   end
 
@@ -106,7 +106,7 @@ Rails.application.routes.draw do
         get "versions", to: "versions#index", on: :member
         get "versions/:version/manifest", to: "manifests#show", on: :member, version: /[^\/]+/
         get "versions/:version/page-index", to: "page_index#index", on: :member, version: /[^\/]+/
-        get "versions/:version/pages/:page_uid", to: "page_index#show", on: :member, version: /[^\/]+/
+        get "versions/:version/pages/*page_uid", to: "page_index#show", on: :member, version: /[^\/]+/, format: false
         get "versions/:version/bundles/:profile", to: "bundles#show", on: :member, version: /[^\/]+/
         post "versions/:version/query", to: "query_docs#create", on: :member, version: /[^\/]+/
       end
