@@ -621,7 +621,7 @@ get_doc({ library: "${slug}", version: "${sampleVersion}", doc_path: "${samplePa
 
                   {/* Pagination footer */}
                   {showPaginationFooter && (
-                    <div className="flex items-center justify-between border-t bg-muted/30 px-4 py-3">
+                    <div className="flex items-center justify-between bg-muted/30 px-4 py-3">
                       <span className="hidden text-xs text-muted-foreground tabular-nums sm:block">
                         {pagination.from}&ndash;{pagination.to}
                         {pagination.countKnown && pagination.total !== null
