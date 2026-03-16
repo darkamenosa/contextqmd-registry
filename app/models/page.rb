@@ -11,7 +11,13 @@ class Page < ApplicationRecord
 
   pg_search_scope :search_content,
     against: { title: "A", description: "B", path: "C" },
-    using: { tsearch: { prefix: true, dictionary: "english" } }
+    using: {
+      tsearch: {
+        prefix: true,
+        dictionary: "english",
+        tsvector_column: "search_tsvector"
+      }
+    }
 
   scope :ordered, -> { order(path: :asc) }
 end

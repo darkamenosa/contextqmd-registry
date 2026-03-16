@@ -3,6 +3,8 @@
 class LibrariesController < InertiaController
   include Pagy::Method
 
+  MIN_SEARCH_LENGTH = 3
+
   allow_unauthenticated_access
   disallow_account_scope
   before_action :authenticate_identity!, only: [ :new, :create ]
@@ -29,15 +31,21 @@ class LibrariesController < InertiaController
     versions = library.versions.ordered
 
     selected_version = library.best_version(requested: params[:version])
+    search_query = params[:search].to_s.strip
+    search_active = search_query.length >= MIN_SEARCH_LENGTH
 
     # Paginate pages for the selected version
     pages_scope = selected_version ? selected_version.pages : Page.none
-    pages_scope = if params[:search].present?
-      pages_scope.search_content(params[:search])
+    pages_scope = if search_active
+      pages_scope.search_content(search_query)
     else
       pages_scope.order(:path)
     end
-    pagy, pages = pagy(:offset, pages_scope, limit: 30)
+    pagy, pages = if search_active
+      pagy(:countless, pages_scope, limit: 30)
+    else
+      pagy(:offset, pages_scope, limit: 30)
+    end
 
     render inertia: "libraries/show", props: {
       library: library_props(library),
@@ -45,7 +53,9 @@ class LibrariesController < InertiaController
       pages: pages.map { |p| page_props(p) },
       selected_version: selected_version&.version,
       pagination: pagination_props(pagy),
-      search: params[:search] || ""
+      search: search_query,
+      search_active: search_active,
+      minimum_search_length: MIN_SEARCH_LENGTH
     }
   rescue ActiveRecord::RecordNotFound
     redirect_to libraries_path, alert: "Library not found"

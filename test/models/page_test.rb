@@ -59,4 +59,10 @@ class PageTest < ActiveSupport::TestCase
     page = pages(:installation)
     assert_equal versions(:nextjs_stable), page.version
   end
+
+  test "search_content uses the stored search_tsvector column" do
+    sql = Page.search_content("install").to_sql
+
+    assert_includes sql, "search_tsvector"
+  end
 end

@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from "react"
 import { Link, router } from "@inertiajs/react"
-import type { PaginationData } from "@/types"
 import {
   ArrowLeft,
   BookOpen,
@@ -76,8 +75,20 @@ interface Props {
   versions: VersionItem[]
   pages: PageItem[]
   selectedVersion: string | null
-  pagination: PaginationData
+  pagination: {
+    page: number
+    perPage: number
+    total: number | null
+    pages: number | null
+    from: number
+    to: number
+    hasPrevious: boolean
+    hasNext: boolean
+    countKnown: boolean
+  }
   search: string
+  searchActive: boolean
+  minimumSearchLength: number
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -185,6 +196,8 @@ export default function LibraryShow({
   selectedVersion,
   pagination,
   search: initialSearch,
+  searchActive,
+  minimumSearchLength,
 }: Props) {
   const [expandedPage, setExpandedPage] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState(initialSearch)
@@ -193,6 +206,12 @@ export default function LibraryShow({
   const selectedVersionData = versions.find(
     (v) => v.version === selectedVersion
   )
+  const searchTooShort = Boolean(initialSearch) && !searchActive
+  const showNumberedPagination = Boolean(
+    pagination.countKnown && pagination.pages && pagination.pages > 1
+  )
+  const showPaginationFooter =
+    showNumberedPagination || pagination.hasPrevious || pagination.hasNext
 
   function switchVersion(version: string) {
     router.get(
@@ -443,11 +462,27 @@ get_doc({ library: "${slug}", version: "${sampleVersion}", doc_path: "${samplePa
             {initialSearch && (
               <div className="mb-4">
                 <span className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                  {pagination.total} result
-                  {pagination.total !== 1 ? "s" : ""} for
-                  <span className="font-semibold text-foreground">
-                    &ldquo;{initialSearch}&rdquo;
-                  </span>
+                  {searchTooShort ? (
+                    <>
+                      Type at least {minimumSearchLength} characters to search.
+                    </>
+                  ) : pagination.countKnown && pagination.total !== null ? (
+                    <>
+                      {pagination.total} result
+                      {pagination.total !== 1 ? "s" : ""} for
+                      <span className="font-semibold text-foreground">
+                        &ldquo;{initialSearch}&rdquo;
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      Showing {pagination.from}&ndash;{pagination.to} for
+                      <span className="font-semibold text-foreground">
+                        &ldquo;{initialSearch}&rdquo;
+                      </span>
+                      {pagination.hasNext ? " with more matches available" : ""}
+                    </>
+                  )}
                   <button
                     type="button"
                     onClick={clearSearch}
@@ -465,14 +500,16 @@ get_doc({ library: "${slug}", version: "${sampleVersion}", doc_path: "${samplePa
                   <FileText className="size-5 text-muted-foreground" />
                 </div>
                 <p className="mt-4 text-sm font-medium">
-                  {initialSearch
+                  {searchActive
                     ? "No pages match your search"
                     : "No documentation indexed yet"}
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {initialSearch
-                    ? "Try a different search term."
-                    : "Check back soon or submit a crawl request."}
+                  {searchTooShort
+                    ? `Enter at least ${minimumSearchLength} characters to search this version.`
+                    : searchActive
+                      ? "Try a different search term."
+                      : "Check back soon or submit a crawl request."}
                 </p>
                 {!initialSearch && (
                   <Button
@@ -592,11 +629,13 @@ get_doc({ library: "${slug}", version: "${sampleVersion}", doc_path: "${samplePa
                   })}
 
                   {/* Pagination footer */}
-                  {pagination.pages > 1 && (
+                  {showPaginationFooter && (
                     <div className="flex items-center justify-between border-t bg-muted/30 px-4 py-3">
                       <span className="hidden text-xs text-muted-foreground tabular-nums sm:block">
-                        {pagination.from}&ndash;{pagination.to} of{" "}
-                        {pagination.total}
+                        {pagination.from}&ndash;{pagination.to}
+                        {pagination.countKnown && pagination.total !== null
+                          ? ` of ${pagination.total}`
+                          : ""}
                       </span>
 
                       <div className="flex flex-1 items-center justify-center gap-1 sm:flex-initial">
@@ -609,11 +648,13 @@ get_doc({ library: "${slug}", version: "${sampleVersion}", doc_path: "${samplePa
                           <ChevronLeft className="size-4" />
                         </button>
 
-                        <PageNumbers
-                          current={pagination.page}
-                          total={pagination.pages}
-                          onPage={goToPage}
-                        />
+                        {showNumberedPagination && pagination.pages && (
+                          <PageNumbers
+                            current={pagination.page}
+                            total={pagination.pages}
+                            onPage={goToPage}
+                          />
+                        )}
 
                         <button
                           type="button"
