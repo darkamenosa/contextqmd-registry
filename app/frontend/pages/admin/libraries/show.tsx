@@ -450,12 +450,14 @@ export default function AdminLibraryShow({
     })
   }
 
+  const crawlUrl = library.lastCrawlUrl || library.homepageUrl
+
   function handleRecrawl() {
-    if (!library.lastCrawlUrl) return
+    if (!crawlUrl) return
     setRecrawling(true)
     router.post(
       `/admin/libraries/${library.id}/recrawl`,
-      { url: library.lastCrawlUrl },
+      { url: crawlUrl },
       { onFinish: () => setRecrawling(false) }
     )
   }
@@ -504,7 +506,7 @@ export default function AdminLibraryShow({
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />
-              {library.lastCrawlUrl && (
+              {crawlUrl && (
                 <DropdownMenuItem onClick={handleRecrawl} disabled={recrawling}>
                   <RefreshCw className="mr-2 size-4" />
                   {recrawling ? "Queuing..." : "Re-crawl"}
@@ -558,7 +560,7 @@ export default function AdminLibraryShow({
               </Button>
             )}
             <div className="h-4 w-px bg-border" />
-            {library.lastCrawlUrl && (
+            {crawlUrl && (
               <Button
                 variant="outline"
                 size="sm"
