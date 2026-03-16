@@ -6,7 +6,7 @@ require "json"
 class LibrariesShowSearchTest < ActionDispatch::IntegrationTest
   fixtures :accounts, :libraries, :versions, :pages, :source_policies
 
-  test "short search query keeps normal pagination and exposes the minimum length" do
+  test "two-character search stays active and uses count-less pagination" do
     version = versions(:nextjs_stable)
     pages(:installation).update!(description: "Deploy your app")
     pages(:routing).update!(description: "Route incoming requests")
@@ -22,10 +22,11 @@ class LibrariesShowSearchTest < ActionDispatch::IntegrationTest
     get "/libraries/nextjs", params: { version: version.version, search: "de" }
 
     assert_response :success
-    assert_equal false, page_props.dig("props", "searchActive")
-    assert_equal 3, page_props.dig("props", "minimumSearchLength")
-    assert_equal true, page_props.dig("props", "pagination", "countKnown")
-    assert_equal 3, page_props.dig("props", "pages").size
+    assert_equal true, page_props.dig("props", "searchActive")
+    assert_equal false, page_props.dig("props", "pagination", "countKnown")
+    assert_nil page_props.dig("props", "pagination", "total")
+    assert_nil page_props.dig("props", "pagination", "pages")
+    assert_equal 1, page_props.dig("props", "pages").size
   end
 
   test "active search uses count-less pagination" do

@@ -88,7 +88,6 @@ interface Props {
   }
   search: string
   searchActive: boolean
-  minimumSearchLength: number
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -197,7 +196,6 @@ export default function LibraryShow({
   pagination,
   search: initialSearch,
   searchActive,
-  minimumSearchLength,
 }: Props) {
   const [expandedPage, setExpandedPage] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState(initialSearch)
@@ -206,7 +204,6 @@ export default function LibraryShow({
   const selectedVersionData = versions.find(
     (v) => v.version === selectedVersion
   )
-  const searchTooShort = Boolean(initialSearch) && !searchActive
   const showNumberedPagination = Boolean(
     pagination.countKnown && pagination.pages && pagination.pages > 1
   )
@@ -462,11 +459,7 @@ get_doc({ library: "${slug}", version: "${sampleVersion}", doc_path: "${samplePa
             {initialSearch && (
               <div className="mb-4">
                 <span className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                  {searchTooShort ? (
-                    <>
-                      Type at least {minimumSearchLength} characters to search.
-                    </>
-                  ) : pagination.countKnown && pagination.total !== null ? (
+                  {pagination.countKnown && pagination.total !== null ? (
                     <>
                       {pagination.total} result
                       {pagination.total !== 1 ? "s" : ""} for
@@ -505,11 +498,9 @@ get_doc({ library: "${slug}", version: "${sampleVersion}", doc_path: "${samplePa
                     : "No documentation indexed yet"}
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {searchTooShort
-                    ? `Enter at least ${minimumSearchLength} characters to search this version.`
-                    : searchActive
-                      ? "Try a different search term."
-                      : "Check back soon or submit a crawl request."}
+                  {searchActive
+                    ? "Try a different search term."
+                    : "Check back soon or submit a crawl request."}
                 </p>
                 {!initialSearch && (
                   <Button

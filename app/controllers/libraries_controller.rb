@@ -3,19 +3,16 @@
 class LibrariesController < InertiaController
   include Pagy::Method
 
-  MIN_SEARCH_LENGTH = 3
-
   allow_unauthenticated_access
   disallow_account_scope
   before_action :authenticate_identity!, only: [ :new, :create ]
 
   def index
     libraries = if params[:query].present?
-      search_libraries(params[:query])
+      search_libraries(params[:query]).includes(:source_policy, :versions)
     else
-      Library.all
+      Library.all.includes(:source_policy, :versions).order(:slug)
     end
-    libraries = libraries.includes(:source_policy, :versions).order(:slug)
 
     pagy, paginated = pagy(:offset, libraries, limit: 10)
 
@@ -32,7 +29,7 @@ class LibrariesController < InertiaController
 
     selected_version = library.best_version(requested: params[:version])
     search_query = params[:search].to_s.strip
-    search_active = search_query.length >= MIN_SEARCH_LENGTH
+    search_active = search_query.present?
 
     # Paginate pages for the selected version
     pages_scope = selected_version ? selected_version.pages : Page.none
@@ -54,8 +51,7 @@ class LibrariesController < InertiaController
       selected_version: selected_version&.version,
       pagination: pagination_props(pagy),
       search: search_query,
-      search_active: search_active,
-      minimum_search_length: MIN_SEARCH_LENGTH
+      search_active: search_active
     }
   rescue ActiveRecord::RecordNotFound
     redirect_to libraries_path, alert: "Library not found"
@@ -86,9 +82,6 @@ class LibrariesController < InertiaController
   private
 
     def search_libraries(query)
-      by_alias = Library.where("aliases @> ?", [ query ].to_json)
-      return by_alias if by_alias.exists?
-
       Library.search_by_query(query)
     end
 

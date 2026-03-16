@@ -4,6 +4,27 @@ class Library < ApplicationRecord
   include PgSearch::Model
 
   PATH_SAFE_SLUG = /\A[a-z0-9\-]+\z/
+  SEARCH_VECTOR_SQL = <<~SQL.squish.freeze
+    (
+      setweight(to_tsvector('simple', coalesce(libraries.display_name, '')), 'A') ||
+      setweight(to_tsvector('simple', coalesce(libraries.slug, '')), 'A') ||
+      setweight(to_tsvector('simple', coalesce(libraries.name, '')), 'A') ||
+      setweight(to_tsvector('simple', coalesce(libraries.namespace, '')), 'B') ||
+      setweight(
+        to_tsvector(
+          'simple',
+          coalesce(
+            (
+              SELECT string_agg(alias_term, ' ')
+              FROM jsonb_array_elements_text(coalesce(libraries.aliases, '[]'::jsonb)) AS alias_term
+            ),
+            ''
+          )
+        ),
+        'A'
+      )
+    )
+  SQL
 
   belongs_to :account
   has_many :versions, dependent: :destroy
@@ -21,10 +42,6 @@ class Library < ApplicationRecord
     format: { with: PATH_SAFE_SLUG, message: "must be a path-safe slug" }
   validates :display_name, presence: true
   validates :namespace, uniqueness: { scope: :name }
-
-  pg_search_scope :search_by_query,
-    against: %i[slug display_name],
-    using: { tsearch: { prefix: true } }
 
   def to_param
     slug
@@ -70,8 +87,39 @@ class Library < ApplicationRecord
 
   private
 
+    def self.search_by_query(query)
+      normalized = query.to_s.strip.downcase
+      return none if normalized.blank?
+
+      quoted_query = connection.quote(search_tsquery(normalized))
+      quoted_alias_json = connection.quote([ normalized ].to_json)
+      vector_sql = SEARCH_VECTOR_SQL
+      alias_match_sql = <<~SQL.squish
+        libraries.aliases @> #{quoted_alias_json}::jsonb
+      SQL
+      rank_sql = <<~SQL.squish
+        (
+          ts_rank(#{vector_sql}, to_tsquery('simple', #{quoted_query}), 0) +
+          CASE WHEN lower(libraries.slug) = #{connection.quote(normalized)} THEN 4.0 ELSE 0.0 END +
+          CASE WHEN lower(libraries.name) = #{connection.quote(normalized)} THEN 4.0 ELSE 0.0 END +
+          CASE WHEN #{alias_match_sql} THEN 3.0 ELSE 0.0 END
+        )
+      SQL
+
+      where("#{vector_sql} @@ to_tsquery('simple', #{quoted_query}) OR #{alias_match_sql}")
+        .select(Arel.sql("libraries.*, #{rank_sql} AS search_rank"))
+        .order(Arel.sql("#{rank_sql} DESC, libraries.slug ASC"))
+    end
+
     def populate_slug
       candidate = slug.presence || name
       self.slug = candidate.to_s.tr("_", "-").parameterize(separator: "-") if candidate.present?
+    end
+
+    def self.search_tsquery(query)
+      terms = query.scan(/[[:alnum:]]+/)
+      return query if terms.empty?
+
+      terms.map { |term| "#{term}:*" }.join(" & ")
     end
 end

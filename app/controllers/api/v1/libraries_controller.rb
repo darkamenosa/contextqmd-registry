@@ -30,9 +30,6 @@ module Api
 
         def search_libraries(query)
           normalized = query.to_s.strip
-          by_alias = Library.where("aliases @> ?", [ normalized ].to_json).order(:slug)
-          return by_alias if by_alias.exists?
-
           Library.search_by_query(normalized)
         end
 
