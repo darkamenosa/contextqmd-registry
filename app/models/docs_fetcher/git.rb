@@ -4,6 +4,7 @@ require "find"
 require "json"
 require "nokogiri"
 require "open3"
+require "set"
 require "tmpdir"
 
 module DocsFetcher
@@ -228,13 +229,14 @@ module DocsFetcher
       # --- Page building ---
 
       def build_pages(files, tmpdir, source_url, branch_or_tag)
+        used_page_uids = Set.new
+
         files.filter_map do |full_path|
           rel = full_path.sub("#{tmpdir}/", "")
-          raw_content = File.read(full_path, encoding: "UTF-8")
-          raw_content.delete_prefix!("\xEF\xBB\xBF") # Strip UTF-8 BOM
-          next if raw_content.strip.empty?
-
           ext = File.extname(full_path).downcase
+          raw_content = read_text_file(full_path)
+          next if raw_content.blank?
+
           content, extra_title = convert_content(raw_content, ext)
           next if content.nil? || content.strip.empty?
 
@@ -250,10 +252,9 @@ module DocsFetcher
           else
             content.scan(/^\#{2,4}\s+(.+)$/).flatten.map(&:strip)
           end
-          slug = rel.delete_suffix(File.extname(rel)).tr("/", "-").downcase
 
           {
-            page_uid: slug,
+            page_uid: unique_page_uid(rel, ext, used_page_uids),
             path: rel,
             title: title,
             url: build_file_url(source_url, rel, branch_or_tag),
@@ -261,6 +262,32 @@ module DocsFetcher
             headings: headings
           }
         end
+      end
+
+      def read_text_file(full_path)
+        content = File.binread(full_path).force_encoding(Encoding::UTF_8).scrub("")
+        content.delete_prefix!("\xEF\xBB\xBF")
+        content
+      end
+
+      def unique_page_uid(rel, ext, used_page_uids)
+        base = rel.delete_suffix(ext).tr("\\", "/")
+        candidate = base
+
+        if used_page_uids.include?(candidate)
+          ext_suffix = ext.delete_prefix(".").parameterize(separator: "-")
+          ext_candidate = "#{base}-#{ext_suffix}"
+          candidate = ext_candidate unless ext_suffix.blank? || used_page_uids.include?(ext_candidate)
+        end
+
+        suffix = 2
+        while used_page_uids.include?(candidate)
+          candidate = "#{base}-#{suffix}"
+          suffix += 1
+        end
+
+        used_page_uids << candidate
+        candidate
       end
 
       # --- Content conversion ---

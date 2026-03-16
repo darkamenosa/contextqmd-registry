@@ -152,6 +152,16 @@ class DocsFetcher::LibraryIdentityTest < ActiveSupport::TestCase
     assert_equal "drizzle-orm", identity[:slug]
   end
 
+  test "git ansible-documentation resolves to ansible" do
+    identity = DocsFetcher::LibraryIdentity.from_git(
+      owner: "ansible", repo_name: "ansible-documentation",
+      source_url: "https://github.com/ansible/ansible-documentation"
+    )
+
+    assert_equal "ansible", identity[:slug]
+    assert_equal "Ansible", identity[:display_name]
+  end
+
   # --- Generic language names ---
 
   test "git generic language repo names resolve to owner slug" do

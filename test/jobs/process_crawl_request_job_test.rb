@@ -335,6 +335,164 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     refute_includes second_library.aliases, "laravel"
   end
 
+  test "reuses canonical library for git docs repos when product slug differs from repo name" do
+    existing = Library.create!(
+      account: @account,
+      namespace: "act",
+      name: "act",
+      slug: "act",
+      display_name: "Act",
+      homepage_url: "https://github.com/nektos/act-docs",
+      aliases: [ "act" ]
+    )
+
+    crawl_request = CrawlRequest.create!(
+      identity: @identity,
+      url: "https://github.com/nektos/act-docs",
+      source_type: "github",
+      status: "pending"
+    )
+
+    result = CrawlResult.new(
+      slug: "act",
+      namespace: "nektos",
+      name: "act-docs",
+      display_name: "Act",
+      homepage_url: "https://github.com/nektos/act-docs",
+      aliases: [ "act", "act-docs", "nektos/act-docs" ],
+      version: "latest",
+      pages: [
+        { page_uid: "intro", path: "intro.md", title: "Intro",
+          url: "https://github.com/nektos/act-docs/blob/main/intro.md", content: "Act docs", headings: [] }
+      ]
+    )
+
+    with_stub_fetcher(result) do
+      assert_no_difference -> { Library.count } do
+        ProcessCrawlRequestJob.perform_now(crawl_request)
+      end
+    end
+
+    assert_equal existing.id, crawl_request.reload.library_id
+    assert crawl_request.library.library_sources.exists?(url: "https://github.com/nektos/act-docs")
+  end
+
+  test "canonical metadata overrides correct existing library metadata on recrawl" do
+    existing = Library.create!(
+      account: @account,
+      namespace: "nektos",
+      name: "act-docs",
+      slug: "nektos-act-docs",
+      display_name: "Act Docs",
+      homepage_url: "https://github.com/nektos/act-docs",
+      aliases: [ "act-docs", "nektos/act-docs" ]
+    )
+    existing.library_sources.create!(
+      url: "https://github.com/nektos/act-docs",
+      source_type: "github",
+      active: true,
+      primary: true
+    )
+
+    crawl_request = CrawlRequest.create!(
+      identity: @identity,
+      url: "https://github.com/nektos/act-docs",
+      source_type: "github",
+      status: "pending",
+      metadata: {
+        "canonical_slug" => "act",
+        "canonical_display_name" => "Act"
+      }
+    )
+
+    result = CrawlResult.new(
+      slug: "nektos-act-docs",
+      namespace: "nektos",
+      name: "act-docs",
+      display_name: "Act Docs",
+      homepage_url: "https://github.com/nektos/act-docs",
+      aliases: [ "act-docs", "nektos/act-docs" ],
+      version: "latest",
+      pages: [
+        { page_uid: "intro", path: "intro.md", title: "Intro",
+          url: "https://github.com/nektos/act-docs/blob/main/intro.md", content: "Act docs", headings: [] }
+      ]
+    )
+
+    with_stub_fetcher(result) do
+      assert_no_difference -> { Library.count } do
+        ProcessCrawlRequestJob.perform_now(crawl_request)
+      end
+    end
+
+    library = crawl_request.reload.library
+    assert_equal existing.id, library.id
+    assert_equal "act", library.slug
+    assert_equal "Act", library.display_name
+    assert_includes library.aliases, "act"
+  end
+
+  test "canonical metadata reassigns an existing source onto the canonical library" do
+    canonical = Library.create!(
+      account: @account,
+      namespace: "act",
+      name: "act",
+      slug: "act",
+      display_name: "Act",
+      homepage_url: "https://github.com/nektos/act-docs",
+      aliases: [ "act" ]
+    )
+    wrong = Library.create!(
+      account: @account,
+      namespace: "nektos",
+      name: "act-docs",
+      slug: "nektos-act-docs",
+      display_name: "Act Docs",
+      homepage_url: "https://github.com/nektos/act-docs",
+      aliases: [ "act-docs", "nektos/act-docs" ]
+    )
+    source = wrong.library_sources.create!(
+      url: "https://github.com/nektos/act-docs",
+      source_type: "github",
+      active: true,
+      primary: true
+    )
+
+    crawl_request = CrawlRequest.create!(
+      identity: @identity,
+      url: "https://github.com/nektos/act-docs",
+      source_type: "github",
+      status: "pending",
+      metadata: {
+        "canonical_slug" => "act",
+        "canonical_display_name" => "Act"
+      }
+    )
+
+    result = CrawlResult.new(
+      slug: "nektos-act-docs",
+      namespace: "nektos",
+      name: "act-docs",
+      display_name: "Act Docs",
+      homepage_url: "https://github.com/nektos/act-docs",
+      aliases: [ "act-docs", "nektos/act-docs" ],
+      version: "latest",
+      pages: [
+        { page_uid: "intro", path: "intro.md", title: "Intro",
+          url: "https://github.com/nektos/act-docs/blob/main/intro.md", content: "Act docs", headings: [] }
+      ]
+    )
+
+    with_stub_fetcher(result) do
+      assert_no_difference -> { Library.count } do
+        ProcessCrawlRequestJob.perform_now(crawl_request)
+      end
+    end
+
+    assert_equal canonical.id, crawl_request.reload.library_id
+    assert_equal canonical.id, source.reload.library_id
+  end
+
   test "does not merge git libraries that share an owner" do
     rust_result = CrawlResult.new(
       slug: "rust",

@@ -19,8 +19,8 @@ module DocsFetcher
       \z
     /ix
 
-    # Repo names ending with "-docs" → strip to get product slug.
-    DOCS_REPO_SUFFIX_STRIP = /[-.]docs?\z/i
+    # Repo names ending with "-docs" or "-documentation" → strip to get product slug.
+    DOCS_REPO_SUFFIX_STRIP = /[-.](?:docs?|documentation)\z/i
 
     # Programming language names that are too generic ONLY when the owner is a
     # "bindings/SDK" org — NOT when the owner IS the language project itself.

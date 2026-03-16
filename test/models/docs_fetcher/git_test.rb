@@ -197,6 +197,51 @@ class DocsFetcher::GitTest < ActiveSupport::TestCase
     end
   end
 
+  test "build_pages preserves nested path structure in page_uids to avoid collisions" do
+    Dir.mktmpdir("test-git-") do |tmpdir|
+      first = File.join(tmpdir, "docs", "foo", "bar.md")
+      second = File.join(tmpdir, "docs", "foo-bar.md")
+
+      FileUtils.mkdir_p(File.dirname(first))
+      File.write(first, "# Nested")
+      File.write(second, "# Flat")
+
+      pages = @generic.send(
+        :build_pages,
+        [ first, second ],
+        tmpdir,
+        "https://github.com/example/repo",
+        "main"
+      )
+
+      assert_equal 2, pages.size
+      assert_equal 2, pages.map { |page| page[:page_uid] }.uniq.size
+      assert_includes pages.map { |page| page[:page_uid] }, "docs/foo/bar"
+      assert_includes pages.map { |page| page[:page_uid] }, "docs/foo-bar"
+    end
+  end
+
+  test "build_pages scrubs invalid utf-8 bytes instead of raising" do
+    Dir.mktmpdir("test-git-") do |tmpdir|
+      path = File.join(tmpdir, "README.md")
+      File.binwrite(path, "# Hello\xFF\nWorld")
+
+      pages = nil
+      assert_nothing_raised do
+        pages = @generic.send(
+          :build_pages,
+          [ path ],
+          tmpdir,
+          "https://github.com/example/repo",
+          "main"
+        )
+      end
+
+      assert_equal 1, pages.size
+      assert_equal "# Hello\nWorld", pages.first[:content]
+    end
+  end
+
   # --- Version extraction ---
 
   test "extract_version parses v-prefixed branch" do

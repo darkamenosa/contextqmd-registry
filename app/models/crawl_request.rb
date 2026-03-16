@@ -108,6 +108,7 @@ class CrawlRequest < ApplicationRecord
     # --- Import pipeline (invocation order) ---
 
     def import_result(result)
+      result = apply_canonical_metadata_overrides(result)
       existing_source = find_existing_library_source
       library = find_or_create_library(result, existing_source: existing_source)
       source = find_or_create_library_source(library, existing_source: existing_source)
@@ -129,8 +130,15 @@ class CrawlRequest < ApplicationRecord
       slug = library_slug(result.slug, prefix: "lib")
       namespace_slug = library_slug(result.namespace, prefix: "ns")
       name_slug = library_slug(result.name, prefix: "lib")
+      existing_source_library = preferred_existing_source_library(
+        existing_source,
+        result,
+        slug: slug,
+        namespace_slug: namespace_slug,
+        name_slug: name_slug
+      )
 
-      library = self.library || existing_source&.library || find_matching_library_for_import(
+      library = self.library || existing_source_library || find_matching_library_for_import(
         result,
         slug: slug,
         namespace_slug: namespace_slug,
@@ -150,7 +158,14 @@ class CrawlRequest < ApplicationRecord
     end
 
     def find_matching_library_for_import(result, slug:, namespace_slug:, name_slug:)
-      return Library.find_by(namespace: namespace_slug, name: name_slug) if git_source_import?
+      if git_source_import?
+        if prefer_canonical_git_match?(slug: slug, name_slug: name_slug)
+          existing = find_existing_library(canonical_lookup_values(result, slug: slug, namespace_slug: namespace_slug, name_slug: name_slug))
+          return existing if existing
+        end
+
+        return Library.find_by(namespace: namespace_slug, name: name_slug)
+      end
 
       find_existing_library([
         slug,
@@ -161,6 +176,13 @@ class CrawlRequest < ApplicationRecord
         name_slug,
         *(result.aliases || [])
       ].reject { |v| generic_alias?(v) })
+    end
+
+    def preferred_existing_source_library(existing_source, result, slug:, namespace_slug:, name_slug:)
+      return existing_source&.library unless existing_source.present?
+      return existing_source.library unless prefer_canonical_git_match?(slug: slug, name_slug: name_slug)
+
+      find_existing_library(canonical_lookup_values(result, slug: slug, namespace_slug: namespace_slug, name_slug: name_slug)) || existing_source.library
     end
 
     def create_library_record(result, slug:, namespace_slug:, name_slug:)
@@ -195,6 +217,7 @@ class CrawlRequest < ApplicationRecord
     def find_or_create_library_source(library, existing_source: nil)
       normalized_url = LibrarySource.normalize_url(url, source_type: source_type)
       source = library_source || existing_source || library.library_sources.find_or_initialize_by(url: normalized_url)
+      source.library = library
       source.assign_attributes(
         url: normalized_url,
         source_type: source_type,
@@ -217,7 +240,7 @@ class CrawlRequest < ApplicationRecord
       attrs = {
         aliases: merged_aliases
       }
-      attrs[:slug] = slug if library.slug.blank?
+      attrs[:slug] = slug if should_update_library_slug?(library, slug)
       attrs[:source_type] = source_type if library.source_type.blank?
 
       unless library.metadata_locked?
@@ -300,6 +323,24 @@ class CrawlRequest < ApplicationRecord
       comparison && comparison.positive?
     end
 
+    def apply_canonical_metadata_overrides(result)
+      canonical_slug = canonical_slug_override
+      canonical_display_name = canonical_display_name_override
+      return result if canonical_slug.blank? && canonical_display_name.blank?
+
+      CrawlResult.new(
+        slug: canonical_slug.presence || result.slug,
+        namespace: result.namespace,
+        name: result.name,
+        display_name: canonical_display_name.presence || result.display_name,
+        homepage_url: result.homepage_url,
+        aliases: normalized_aliases(Array(result.aliases) + [ canonical_slug ]),
+        version: result.version,
+        pages: result.pages,
+        complete: result.complete
+      )
+    end
+
     def default_version_priority(channel)
       case channel
       when "stable"
@@ -324,6 +365,32 @@ class CrawlRequest < ApplicationRecord
       (raw + compact).uniq
     end
 
+    def canonical_lookup_values(result, slug:, namespace_slug:, name_slug:)
+      [
+        canonical_slug_override,
+        slug,
+        result.slug,
+        result.namespace,
+        namespace_slug,
+        result.name,
+        name_slug,
+        *(result.aliases || [])
+      ].reject { |value| generic_alias?(value) }
+    end
+
+    def prefer_canonical_git_match?(slug:, name_slug:)
+      canonical_slug_override.present? || slug != name_slug
+    end
+
+    def should_update_library_slug?(library, slug)
+      return false if slug.blank? || library.slug == slug
+      return true if library.slug.blank?
+      return false unless canonical_slug_override.present?
+      return false if library.metadata_locked?
+
+      !Library.where.not(id: library.id).exists?(slug: slug)
+    end
+
     def generic_alias?(value)
       DocsFetcher::LibraryIdentity::GENERIC_SOURCE_NAMES.include?(value.to_s.downcase.strip)
     end
@@ -337,6 +404,19 @@ class CrawlRequest < ApplicationRecord
       return false unless error.is_a?(ActiveRecord::RecordInvalid)
 
       error.record&.errors&.attribute_names&.include?(:slug)
+    end
+
+    def canonical_slug_override
+      metadata_string("canonical_slug")
+    end
+
+    def canonical_display_name_override
+      metadata_string("canonical_display_name")
+    end
+
+    def metadata_string(key)
+      value = metadata&.[](key) || metadata&.[](key.to_sym)
+      value.to_s.strip.presence
     end
 
     def sync_pages(version, pages)

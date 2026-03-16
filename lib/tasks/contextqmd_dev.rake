@@ -27,10 +27,13 @@ module ContextqmdDevTasks
 
   def submit_catalog!(out: $stdout)
     identity = submitter_identity!
-    urls = crawl_urls
+    entries = crawl_entries
 
-    urls.each do |url|
-      crawl_request = identity.crawl_requests.create!(url: url)
+    entries.each do |entry|
+      crawl_request = identity.crawl_requests.create!(
+        url: entry.fetch(:url),
+        metadata: entry.fetch(:metadata, {})
+      )
       out.puts "Queued crawl ##{crawl_request.id}: #{crawl_request.url}"
     end
   end
@@ -44,6 +47,30 @@ module ContextqmdDevTasks
     raw = ENV["URLS"].to_s
     urls = raw.split(",").map(&:strip).reject(&:blank?)
     urls.presence || DEFAULT_CRAWL_URLS
+  end
+
+  def crawl_entries
+    catalog_tsv = ENV["CATALOG_TSV"].to_s.strip
+    return crawl_entries_from_catalog_tsv(catalog_tsv) if catalog_tsv.present?
+
+    crawl_urls.map { |url| { url: url, metadata: {} } }
+  end
+
+  def crawl_entries_from_catalog_tsv(path)
+    File.readlines(path, chomp: true).filter_map do |line|
+      next if line.blank?
+
+      slug, display_name, url = line.split("\t", 3)
+      raise ArgumentError, "Invalid catalog row: #{line.inspect}" if url.blank?
+
+      {
+        url: url,
+        metadata: {
+          "canonical_slug" => slug.to_s.strip,
+          "canonical_display_name" => display_name.to_s.strip
+        }.reject { |_key, value| value.blank? }
+      }
+    end
   end
 
   def submitter_identity!
