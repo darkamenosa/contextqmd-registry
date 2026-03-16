@@ -21,7 +21,11 @@ module DocsFetcher
       test tests spec specs __tests__ __mocks__ fixtures testdata
       archive archived deprecated legacy obsolete outdated superseded old previous
       examples example demo demos sample samples
-      i18n l10n locales translations zh-cn zh-tw zh-hk zh-mo zh-sg
+      i18n l10n locales translations
+      ar bg bn cs da de el es et fa fi fr he hi hr hu id it ja ka kk km
+      ko lt lv mk mn ms my nl no pl pt ro ru sk sl sq sr sv sw ta te th
+      tl tr uk ur vi zh
+      pt-br zh-cn zh-tw zh-hk zh-mo zh-sg ja-jp ko-kr
     ].freeze
 
     # Default basenames to exclude (matched against filename only).
@@ -173,8 +177,9 @@ module DocsFetcher
 
             # Check if directory matches an include prefix (overrides excludes)
             unless include_prefixes.any? { |ip| rel_lower.start_with?(ip) || ip.start_with?(rel_lower) }
-              # Check if path starts with an exclude prefix (root-relative only)
-              if exclude_prefixes.any? { |ep| rel_lower == ep || rel_lower.start_with?("#{ep}/") }
+              # Check directory basename OR root-relative prefix against excludes
+              if exclude_prefixes.include?(dirname) ||
+                 exclude_prefixes.any? { |ep| rel_lower == ep || rel_lower.start_with?("#{ep}/") }
                 Find.prune
                 next
               end
