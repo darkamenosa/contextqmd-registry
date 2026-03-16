@@ -31,7 +31,6 @@ module DocsFetcher
         display_name: humanize_slug(product_slug),
         aliases: alias_set(
           product_slug,
-          owner_slug,
           repo_slug,
           "#{owner_slug}/#{repo_slug}"
         )

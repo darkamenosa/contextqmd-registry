@@ -129,7 +129,29 @@ class CrawlRequest < ApplicationRecord
       namespace_slug = library_slug(result.namespace, prefix: "ns")
       name_slug = library_slug(result.name, prefix: "lib")
 
-      library = self.library || existing_source&.library || find_existing_library([
+      library = self.library || existing_source&.library || find_matching_library_for_import(
+        result,
+        slug: slug,
+        namespace_slug: namespace_slug,
+        name_slug: name_slug
+      )
+
+      library ||= create_library_record(
+        result,
+        slug: slug,
+        namespace_slug: namespace_slug,
+        name_slug: name_slug
+      )
+
+      sync_library_metadata(library, result, slug: slug, namespace_slug: namespace_slug, name_slug: name_slug)
+
+      library
+    end
+
+    def find_matching_library_for_import(result, slug:, namespace_slug:, name_slug:)
+      return Library.find_by(namespace: namespace_slug, name: name_slug) if git_source_import?
+
+      find_existing_library([
         slug,
         result.slug,
         result.namespace,
@@ -138,21 +160,35 @@ class CrawlRequest < ApplicationRecord
         name_slug,
         *(result.aliases || [])
       ].reject { |v| generic_alias?(v) })
+    end
 
-      library ||= find_or_create_record(
-        Library,
-        { namespace: namespace_slug, name: name_slug },
+    def create_library_record(result, slug:, namespace_slug:, name_slug:)
+      unique_attrs = { namespace: namespace_slug, name: name_slug }
+      create_attrs = {
         account: ensure_system_account,
-        slug: slug,
         display_name: result.display_name,
         homepage_url: result.homepage_url,
         aliases: (result.aliases || []).reject { |v| generic_alias?(v) },
         source_type: source_type
-      )
+      }
 
-      sync_library_metadata(library, result, slug: slug, namespace_slug: namespace_slug, name_slug: name_slug)
+      loop do
+        library = Library.find_by(unique_attrs)
+        return library if library
 
-      library
+        library = Library.create!(
+          unique_attrs.merge(
+            create_attrs.merge(
+              slug: next_available_library_slug(slug, namespace_slug: namespace_slug, name_slug: name_slug)
+            )
+          )
+        )
+        return library
+      rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid => e
+        library = Library.find_by(unique_attrs)
+        return library if library
+        raise unless slug_conflict?(e)
+      end
     end
 
     def find_or_create_library_source(library, existing_source: nil)
@@ -214,6 +250,26 @@ class CrawlRequest < ApplicationRecord
       LibrarySource.find_matching(url: url, source_type: source_type)
     end
 
+    def next_available_library_slug(base_slug, namespace_slug:, name_slug:)
+      base = library_slug(base_slug, prefix: "lib")
+      namespace_name = [ namespace_slug, name_slug ].uniq.join("-")
+      candidates = [ base ]
+      candidates << namespace_name unless namespace_name == base
+      candidates << "#{namespace_slug}-#{base}" unless namespace_slug == base
+
+      candidates.each do |candidate|
+        return candidate unless Library.exists?(slug: candidate)
+      end
+
+      suffix = 2
+      loop do
+        candidate = "#{namespace_name}-#{suffix}"
+        return candidate unless Library.exists?(slug: candidate)
+
+        suffix += 1
+      end
+    end
+
     def find_or_create_version(library, result)
       version_tag = result.version || "latest"
       version = find_or_create_record(
@@ -269,6 +325,17 @@ class CrawlRequest < ApplicationRecord
 
     def generic_alias?(value)
       DocsFetcher::LibraryIdentity::GENERIC_SOURCE_NAMES.include?(value.to_s.downcase.strip)
+    end
+
+    def git_source_import?
+      source_type.in?(%w[github gitlab bitbucket git])
+    end
+
+    def slug_conflict?(error)
+      return true if error.is_a?(ActiveRecord::RecordNotUnique)
+      return false unless error.is_a?(ActiveRecord::RecordInvalid)
+
+      error.record&.errors&.attribute_names&.include?(:slug)
     end
 
     def sync_pages(version, pages, prune_stale: true)

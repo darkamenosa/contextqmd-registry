@@ -18,6 +18,19 @@ class DocsFetcher::LibraryIdentityTest < ActiveSupport::TestCase
     refute_includes identity[:aliases], "github.com"
   end
 
+  test "git identities do not include owner-only aliases for non-generic repos" do
+    identity = DocsFetcher::LibraryIdentity.from_git(
+      owner: "rust-lang",
+      repo_name: "cargo",
+      source_url: "https://github.com/rust-lang/cargo"
+    )
+
+    assert_equal "cargo", identity[:slug]
+    assert_includes identity[:aliases], "cargo"
+    assert_includes identity[:aliases], "rust-lang/cargo"
+    refute_includes identity[:aliases], "rust-lang"
+  end
+
   test "llms identities use host-derived product slug and clean display title" do
     identity = DocsFetcher::LibraryIdentity.from_llms(
       uri: URI.parse("https://react.dev/llms-full.txt"),

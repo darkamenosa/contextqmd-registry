@@ -335,6 +335,116 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     refute_includes second_library.aliases, "laravel"
   end
 
+  test "does not merge git libraries that share an owner" do
+    rust_result = CrawlResult.new(
+      slug: "rust",
+      namespace: "rust-lang",
+      name: "rust",
+      display_name: "Rust",
+      homepage_url: "https://github.com/rust-lang/rust",
+      aliases: [ "rust", "rust-lang/rust" ],
+      version: "1.0.0",
+      pages: [
+        { page_uid: "intro", path: "intro.md", title: "Intro",
+          url: "https://github.com/rust-lang/rust/blob/main/intro.md", content: "Rust", headings: [] }
+      ]
+    )
+
+    with_stub_fetcher(rust_result) do
+      ProcessCrawlRequestJob.perform_now(@crawl_request)
+    end
+
+    first_library = @crawl_request.reload.library
+
+    second_request = CrawlRequest.create!(
+      identity: @identity,
+      url: "https://github.com/rust-lang/cargo",
+      source_type: "github",
+      status: "pending"
+    )
+    cargo_result = CrawlResult.new(
+      slug: "cargo",
+      namespace: "rust-lang",
+      name: "cargo",
+      display_name: "Cargo",
+      homepage_url: "https://github.com/rust-lang/cargo",
+      aliases: [ "cargo", "rust-lang/cargo" ],
+      version: "1.0.0",
+      pages: [
+        { page_uid: "intro", path: "intro.md", title: "Intro",
+          url: "https://github.com/rust-lang/cargo/blob/main/intro.md", content: "Cargo", headings: [] }
+      ]
+    )
+
+    with_stub_fetcher(cargo_result) do
+      assert_difference -> { Library.count }, 1 do
+        ProcessCrawlRequestJob.perform_now(second_request)
+      end
+    end
+
+    first_library.reload
+    second_library = second_request.reload.library
+
+    refute_equal first_library.id, second_library.id
+    assert_equal "rust", first_library.slug
+    assert_equal "cargo", second_library.slug
+  end
+
+  test "creates separate libraries for git repos with the same repo name under different owners" do
+    first_result = CrawlResult.new(
+      slug: "log",
+      namespace: "charmbracelet",
+      name: "log",
+      display_name: "Charm Log",
+      homepage_url: "https://github.com/charmbracelet/log",
+      aliases: [ "log", "charmbracelet/log" ],
+      version: "1.0.0",
+      pages: [
+        { page_uid: "intro", path: "intro.md", title: "Intro",
+          url: "https://github.com/charmbracelet/log/blob/main/intro.md", content: "Charm", headings: [] }
+      ]
+    )
+
+    with_stub_fetcher(first_result) do
+      ProcessCrawlRequestJob.perform_now(@crawl_request)
+    end
+
+    second_request = CrawlRequest.create!(
+      identity: @identity,
+      url: "https://github.com/rust-lang/log",
+      source_type: "github",
+      status: "pending"
+    )
+    second_result = CrawlResult.new(
+      slug: "log",
+      namespace: "rust-lang",
+      name: "log",
+      display_name: "Rust Log",
+      homepage_url: "https://github.com/rust-lang/log",
+      aliases: [ "log", "rust-lang/log" ],
+      version: "0.4.29",
+      pages: [
+        { page_uid: "intro", path: "intro.md", title: "Intro",
+          url: "https://github.com/rust-lang/log/blob/master/intro.md", content: "Rust log", headings: [] }
+      ]
+    )
+
+    with_stub_fetcher(second_result) do
+      assert_difference -> { Library.count }, 1 do
+        ProcessCrawlRequestJob.perform_now(second_request)
+      end
+    end
+
+    first_library = @crawl_request.reload.library
+    second_library = second_request.reload.library
+
+    refute_equal first_library.id, second_library.id
+    assert_equal "log", first_library.slug
+    assert_equal "rust-lang-log", second_library.slug
+    assert_equal "rust-lang", second_library.namespace
+    assert_equal "log", second_library.name
+  end
+
   test "reuses the attached library and preserves locked metadata on recrawl" do
     existing = Library.create!(
       account: @account,
