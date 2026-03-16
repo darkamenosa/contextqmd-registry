@@ -116,4 +116,8 @@ Rails.application.routes.draw do
   end
 
   get "up" => "rails/health#show", as: :rails_health_check
+
+  # Catch-all: render Inertia 404 instead of static public/404.html
+  get "*unmatched", to: "errors#show", defaults: { status: "404" },
+    constraints: ->(req) { req.format.html? }
 end
