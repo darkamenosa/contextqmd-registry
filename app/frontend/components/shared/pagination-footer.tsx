@@ -28,13 +28,17 @@ export function PaginationFooter({
   }
 
   return (
-    <div className="flex items-center justify-center gap-2 px-4 py-3 text-xs text-muted-foreground">
+    <nav
+      aria-label="Pagination"
+      className="flex items-center justify-center gap-2 px-4 py-3 text-xs text-muted-foreground"
+    >
       <Button
         variant="ghost"
         size="icon"
         className="size-6"
         disabled={!pagination.hasPrevious}
         onClick={() => goToPage(pagination.page - 1)}
+        aria-label="Previous page"
       >
         <ChevronLeft className="size-3.5" />
       </Button>
@@ -47,9 +51,10 @@ export function PaginationFooter({
         className="size-6"
         disabled={!pagination.hasNext}
         onClick={() => goToPage(pagination.page + 1)}
+        aria-label="Next page"
       >
         <ChevronRight className="size-3.5" />
       </Button>
-    </div>
+    </nav>
   )
 }
