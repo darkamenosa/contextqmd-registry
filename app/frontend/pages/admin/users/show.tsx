@@ -3,7 +3,7 @@ import { Head, Link, router } from "@inertiajs/react"
 import type { AdminUserDetail, AdminUserMembership } from "@/types"
 import { ChevronLeft } from "lucide-react"
 
-import { formatDateShort } from "@/lib/format-date"
+import { formatDateTime } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -56,7 +56,7 @@ function OverviewCard({ user }: { user: AdminUserDetail }) {
           <div>
             <dt className="text-muted-foreground">Joined</dt>
             <dd className="mt-0.5 font-medium">
-              {formatDateShort(user.createdAt)}
+              {formatDateTime(user.createdAt)}
             </dd>
           </div>
           <div>
@@ -114,7 +114,7 @@ function MembershipRow({
         )}
       </td>
       <td className="hidden px-4 py-3 text-sm sm:table-cell">
-        {formatDateShort(m.createdAt)}
+        {formatDateTime(m.createdAt)}
       </td>
     </tr>
   )
@@ -224,7 +224,7 @@ function IdentityCard({
             <StatusBadge status={user.status} />
             {isSuspended && user.suspendedAt && (
               <span className="text-xs text-muted-foreground">
-                since {formatDateShort(user.suspendedAt)}
+                since {formatDateTime(user.suspendedAt)}
               </span>
             )}
           </div>

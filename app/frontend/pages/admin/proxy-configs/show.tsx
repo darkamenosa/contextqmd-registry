@@ -16,7 +16,7 @@ import {
   Zap,
 } from "lucide-react"
 
-import { formatDateTime, formatTimeAgo } from "@/lib/format-date"
+import { formatDateTime } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -481,7 +481,7 @@ export default function AdminProxyConfigShow({
                               )}
                             </TableCell>
                             <TableCell className="hidden pr-4 text-right text-xs text-muted-foreground sm:table-cell">
-                              {formatTimeAgo(lease.lastSeenAt, true)}
+                              {formatDateTime(lease.lastSeenAt)}
                             </TableCell>
                           </TableRow>
                         ))}

@@ -9,7 +9,6 @@ Guidance for Claude Code when working with this Rails + InertiaJS React/TypeScri
 - DO NOT over-engineer. Simple solutions > complex abstractions
 - Be critical — challenge suggestions that lead to poor code quality or architecture
 - Before implementing, ask clarifying questions about assumptions
-- When finished coding: backend → `bin/rubocop --autocorrect`, frontend → `npm run check && npm run lint:fix`
 - Consult context7 skill for related topics before coding. If unavailable, do web research. Don't add anything you don't know
 - Read `docs/tailwind.md` before writing frontend code. Read `docs/STYLE.md` before writing Ruby
 - Read `docs/auth-tenant-guide.md` before adding models, controllers, or features that involve tenant data, authentication, or authorization. It covers the Identity/User/Account pattern, scoping rules, and has a safety checklist
@@ -33,7 +32,7 @@ Guidance for Claude Code when working with this Rails + InertiaJS React/TypeScri
 ### Frontend
 - Follow Next.js naming: files in `kebab-case.tsx`, components in `PascalCase`, props in `camelCase`
 - Never modify `app/frontend/components/ui/` (shadcn managed)
-- Run `npm run check && npm run lint` after changes
+- Run `npm run check && npm run lint && npm run format:check` after changes — Prettier failures are common
 
 ### Strong Parameters
 

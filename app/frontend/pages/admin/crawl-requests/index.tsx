@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Head, Link, router } from "@inertiajs/react"
-import type { AdminProxyConfig, PaginationData } from "@/types"
-import { Plus } from "lucide-react"
+import type { AdminCrawlRequest, PaginationData } from "@/types"
+import { Loader2 } from "lucide-react"
 
 import { formatDateTime } from "@/lib/format-date"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -23,6 +22,7 @@ import {
 } from "@/components/admin/ui/index-table"
 import { StatusBadge } from "@/components/admin/ui/status-badge"
 import { useSetIndexFiltersMode } from "@/components/admin/ui/use-index-filters-mode"
+import { SourceTypeIcon } from "@/components/shared/source-type-icon"
 import AdminLayout from "@/layouts/admin-layout"
 
 interface Filters {
@@ -32,11 +32,19 @@ interface Filters {
   direction: string
 }
 
+interface Counts {
+  all: number
+  pending: number
+  processing: number
+  completed: number
+  failed: number
+  cancelled: number
+}
+
 interface Props {
-  proxyConfigs: AdminProxyConfig[]
+  crawlRequests: AdminCrawlRequest[]
   pagination: PaginationData
-  totalCount: number
-  activeCount: number
+  counts: Counts
   filters: Filters
 }
 
@@ -44,56 +52,38 @@ function buildParams(filters: Filters, page?: number) {
   const params: Record<string, string> = {}
   if (filters.query) params.query = filters.query
   if (filters.tab && filters.tab !== "all") params.tab = filters.tab
-  if (filters.sort && filters.sort !== "priority") params.sort = filters.sort
+  if (filters.sort && filters.sort !== "created_at") params.sort = filters.sort
   if (filters.direction && filters.direction !== "desc")
     params.direction = filters.direction
   if (page && page > 1) params.page = String(page)
   return params
 }
 
-function ProxyHealthIndicator({ config }: { config: AdminProxyConfig }) {
-  if (!config.active) {
-    return <StatusBadge status="inactive" />
+function truncateUrl(url: string, max = 55): string {
+  try {
+    const u = new URL(url)
+    const display = u.host + u.pathname
+    return display.length > max ? display.slice(0, max) + "..." : display
+  } catch {
+    return url.length > max ? url.slice(0, max) + "..." : url
   }
-  if (config.cooldownUntil && new Date(config.cooldownUntil) > new Date()) {
-    return <StatusBadge status="suspended">Cooldown</StatusBadge>
-  }
-  if (config.consecutiveFailures > 0) {
-    return (
-      <StatusBadge status="pending">
-        {config.consecutiveFailures} fail
-        {config.consecutiveFailures !== 1 && "s"}
-      </StatusBadge>
-    )
-  }
-  return <StatusBadge status="active" />
 }
 
-function CapacityBar({ active, max }: { active: number; max: number }) {
-  const pct = max > 0 ? Math.min((active / max) * 100, 100) : 0
-  const color =
-    pct >= 90 ? "bg-red-500" : pct >= 60 ? "bg-amber-500" : "bg-emerald-500"
-
-  return (
-    <div className="flex items-center gap-2">
-      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
-        <div
-          className={`h-full rounded-full transition-all ${color}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <span className="font-mono text-xs text-muted-foreground">
-        {active}/{max}
-      </span>
-    </div>
-  )
+function formatDuration(seconds: number | null): string {
+  if (seconds === null || seconds === undefined) return "—"
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  if (minutes < 60) return `${minutes}m ${secs}s`
+  const hours = Math.floor(minutes / 60)
+  const mins = minutes % 60
+  return `${hours}h ${mins}m`
 }
 
-export default function AdminProxyConfigsIndex({
-  proxyConfigs,
+export default function AdminCrawlRequestsIndex({
+  crawlRequests,
   pagination,
-  totalCount,
-  activeCount,
+  counts,
   filters,
 }: Props) {
   const [query, setQuery] = useState(filters.query)
@@ -106,9 +96,12 @@ export default function AdminProxyConfigsIndex({
   const { mode, setMode } = useSetIndexFiltersMode("default")
 
   const tabs = [
-    { id: "all", label: `All (${totalCount})` },
-    { id: "active", label: `Active (${activeCount})` },
-    { id: "inactive", label: `Inactive (${totalCount - activeCount})` },
+    { id: "all", label: `All (${counts.all})` },
+    { id: "pending", label: `Pending (${counts.pending})` },
+    { id: "processing", label: `Processing (${counts.processing})` },
+    { id: "completed", label: `Completed (${counts.completed})` },
+    { id: "failed", label: `Failed (${counts.failed})` },
+    { id: "cancelled", label: `Cancelled (${counts.cancelled})` },
   ]
 
   const selectedTab = tabs.findIndex((t) => t.id === filters.tab)
@@ -116,7 +109,7 @@ export default function AdminProxyConfigsIndex({
   const navigate = useCallback(
     (overrides: Partial<Filters>, page?: number) => {
       const merged = { ...filters, ...overrides }
-      router.get("/admin/proxy_configs", buildParams(merged, page), {
+      router.get("/admin/crawl_requests", buildParams(merged, page), {
         preserveState: true,
         preserveScroll: true,
       })
@@ -135,47 +128,39 @@ export default function AdminProxyConfigsIndex({
 
   const columns: IndexTableColumn[] = [
     {
-      id: "name",
-      label: "Proxy",
+      id: "url",
+      label: "Request",
       sortable: true,
       headerClassName: "pl-4",
       cellClassName: "pl-4",
     },
-    { id: "host", label: "Endpoint", sortable: true },
+    { id: "status", label: "Status" },
     {
-      id: "kind",
-      label: "Type",
+      id: "library",
+      label: "Library",
       headerClassName: "hidden sm:table-cell",
       cellClassName: "hidden sm:table-cell",
     },
     {
-      id: "usage_scope",
-      label: "Scope",
+      id: "identity",
+      label: "Submitter",
+      headerClassName: "hidden md:table-cell",
+      cellClassName: "hidden md:table-cell",
+    },
+    {
+      id: "duration",
+      label: "Duration",
+      align: "end",
       headerClassName: "hidden sm:table-cell",
       cellClassName: "hidden sm:table-cell",
     },
     {
-      id: "priority",
-      label: "Priority",
+      id: "created_at",
+      label: "Created",
       sortable: true,
       align: "end",
-      headerClassName: "hidden sm:table-cell",
-      cellClassName: "hidden sm:table-cell",
-    },
-    { id: "health", label: "Health" },
-    {
-      id: "capacity",
-      label: "Capacity",
-      align: "end",
-      headerClassName: "hidden sm:table-cell",
-      cellClassName: "hidden sm:table-cell",
-    },
-    {
-      id: "last_activity",
-      label: "Last Activity",
-      align: "end",
-      headerClassName: "hidden sm:table-cell pr-4",
-      cellClassName: "hidden sm:table-cell pr-4",
+      headerClassName: "pr-4",
+      cellClassName: "pr-4",
     },
   ]
 
@@ -202,25 +187,17 @@ export default function AdminProxyConfigsIndex({
   const executeBulkDelete = () => {
     if (!bulkDialog) return
     for (const id of bulkDialog.ids) {
-      router.delete(`/admin/proxy_configs/${id}`, { preserveState: false })
+      router.delete(`/admin/crawl_requests/${id}`, { preserveState: false })
     }
     setBulkDialog(null)
   }
 
   return (
     <AdminLayout>
-      <Head title="Proxy Pool" />
+      <Head title="Crawl Requests" />
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-lg font-semibold">Proxy Pool</h1>
-          <Button
-            size="sm"
-            nativeButton={false}
-            render={<Link href="/admin/proxy_configs/new" />}
-          >
-            <Plus className="size-4" />
-            Add Proxy
-          </Button>
+          <h1 className="text-lg font-semibold">Crawl Requests</h1>
         </div>
         <div className="rounded-lg border border-border bg-card">
           <IndexFilters
@@ -235,65 +212,66 @@ export default function AdminProxyConfigsIndex({
               setQuery("")
               navigate({ query: "" })
             }}
-            queryPlaceholder="Search proxies..."
+            queryPlaceholder="Search by URL or error message..."
             mode={mode}
             setMode={setMode}
           />
           <IndexTable
-            items={proxyConfigs}
+            items={crawlRequests}
             columns={columns}
-            itemId={(c) => c.id}
-            renderRow={(c) => [
+            itemId={(cr) => cr.id}
+            renderRow={(cr) => [
               <Link
-                key="name"
-                href={`/admin/proxy_configs/${c.id}`}
+                key="url"
+                href={`/admin/crawl_requests/${cr.id}`}
                 className="group block"
               >
-                <span className="font-medium group-hover:underline">
-                  {c.name}
+                <span className="inline-flex items-center gap-2">
+                  <SourceTypeIcon sourceType={cr.sourceType} size="size-3.5" />
+                  <span className="max-w-[320px] truncate font-medium group-hover:underline">
+                    {truncateUrl(cr.url)}
+                  </span>
                 </span>
-                {c.provider && (
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    {c.provider}
+                {cr.status === "failed" && cr.errorMessage && (
+                  <span className="mt-0.5 block max-w-[320px] truncate text-xs text-red-600 dark:text-red-400">
+                    {cr.errorMessage}
                   </span>
                 )}
               </Link>,
-              <span
-                key="endpoint"
-                className="font-mono text-xs text-muted-foreground"
-              >
-                {c.scheme}://{c.host}:{c.port}
+              <span key="status" className="inline-flex items-center gap-1.5">
+                {cr.status === "processing" && (
+                  <Loader2 className="size-3 animate-spin text-amber-500" />
+                )}
+                <StatusBadge status={cr.status} />
               </span>,
-              c.kind ? (
-                <Badge
-                  key="kind"
-                  variant="outline"
-                  className="text-xs capitalize"
+              cr.librarySlug ? (
+                <Link
+                  key="library"
+                  href={`/admin/libraries/${cr.libraryId}`}
+                  className="text-sm hover:underline"
                 >
-                  {c.kind}
-                </Badge>
+                  {cr.libraryDisplayName || cr.librarySlug}
+                </Link>
               ) : (
-                <span key="kind" className="text-xs text-muted-foreground">
+                <span key="library" className="text-sm text-muted-foreground">
                   —
                 </span>
               ),
-              <Badge key="scope" variant="secondary" className="text-xs">
-                {c.usageScope}
-              </Badge>,
-              <span key="priority" className="font-mono text-xs">
-                {c.priority}
-              </span>,
-              <ProxyHealthIndicator key="health" config={c} />,
-              <CapacityBar
-                key="capacity"
-                active={c.activeLeaseCount}
-                max={c.maxConcurrency}
-              />,
               <span
-                key="last_activity"
-                className="text-xs text-muted-foreground"
+                key="identity"
+                className="max-w-[160px] truncate text-xs text-muted-foreground"
+                title={cr.identityEmail}
               >
-                {c.lastSuccessAt ? formatDateTime(c.lastSuccessAt) : "Never"}
+                {cr.identityEmail}
+              </span>,
+              <span
+                key="duration"
+                className="font-mono text-xs text-muted-foreground"
+              >
+                {formatDuration(cr.durationSeconds)}
+              </span>,
+              <span key="created_at" className="text-xs text-muted-foreground">
+                {formatDateTime(cr.createdAt)}
               </span>,
             ]}
             sort={sort}
@@ -308,11 +286,13 @@ export default function AdminProxyConfigsIndex({
             ]}
             emptyState={
               <div>
-                <p className="text-muted-foreground">No proxies configured</p>
+                <p className="text-muted-foreground">No crawl requests found</p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {filters.query
                     ? "Try a different search term."
-                    : "Add a proxy to start routing crawl requests."}
+                    : filters.tab !== "all"
+                      ? "No requests match this filter."
+                      : "Crawl requests will appear here when docs are submitted."}
                 </p>
               </div>
             }
@@ -326,10 +306,10 @@ export default function AdminProxyConfigsIndex({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete proxies?</DialogTitle>
+            <DialogTitle>Delete crawl requests?</DialogTitle>
             <DialogDescription>
-              This will permanently delete {bulkDialog?.ids.length} proxy
-              config(s) and all their lease history. This cannot be undone.
+              This will permanently delete {bulkDialog?.ids.length} crawl
+              request(s). This cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

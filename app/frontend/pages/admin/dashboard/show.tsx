@@ -12,7 +12,7 @@ import {
   XCircle,
 } from "lucide-react"
 
-import { formatTimeAgo } from "@/lib/format-date"
+import { formatDateTime } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -306,7 +306,7 @@ export default function AdminDashboard({
                         <CrawlStatusBadge status={cr.status} />
                       </TableCell>
                       <TableCell className="hidden pr-4 text-right text-sm text-muted-foreground sm:table-cell">
-                        {formatTimeAgo(cr.createdAt, true)}
+                        {formatDateTime(cr.createdAt)}
                       </TableCell>
                     </TableRow>
                   ))}

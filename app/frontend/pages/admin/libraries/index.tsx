@@ -3,7 +3,7 @@ import { Head, Link, router } from "@inertiajs/react"
 import type { AdminLibrary, PaginationData } from "@/types"
 import { Plus } from "lucide-react"
 
-import { formatDateShort } from "@/lib/format-date"
+import { formatDateTime } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -210,7 +210,7 @@ export default function AdminLibrariesIndex({
               lib.accountName,
               lib.versionCount,
               lib.pageCount,
-              formatDateShort(lib.updatedAt),
+              formatDateTime(lib.updatedAt),
             ]}
             sort={sort}
             pagination={paginationProps}

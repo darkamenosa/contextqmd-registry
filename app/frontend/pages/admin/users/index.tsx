@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { Head, Link, router } from "@inertiajs/react"
 import type { AdminUser, PaginationData } from "@/types"
 
-import { formatDateShort } from "@/lib/format-date"
+import { formatDateTime } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -227,7 +227,7 @@ export default function AdminUsersIndex({
               ) : null,
               <StatusBadge key="status" status={user.status} />,
               user.accountsCount,
-              formatDateShort(user.createdAt),
+              formatDateTime(user.createdAt),
             ]}
             sort={sort}
             pagination={paginationProps}

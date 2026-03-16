@@ -29,6 +29,7 @@ class CrawlRequest < ApplicationRecord
   scope :processing, -> { where(status: "processing") }
   scope :completed, -> { where(status: "completed") }
   scope :failed, -> { where(status: "failed") }
+  scope :cancelled, -> { where(status: "cancelled") }
   scope :recent, -> { order(created_at: :desc) }
 
   def pending?
@@ -43,10 +44,20 @@ class CrawlRequest < ApplicationRecord
     status == "completed"
   end
 
+  def cancelled?
+    status == "cancelled"
+  end
+
+  def mark_cancelled
+    raise "Cannot cancel from #{status}" if completed? || cancelled?
+    update!(status: "cancelled", completed_at: Time.current, status_message: "Cancelled")
+  end
+
   # Owns the full crawl lifecycle: fetch → import → complete/fail.
   # Called by ProcessCrawlRequestJob (thin job, rich model pattern).
   def process
     return unless pending? || processing?
+    return if cancelled?
 
     mark_processing if pending?
 

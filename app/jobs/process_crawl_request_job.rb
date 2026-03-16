@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class ProcessCrawlRequestJob < ApplicationJob
+  discard_on ActiveJob::DeserializationError
+
   # Website BFS crawls are slow — isolate them so they don't block lighter work.
   queue_as do
     crawl_request = arguments.first

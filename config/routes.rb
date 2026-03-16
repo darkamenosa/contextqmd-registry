@@ -52,6 +52,12 @@ Rails.application.routes.draw do
         resources :pages, only: :index, module: :libraries, controller: :pages
       end
       resources :pages, only: [ :show, :edit, :update, :destroy ]
+      resources :crawl_requests, only: [ :index, :show, :destroy ] do
+        scope module: :crawl_requests do
+          resource :cancellation, only: :create
+          resource :retry, only: :create
+        end
+      end
       resources :proxy_configs
       resources :webhooks, only: [ :index ]
 

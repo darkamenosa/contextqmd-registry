@@ -4,6 +4,7 @@ import {
   BookOpen,
   LayoutDashboard,
   Network,
+  Radar,
   Settings2,
   Users,
   Webhook,
@@ -31,6 +32,11 @@ const navOverview = [
     title: "Libraries",
     url: "/admin/libraries",
     icon: BookOpen,
+  },
+  {
+    title: "Crawl Requests",
+    url: "/admin/crawl_requests",
+    icon: Radar,
   },
   {
     title: "Users",

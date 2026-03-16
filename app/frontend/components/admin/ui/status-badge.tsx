@@ -17,6 +17,7 @@ const statusTones: Record<string, StatusTone> = {
   completed: "positive",
   suspended: "warning",
   pending: "warning",
+  processing: "warning",
   draft: "neutral",
   inactive: "neutral",
   failed: "critical",

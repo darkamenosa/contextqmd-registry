@@ -129,6 +129,32 @@ export type AdminCrawlItem = {
   createdAt: string
 }
 
+// Admin crawl request types
+export type AdminCrawlRequest = {
+  id: number
+  url: string
+  sourceType: string
+  status: string
+  statusMessage: string | null
+  errorMessage: string | null
+  requestedBundleVisibility: string
+  identityEmail: string
+  libraryId: number | null
+  librarySlug: string | null
+  libraryDisplayName: string | null
+  durationSeconds: number | null
+  startedAt: string | null
+  completedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type AdminCrawlRequestDetail = AdminCrawlRequest & {
+  metadata: Record<string, unknown> | null
+  librarySourceId: number | null
+  librarySourceUrl: string | null
+}
+
 // Admin proxy config types
 export type AdminProxyConfig = {
   id: number
