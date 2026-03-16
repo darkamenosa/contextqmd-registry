@@ -3,7 +3,7 @@
 class Page < ApplicationRecord
   include PgSearch::Model
 
-  belongs_to :version
+  belongs_to :version, counter_cache: true
 
   validates :page_uid, presence: true, uniqueness: { scope: :version_id }
   validates :path, presence: true

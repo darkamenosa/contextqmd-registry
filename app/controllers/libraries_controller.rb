@@ -13,9 +13,9 @@ class LibrariesController < InertiaController
     else
       Library.all
     end
-    libraries = libraries.includes(:source_policy, versions: :pages).order(:slug)
+    libraries = libraries.includes(:source_policy, :versions).order(:slug)
 
-    pagy, paginated = pagy(libraries, limit: 10)
+    pagy, paginated = pagy(:offset, libraries, limit: 10)
 
     render inertia: "libraries/index", props: {
       libraries: paginated.map { |lib| library_props(lib) },
@@ -25,7 +25,7 @@ class LibrariesController < InertiaController
   end
 
   def show
-    library = Library.includes(versions: :pages, source_policy: [], library_sources: []).find_by!(slug: params[:slug])
+    library = Library.includes(:versions, :source_policy, :library_sources).find_by!(slug: params[:slug])
     versions = library.versions.ordered
 
     selected_version = library.best_version(requested: params[:version])
@@ -37,7 +37,7 @@ class LibrariesController < InertiaController
     else
       pages_scope.order(:path)
     end
-    pagy, pages = pagy(pages_scope, limit: 30)
+    pagy, pages = pagy(:offset, pages_scope, limit: 30)
 
     render inertia: "libraries/show", props: {
       library: library_props(library),
@@ -91,7 +91,7 @@ class LibrariesController < InertiaController
         default_version: library.default_version,
         license_status: library.source_policy&.license_status,
         version_count: library.versions.size,
-        page_count: library.versions.sum { |v| v.pages.size },
+        page_count: library.versions.sum(&:pages_count),
         source_type: library.source_type,
         source_count: library.library_sources.size
       }
@@ -102,7 +102,7 @@ class LibrariesController < InertiaController
         version: version.version,
         channel: version.channel,
         generated_at: version.generated_at&.iso8601,
-        page_count: version.pages.size
+        page_count: version.pages_count
       }
     end
 

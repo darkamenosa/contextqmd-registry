@@ -14,6 +14,11 @@ class Version < ApplicationRecord
   scope :ordered, -> { order(generated_at: :desc) }
   scope :stable, -> { where(channel: "stable") }
 
+  # Fizzy-inspired reconciliation: fix pages_count drift after bulk operations.
+  def reconcile_pages_count
+    update_column :pages_count, pages.count
+  end
+
   def self.channel_for(version_value)
     return "latest" if version_value.blank?
 

@@ -7,7 +7,7 @@ module App
 
     def index
       scope = Current.identity.access_tokens.order(created_at: :desc)
-      pagy, tokens = pagy(scope, limit: 10)
+      pagy, tokens = pagy(:offset, scope, limit: 10)
 
       render inertia: "app/access-tokens/index", props: {
         access_tokens: tokens.map { |t| token_props(t) },

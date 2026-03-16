@@ -113,6 +113,7 @@ class CrawlRequest < ApplicationRecord
       source = find_or_create_library_source(library, existing_source: existing_source)
       version = find_or_create_version(library, result)
       sync_pages(version, result.pages, prune_stale: result.complete)
+      version.reconcile_pages_count
       record_fetch_recipe(version, source)
       update_manifest_checksum(version)
       schedule_full_bundle(version)
@@ -380,8 +381,12 @@ class CrawlRequest < ApplicationRecord
 
       # Only prune stale pages on complete harvests. Partial/bounded crawls
       # (website, truncated llms.txt) merge without deleting previously good pages.
-      if prune_stale && incoming_uids.any?
-        version.pages.where.not(page_uid: incoming_uids.to_a).destroy_all
+      if prune_stale
+        if incoming_uids.any?
+          version.pages.where.not(page_uid: incoming_uids.to_a).destroy_all
+        else
+          version.pages.destroy_all
+        end
       end
     end
 

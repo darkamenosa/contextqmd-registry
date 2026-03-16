@@ -17,7 +17,7 @@ class CrawlRequestsController < InertiaController
       base.where(status: [ "pending", "processing" ])
     end
 
-    pagy, crawl_requests = pagy(scope, limit: 10)
+    pagy, crawl_requests = pagy(:offset, scope, limit: 10)
 
     render inertia: "crawl-requests/index", props: {
       crawl_requests: crawl_requests.map { |cr| crawl_request_props(cr) },

@@ -13,7 +13,7 @@ module Admin
 
       scope = base.includes(:account, :versions, :source_policy)
 
-      pagy, libraries = pagy(
+      pagy, libraries = pagy(:offset,
         scope.order(sort_column => sort_direction),
         limit: 25
       )
@@ -31,7 +31,7 @@ module Admin
     end
 
     def show
-      versions = @library.versions.includes(:pages).ordered
+      versions = @library.versions.ordered
       crawl_requests = CrawlRequest.where(library: @library).recent.limit(10)
 
       render inertia: "admin/libraries/show", props: {
@@ -107,7 +107,7 @@ module Admin
           default_version: library.default_version,
           license_status: library.source_policy&.license_status,
           version_count: library.versions.size,
-          page_count: library.versions.sum { |v| v.pages.size },
+          page_count: library.versions.sum(&:pages_count),
           account_name: library.account.name,
           updated_at: library.updated_at.iso8601,
           created_at: library.created_at.iso8601
@@ -129,7 +129,7 @@ module Admin
           license_status: library.source_policy&.license_status,
           account_name: library.account.name,
           version_count: library.versions.size,
-          page_count: library.versions.sum { |v| v.pages.size },
+          page_count: library.versions.sum(&:pages_count),
           last_crawl_url: last_crawl&.url,
           crawl_rules: library.crawl_rules || {},
           created_at: library.created_at.iso8601,
@@ -159,7 +159,7 @@ module Admin
           version: version.version,
           channel: version.channel,
           generated_at: version.generated_at&.iso8601,
-          page_count: version.pages.size,
+          page_count: version.pages_count,
           created_at: version.created_at.iso8601
         }
       end

@@ -14,7 +14,7 @@ module Admin
 
       scope = apply_tab_filter(base)
 
-      pagy, configs = pagy(
+      pagy, configs = pagy(:offset,
         scope.order(sort_column => sort_direction),
         limit: 25
       )

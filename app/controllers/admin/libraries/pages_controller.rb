@@ -10,7 +10,7 @@ module Admin
         scope = scope.search_content(params[:query]) if params[:query].present?
         scope = scope.ordered unless params[:query].present?
 
-        pagy, pages = pagy(scope, limit: 50)
+        pagy, pages = pagy(:offset, scope, limit: 50)
 
         render inertia: "admin/versions/pages/index", props: {
           library: {

@@ -3,7 +3,7 @@
 module Admin
   class DashboardsController < BaseController
     def show
-      pagy, recent_crawls = pagy(
+      pagy, recent_crawls = pagy(:offset,
         CrawlRequest.includes(:identity, :library).recent,
         limit: 10
       )

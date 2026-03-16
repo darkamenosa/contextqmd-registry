@@ -60,7 +60,7 @@ module Api
                     library.versions.ordered.first
           if default
             data[:stats] = {
-              page_count: default.pages.count,
+              page_count: default.pages_count,
               total_bytes: default.pages.sum(:bytes),
               last_generated_at: default.generated_at&.iso8601
             }

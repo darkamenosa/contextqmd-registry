@@ -6,7 +6,7 @@ module Admin
       base = params[:query].present? ? Identity.search(params[:query]) : Identity.all
       scope = filter_by_status(base)
 
-      pagy, identities = pagy(
+      pagy, identities = pagy(:offset,
         scope.includes(users: { account: :cancellation }).order(sort_column => sort_direction),
         limit: 25
       )

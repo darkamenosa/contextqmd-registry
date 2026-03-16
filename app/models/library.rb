@@ -54,11 +54,11 @@ class Library < ApplicationRecord
     end
 
     default_v = versions.find { |v| v.version == default_version }
-    richest_v = versions.max_by { |v| v.pages.size }
+    richest_v = versions.max_by(&:pages_count)
 
-    if default_v && default_v.pages.size > 0
+    if default_v && default_v.pages_count > 0
       # Prefer richest if it has significantly more pages (3x threshold)
-      if richest_v && richest_v.pages.size > default_v.pages.size * 3
+      if richest_v && richest_v.pages_count > default_v.pages_count * 3
         richest_v
       else
         default_v

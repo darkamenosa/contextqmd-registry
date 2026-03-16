@@ -7,13 +7,13 @@ class RankingsController < InertiaController
   disallow_account_scope
 
   def index
-    libraries = Library.includes(versions: :pages).all
+    libraries = Library.includes(:versions).all
 
     ranked = libraries.map { |lib| ranking_props(lib) }
       .sort_by { |r| [ -r[:page_count], -r[:version_count] ] }
       .each_with_index.map { |r, i| r.merge(rank: i + 1) }
 
-    pagy, paginated = pagy(ranked, limit: 10)
+    pagy, paginated = pagy(:offset, ranked, limit: 10)
 
     render inertia: "rankings/index", props: {
       libraries: paginated,
@@ -26,7 +26,7 @@ class RankingsController < InertiaController
 
     def ranking_props(library)
       latest_version = library.versions.max_by(&:created_at)
-      page_count = latest_version&.pages&.size || 0
+      page_count = latest_version&.pages_count || 0
       version_count = library.versions.size
       days_since_update = if latest_version&.created_at
         ((Time.current - latest_version.created_at) / 1.day).to_i

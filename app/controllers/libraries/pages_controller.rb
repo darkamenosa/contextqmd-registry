@@ -5,8 +5,8 @@ class Libraries::PagesController < InertiaController
   disallow_account_scope
 
   def show
-    library = Library.includes(versions: :pages).find_by!(slug: params[:slug])
-    version = library.versions.find { |v| v.version == params[:version] }
+    library = Library.find_by!(slug: params[:slug])
+    version = library.versions.find_by(version: params[:version])
 
     unless version
       redirect_to "/libraries/#{library.slug}", alert: "Version not found"

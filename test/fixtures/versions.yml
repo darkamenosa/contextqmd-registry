@@ -5,6 +5,7 @@ nextjs_stable:
   generated_at: <%= 2.days.ago.iso8601 %>
   source_url: "https://nextjs.org/docs"
   manifest_checksum: "sha256:nextjs1616checksum"
+  pages_count: 2
 
 nextjs_canary:
   library: nextjs
@@ -12,6 +13,7 @@ nextjs_canary:
   channel: canary
   generated_at: <%= 1.day.ago.iso8601 %>
   source_url: "https://nextjs.org/docs"
+  pages_count: 0
 
 rails_stable:
   library: rails
@@ -20,3 +22,4 @@ rails_stable:
   generated_at: <%= 3.days.ago.iso8601 %>
   source_url: "https://guides.rubyonrails.org"
   manifest_checksum: "sha256:rails810checksum"
+  pages_count: 0

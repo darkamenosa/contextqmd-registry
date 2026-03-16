@@ -34,7 +34,7 @@ module Api
             version: @version.version,
             channel: @version.channel,
             generated_at: @version.generated_at&.iso8601,
-            doc_count: @version.pages.count,
+            doc_count: @version.pages_count,
             source: source_json(recipe),
             page_index: {
               url: "/api/v1/libraries/#{@library.slug}/versions/#{@version.version}/page-index",
