@@ -112,7 +112,7 @@ class CrawlRequest < ApplicationRecord
       library = find_or_create_library(result, existing_source: existing_source)
       source = find_or_create_library_source(library, existing_source: existing_source)
       version = find_or_create_version(library, result)
-      sync_pages(version, result.pages, prune_stale: result.complete)
+      sync_pages(version, result.pages)
       version.reconcile_pages_count
       record_fetch_recipe(version, source)
       update_manifest_checksum(version)
@@ -339,19 +339,17 @@ class CrawlRequest < ApplicationRecord
       error.record&.errors&.attribute_names&.include?(:slug)
     end
 
-    def sync_pages(version, pages, prune_stale: true)
-      incoming_uids = Set.new
+    def sync_pages(version, pages)
+      # Clean slate: delete all existing pages before importing fresh content.
+      version.pages.delete_all
       total = pages.size
 
       pages.each_with_index do |page_data, index|
         content = sanitize_content(page_data[:content].to_s)
         checksum = Digest::SHA256.hexdigest(content)
-        uid = page_data[:page_uid]
-        incoming_uids << uid
 
-        page = find_or_create_record(
-          version.pages,
-          { page_uid: uid },
+        version.pages.create!(
+          page_uid: page_data[:page_uid],
           path: page_data[:path],
           title: page_data[:title],
           url: page_data[:url],
@@ -361,31 +359,9 @@ class CrawlRequest < ApplicationRecord
           source_ref: source_type,
           headings: sanitize_headings(page_data[:headings] || [])
         )
-        page.assign_attributes(
-          path: page_data[:path],
-          title: page_data[:title],
-          url: page_data[:url],
-          description: content,
-          bytes: content.bytesize,
-          checksum: checksum,
-          source_ref: source_type,
-          headings: sanitize_headings(page_data[:headings] || [])
-        )
-        page.save! if page.changed?
 
-        # Debounce progress updates (every 10 pages or last page)
         if (index + 1) % 10 == 0 || index + 1 == total
           update_progress("Importing pages", current: index + 1, total: total)
-        end
-      end
-
-      # Only prune stale pages on complete harvests. Partial/bounded crawls
-      # (website, truncated llms.txt) merge without deleting previously good pages.
-      if prune_stale
-        if incoming_uids.any?
-          version.pages.where.not(page_uid: incoming_uids.to_a).destroy_all
-        else
-          version.pages.destroy_all
         end
       end
     end

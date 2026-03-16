@@ -512,7 +512,7 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     assert_equal false, library.account.personal
   end
 
-  test "skips saving unchanged pages on re-crawl (deduplication)" do
+  test "re-crawl replaces all pages with fresh content" do
     ns = "ns-#{SecureRandom.hex(4)}"
     lib_name = "lib-#{SecureRandom.hex(4)}"
 
@@ -530,17 +530,17 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     with_stub_fetcher(result) { ProcessCrawlRequestJob.perform_now(@crawl_request) }
     library = @crawl_request.reload.library
     version = library.versions.first
-    page = version.pages.find_by(page_uid: "intro")
-    original_updated_at = page.updated_at
+    original_page_id = version.pages.find_by(page_uid: "intro").id
 
-    # Re-crawl with same content — page should NOT be re-saved
+    # Re-crawl — pages are deleted and recreated
     cr2 = CrawlRequest.create!(identity: @identity, url: "https://example.com/llms.txt", source_type: "llms_txt", status: "pending")
-    travel 1.minute do
-      with_stub_fetcher(result) { ProcessCrawlRequestJob.perform_now(cr2) }
-    end
+    with_stub_fetcher(result) { ProcessCrawlRequestJob.perform_now(cr2) }
 
-    page.reload
-    assert_equal original_updated_at, page.updated_at, "Unchanged page should not be re-saved"
+    version.reload
+    assert_equal 1, version.pages.count
+    new_page = version.pages.find_by(page_uid: "intro")
+    assert_not_equal original_page_id, new_page.id, "Page should be recreated on recrawl"
+    assert_equal "Hello world", new_page.description
   end
 
   test "removes stale pages on re-crawl" do
