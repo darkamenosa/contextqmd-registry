@@ -44,7 +44,7 @@ class CrawlRequestsController < InertiaController
   private
 
     def crawl_request_props(cr)
-      {
+      props = {
         id: cr.id,
         url: cr.url,
         source_type: cr.source_type,
@@ -54,5 +54,13 @@ class CrawlRequestsController < InertiaController
         created_at: cr.created_at.iso8601,
         updated_at: cr.updated_at.iso8601
       }
+
+      if cr.status.in?(%w[pending processing])
+        props[:status_message] = cr.status_message
+        props[:progress_current] = cr.metadata&.dig("progress_current")
+        props[:progress_total] = cr.metadata&.dig("progress_total")
+      end
+
+      props
     end
 end

@@ -2,6 +2,8 @@
 
 module App
   class CrawlRequestsController < BaseController
+    rate_limit to: 10, within: 3.minutes, by: -> { Current.identity&.id || request.remote_ip }, only: :create
+
     def new
       render inertia: "app/crawl-requests/new"
     end

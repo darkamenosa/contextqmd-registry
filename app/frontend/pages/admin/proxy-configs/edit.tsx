@@ -28,7 +28,7 @@ interface ProxyConfigEdit {
   host: string
   port: number
   username: string | null
-  password: string | null
+  passwordPresent: boolean
   kind: string | null
   usageScope: string
   priority: number
@@ -59,7 +59,7 @@ export default function AdminProxyConfigEdit({
     host: config.host,
     port: String(config.port),
     username: config.username || "",
-    password: config.password || "",
+    password: "",
     kind: config.kind || "datacenter",
     usageScope: config.usageScope,
     priority: String(config.priority),

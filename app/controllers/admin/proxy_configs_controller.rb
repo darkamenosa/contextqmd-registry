@@ -75,8 +75,10 @@ module Admin
 
     def update
       config = CrawlProxyConfig.find(params[:id])
+      filtered_params = config_params
+      filtered_params.delete(:password) if filtered_params[:password].blank?
 
-      if config.update(config_params)
+      if config.update(filtered_params)
         redirect_to admin_proxy_config_path(config), notice: "Proxy updated."
       else
         redirect_to edit_admin_proxy_config_path(config),
@@ -178,7 +180,7 @@ module Admin
           host: config.host,
           port: config.port,
           username: config.username,
-          password: config.password,
+          password_present: config.password.present?,
           kind: config.kind,
           usage_scope: config.usage_scope,
           priority: config.priority,

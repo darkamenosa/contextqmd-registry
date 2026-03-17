@@ -147,7 +147,7 @@ function VersionRow({
     }
     setProcessing(true)
     router.patch(
-      `/admin/versions/${v.id}`,
+      `/admin/libraries/${libraryId}/versions/${v.id}`,
       { version: { version: newName.trim() } },
       {
         preserveScroll: true,
@@ -161,7 +161,7 @@ function VersionRow({
 
   function handleDelete() {
     setProcessing(true)
-    router.delete(`/admin/versions/${v.id}`, {
+    router.delete(`/admin/libraries/${libraryId}/versions/${v.id}`, {
       preserveScroll: true,
       onFinish: () => setProcessing(false),
     })
@@ -172,7 +172,7 @@ function VersionRow({
       <TableRow>
         <TableCell className="pl-4 font-medium">
           <Link
-            href={`/admin/versions/${v.id}/pages`}
+            href={`/admin/libraries/${libraryId}/versions/${v.id}/pages`}
             className="hover:underline"
           >
             {v.version}
@@ -197,7 +197,11 @@ function VersionRow({
               size="sm"
               className="h-7 gap-1 px-2 text-xs"
               nativeButton={false}
-              render={<Link href={`/admin/versions/${v.id}/pages`} />}
+              render={
+                <Link
+                  href={`/admin/libraries/${libraryId}/versions/${v.id}/pages`}
+                />
+              }
             >
               Pages
               <ChevronRight className="size-3" />

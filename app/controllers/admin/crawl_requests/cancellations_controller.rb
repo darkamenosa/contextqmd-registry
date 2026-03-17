@@ -3,10 +3,11 @@
 module Admin
   module CrawlRequests
     class CancellationsController < Admin::BaseController
+      include Admin::CrawlRequestScoped
+
       def create
-        cr = CrawlRequest.find(params[:crawl_request_id])
-        cr.mark_cancelled
-        redirect_to admin_crawl_request_path(cr), notice: "Crawl request cancelled."
+        @crawl_request.mark_cancelled
+        redirect_to admin_crawl_request_path(@crawl_request), notice: "Crawl request cancelled."
       end
     end
   end

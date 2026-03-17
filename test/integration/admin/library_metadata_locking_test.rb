@@ -36,7 +36,7 @@ class Admin::LibraryMetadataLockingTest < ActionDispatch::IntegrationTest
       }
     }
 
-    assert_redirected_to admin_library_path(id: library.id)
+    assert_redirected_to admin_library_path(library)
     assert_predicate library.reload, :metadata_locked?
     assert_equal "Laravel", library.display_name
     assert_equal "https://laravel.com/docs", library.homepage_url
@@ -77,8 +77,9 @@ class Admin::LibraryMetadataLockingTest < ActionDispatch::IntegrationTest
       }
     }
 
-    assert_redirected_to admin_library_path(id: library.id)
-    assert_equal "laravel", library.reload.slug
+    library.reload
+    assert_redirected_to admin_library_path(library)
+    assert_equal "laravel", library.slug
     assert_predicate library, :metadata_locked?
   ensure
     Current.reset

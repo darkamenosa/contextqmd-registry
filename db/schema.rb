@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_16_094500) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_17_044621) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -167,6 +167,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_16_094500) do
     t.index ["library_id"], name: "index_crawl_requests_on_library_id"
     t.index ["library_source_id"], name: "index_crawl_requests_on_library_source_id"
     t.index ["status"], name: "index_crawl_requests_on_status"
+    t.check_constraint "requested_bundle_visibility::text = ANY (ARRAY['public'::character varying, 'private'::character varying]::text[])", name: "crawl_requests_bundle_visibility_check"
+    t.check_constraint "source_type::text = ANY (ARRAY['github'::character varying, 'gitlab'::character varying, 'bitbucket'::character varying, 'git'::character varying, 'website'::character varying, 'openapi'::character varying, 'llms_txt'::character varying]::text[])", name: "crawl_requests_source_type_check"
+    t.check_constraint "status::text = ANY (ARRAY['pending'::character varying, 'processing'::character varying, 'completed'::character varying, 'failed'::character varying, 'cancelled'::character varying]::text[])", name: "crawl_requests_status_check"
   end
 
   create_table "fetch_recipes", force: :cascade do |t|
@@ -217,12 +220,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_16_094500) do
     t.string "default_version"
     t.string "display_name", null: false
     t.string "homepage_url"
+    t.datetime "latest_version_at"
     t.boolean "metadata_locked", default: false, null: false
     t.string "name", null: false
     t.string "namespace", null: false
     t.string "slug", null: false
     t.string "source_type"
+    t.integer "total_pages_count", default: 0, null: false
     t.datetime "updated_at", null: false
+    t.integer "versions_count", default: 0, null: false
     t.index ["account_id"], name: "index_libraries_on_account_id"
     t.index ["aliases"], name: "index_libraries_on_aliases", using: :gin
     t.index ["namespace", "name"], name: "index_libraries_on_namespace_and_name", unique: true

@@ -31,6 +31,11 @@ class Library < ApplicationRecord
   has_many :library_sources, dependent: :destroy
   has_one :source_policy, dependent: :destroy
 
+  scope :popular,  -> { order(total_pages_count: :desc, slug: :asc) }
+  scope :recent,   -> { order(Arel.sql("latest_version_at DESC NULLS LAST"), :slug) }
+  scope :trending, -> { where("total_pages_count > 0").order(Arel.sql("latest_version_at DESC NULLS LAST"), :slug) }
+  scope :ranked,   -> { order(total_pages_count: :desc, versions_count: :desc, slug: :asc) }
+
   before_validation :populate_slug
 
   validates :slug, presence: true,

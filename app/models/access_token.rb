@@ -3,7 +3,7 @@
 # Personal access tokens for API authentication (fizzy pattern).
 # Token is shown once at creation — only the SHA-256 digest is stored.
 class AccessToken < ApplicationRecord
-  belongs_to :identity
+  belongs_to :identity, default: -> { Current.identity }
 
   enum :permission, { read: "read", write: "write" }, default: :read
 

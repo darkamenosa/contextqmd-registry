@@ -7,6 +7,8 @@ nextjs:
   aliases: <%= ["next", "next.js"].to_json %>
   homepage_url: "https://nextjs.org"
   default_version: "16.1.6"
+  versions_count: 2
+  total_pages_count: 2
 
 rails:
   account: organization
@@ -17,3 +19,5 @@ rails:
   aliases: <%= ["ror", "rubyonrails"].to_json %>
   homepage_url: "https://rubyonrails.org"
   default_version: "8.1.0"
+  versions_count: 1
+  total_pages_count: 0

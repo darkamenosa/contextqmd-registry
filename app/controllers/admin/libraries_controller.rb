@@ -50,9 +50,9 @@ module Admin
 
     def update
       if @library.update(library_params.merge(metadata_locked: true))
-        redirect_to admin_library_path(id: @library.id), notice: "Library updated."
+        redirect_to admin_library_path(@library), notice: "Library updated."
       else
-        redirect_to edit_admin_library_path(id: @library.id),
+        redirect_to edit_admin_library_path(@library),
                     alert: @library.errors.full_messages.join(", ")
       end
     end
@@ -68,7 +68,12 @@ module Admin
     private
 
       def set_library
-        @library = Library.includes(:account, :source_policy, :versions).find(params[:id])
+        param = params[:id]
+        @library = if param.to_s.match?(/\A\d+\z/)
+          Library.includes(:account, :source_policy, :versions).find(param)
+        else
+          Library.includes(:account, :source_policy, :versions).find_by!(slug: param)
+        end
       end
 
       def sort_column

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
+import type React from "react"
 import { Head, Link, router } from "@inertiajs/react"
 import type { AdminPage, PaginationData } from "@/types"
 import { ChevronLeft, Eye, Pencil, Search, Trash2, X } from "lucide-react"
@@ -38,20 +39,31 @@ interface Props {
   query: string
 }
 
-function PageRow({ page }: { page: AdminPage }) {
+function PageRow({
+  page,
+  libraryId,
+  versionId,
+}: {
+  page: AdminPage
+  libraryId: number
+  versionId: number
+}) {
   const [deleteConfirm, setDeleteConfirm] = useState(false)
 
   function handleDelete() {
-    router.delete(`/admin/pages/${page.id}`, {
-      preserveScroll: true,
-    })
+    router.delete(
+      `/admin/libraries/${libraryId}/versions/${versionId}/pages/${page.id}`,
+      {
+        preserveScroll: true,
+      }
+    )
   }
 
   return (
     <TableRow>
       <TableCell className="pl-4">
         <Link
-          href={`/admin/pages/${page.id}`}
+          href={`/admin/libraries/${libraryId}/versions/${versionId}/pages/${page.id}`}
           className="text-sm font-medium hover:underline"
         >
           {page.title}
@@ -70,7 +82,11 @@ function PageRow({ page }: { page: AdminPage }) {
             size="sm"
             className="h-7 w-7 p-0"
             nativeButton={false}
-            render={<Link href={`/admin/pages/${page.id}`} />}
+            render={
+              <Link
+                href={`/admin/libraries/${libraryId}/versions/${versionId}/pages/${page.id}`}
+              />
+            }
             title="View page"
           >
             <Eye className="size-3.5" />
@@ -80,7 +96,11 @@ function PageRow({ page }: { page: AdminPage }) {
             size="sm"
             className="h-7 w-7 p-0"
             nativeButton={false}
-            render={<Link href={`/admin/pages/${page.id}/edit`} />}
+            render={
+              <Link
+                href={`/admin/libraries/${libraryId}/versions/${versionId}/pages/${page.id}/edit`}
+              />
+            }
             title="Edit page"
           >
             <Pencil className="size-3.5" />
@@ -134,12 +154,12 @@ export default function AdminVersionPagesIndex({
   const navigate = useCallback(
     (params: Record<string, string | number>) => {
       router.get(
-        `/admin/versions/${version.id}/pages`,
+        `/admin/libraries/${library.id}/versions/${version.id}/pages`,
         { ...params },
         { preserveState: true, preserveScroll: true }
       )
     },
-    [version.id]
+    [library.id, version.id]
   )
 
   // Debounced search
@@ -152,7 +172,7 @@ export default function AdminVersionPagesIndex({
     return () => clearTimeout(debounceRef.current)
   }, [query, initialQuery, navigate])
 
-  function handleSearch(e: FormEvent) {
+  function handleSearch(e: React.FormEvent) {
     e.preventDefault()
     navigate({ query, page: 1 })
   }
@@ -233,7 +253,12 @@ export default function AdminVersionPagesIndex({
               </TableHeader>
               <TableBody>
                 {pages.map((page) => (
-                  <PageRow key={page.id} page={page} />
+                  <PageRow
+                    key={page.id}
+                    page={page}
+                    libraryId={library.id}
+                    versionId={version.id}
+                  />
                 ))}
               </TableBody>
             </Table>

@@ -1,4 +1,4 @@
-import type { FormEvent } from "react"
+import type React from "react"
 import { Head, Link, useForm } from "@inertiajs/react"
 import { ChevronLeft } from "lucide-react"
 
@@ -36,10 +36,12 @@ export default function AdminPageEdit({ page, version, library }: Props) {
     description: page.content,
   })
 
-  function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     transform((data) => ({ page: data }))
-    patch(`/admin/pages/${page.id}`)
+    patch(
+      `/admin/libraries/${library.id}/versions/${version.id}/pages/${page.id}`
+    )
   }
 
   const contentBytes = new TextEncoder().encode(data.description).length
@@ -52,7 +54,7 @@ export default function AdminPageEdit({ page, version, library }: Props) {
         {/* Header */}
         <div className="flex items-center gap-2.5">
           <Link
-            href={`/admin/versions/${version.id}/pages`}
+            href={`/admin/libraries/${library.id}/versions/${version.id}/pages`}
             aria-label="Back to pages"
             className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
           >
@@ -106,7 +108,9 @@ export default function AdminPageEdit({ page, version, library }: Props) {
                     variant="outline"
                     nativeButton={false}
                     render={
-                      <Link href={`/admin/versions/${version.id}/pages`} />
+                      <Link
+                        href={`/admin/libraries/${library.id}/versions/${version.id}/pages`}
+                      />
                     }
                   >
                     Cancel

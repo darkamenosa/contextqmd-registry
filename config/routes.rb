@@ -46,12 +46,11 @@ Rails.application.routes.draw do
         scope module: :libraries do
           resource :recrawl, only: :create
           resource :default_version, only: :update
+          resources :versions, only: [ :show, :update, :destroy ] do
+            resources :pages, only: [ :index, :show, :edit, :update, :destroy ]
+          end
         end
       end
-      resources :versions, only: [ :show, :update, :destroy ] do
-        resources :pages, only: :index, module: :libraries, controller: :pages
-      end
-      resources :pages, only: [ :show, :edit, :update, :destroy ]
       resources :crawl_requests, only: [ :index, :show, :destroy ] do
         scope module: :crawl_requests do
           resource :cancellation, only: :create

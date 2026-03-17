@@ -43,7 +43,7 @@ export default function AdminPageShow({ page, version, library }: Props) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <Link
-              href={`/admin/versions/${version.id}/pages`}
+              href={`/admin/libraries/${library.id}/versions/${version.id}/pages`}
               aria-label="Back to pages"
               className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
             >
@@ -60,7 +60,11 @@ export default function AdminPageShow({ page, version, library }: Props) {
             variant="outline"
             size="sm"
             nativeButton={false}
-            render={<Link href={`/admin/pages/${page.id}/edit`} />}
+            render={
+              <Link
+                href={`/admin/libraries/${library.id}/versions/${version.id}/pages/${page.id}/edit`}
+              />
+            }
           >
             <Pencil className="size-4" />
             Edit

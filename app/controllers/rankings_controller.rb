@@ -7,33 +7,19 @@ class RankingsController < InertiaController
   disallow_account_scope
 
   def index
-    libraries = Library.includes(:versions).all
-
-    ranked = libraries.map { |lib| ranking_props(lib) }
-      .sort_by { |r| [ -r[:page_count], -r[:version_count] ] }
-      .each_with_index.map { |r, i| r.merge(rank: i + 1) }
-
-    pagy, paginated = pagy(:offset, ranked, limit: 10)
+    pagy, paginated = pagy(:offset, Library.ranked, limit: 10)
 
     render inertia: "rankings/index", props: {
-      libraries: paginated,
+      libraries: paginated.map.with_index { |lib, i| ranking_props(lib, rank: pagy.offset + i + 1) },
       pagination: pagination_props(pagy),
-      total_libraries: libraries.size
+      total_libraries: Library.count
     }
   end
 
   private
 
-    def ranking_props(library)
-      latest_version = library.versions.max_by(&:created_at)
-      page_count = latest_version&.pages_count || 0
-      version_count = library.versions.size
-      days_since_update = if latest_version&.created_at
-        ((Time.current - latest_version.created_at) / 1.day).to_i
-      else
-        999
-      end
-
+    def ranking_props(library, rank:)
+      days_since_update = library.latest_version_at ? ((Time.current - library.latest_version_at) / 1.day).to_i : 999
       freshness = [ 1.0 - (days_since_update / 365.0), 0.0 ].max
 
       {
@@ -41,10 +27,11 @@ class RankingsController < InertiaController
         display_name: library.display_name,
         homepage_url: library.homepage_url,
         source_type: library.source_type,
-        page_count: page_count,
-        version_count: version_count,
+        page_count: library.total_pages_count,
+        version_count: library.versions_count,
         freshness_pct: (freshness * 100).round,
-        updated_at: (latest_version&.created_at || library.updated_at).iso8601
+        updated_at: (library.latest_version_at || library.updated_at).iso8601,
+        rank: rank
       }
     end
 end

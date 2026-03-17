@@ -3,12 +3,13 @@
 module Admin
   module Libraries
     class RecrawlsController < Admin::BaseController
+      include Admin::LibraryScoped
+
       def create
-        library = Library.find(params[:library_id])
         url = params[:url].presence
 
         unless url
-          redirect_to admin_library_path(id: library.id), alert: "No crawl URL provided."
+          redirect_to admin_library_path(@library), alert: "No crawl URL provided."
           return
         end
 
@@ -16,13 +17,13 @@ module Admin
         crawl_request = CrawlRequest.new(
           url: url,
           identity: Current.identity,
-          library: library
+          library: @library
         )
 
         if crawl_request.save
-          redirect_to admin_library_path(id: library.id), notice: "Re-crawl queued for #{library.display_name}."
+          redirect_to admin_library_path(@library), notice: "Re-crawl queued for #{@library.display_name}."
         else
-          redirect_to admin_library_path(id: library.id),
+          redirect_to admin_library_path(@library),
                       alert: crawl_request.errors.full_messages.join(", ")
         end
       end

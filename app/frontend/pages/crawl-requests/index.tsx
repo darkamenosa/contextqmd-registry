@@ -36,6 +36,9 @@ interface CrawlRequestItem {
   librarySlug: string | null
   createdAt: string
   updatedAt: string
+  statusMessage: string | null
+  progressCurrent: number | null
+  progressTotal: number | null
 }
 
 interface Counts {
@@ -60,16 +63,36 @@ function stateDisplay(cr: CrawlRequestItem) {
       return (
         <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Clock className="size-3.5" />
-          Waiting
+          {cr.statusMessage || "Waiting"}
         </span>
       )
-    case "processing":
+    case "processing": {
+      const pct =
+        cr.progressCurrent && cr.progressTotal
+          ? Math.round((cr.progressCurrent / cr.progressTotal) * 100)
+          : null
       return (
-        <span className="flex items-center gap-1.5 text-sm text-primary">
-          <Loader2 className="size-3.5 animate-spin" />
-          Crawling...
-        </span>
+        <div className="flex flex-col gap-1">
+          <span className="flex items-center gap-1.5 text-sm text-primary">
+            <Loader2 className="size-3.5 animate-spin" />
+            {cr.statusMessage || "Crawling..."}
+          </span>
+          {pct !== null && (
+            <div className="flex items-center gap-2">
+              <div className="h-1.5 w-20 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary transition-all"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {cr.progressCurrent}/{cr.progressTotal}
+              </span>
+            </div>
+          )}
+        </div>
       )
+    }
     case "completed":
       return (
         <span className="flex items-center gap-1.5 text-sm text-green-600 dark:text-green-400">
