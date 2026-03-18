@@ -29,8 +29,10 @@ servers:
 proxy:
   ssl: true
   host: contextqmd.com
-  deploy_timeout: 120s
-  drain_timeout: 30s
+
+# Wait longer for containers to boot (migration with CREATE INDEX CONCURRENTLY)
+deploy_timeout: 120
+drain_timeout: 30
 
 # Credentials for your image host.
 registry:
