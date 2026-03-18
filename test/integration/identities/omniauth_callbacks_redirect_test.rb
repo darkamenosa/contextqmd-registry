@@ -3,6 +3,22 @@
 require "test_helper"
 
 class Identities::OmniauthCallbacksRedirectTest < ActionDispatch::IntegrationTest
+  setup do
+    @previous_omniauth_test_mode = OmniAuth.config.test_mode
+    @previous_google_mock_auth = OmniAuth.config.mock_auth[:google_oauth2]
+    OmniAuth.config.test_mode = true
+  end
+
+  teardown do
+    OmniAuth.config.test_mode = @previous_omniauth_test_mode
+
+    if @previous_google_mock_auth.nil?
+      OmniAuth.config.mock_auth.delete(:google_oauth2)
+    else
+      OmniAuth.config.mock_auth[:google_oauth2] = @previous_google_mock_auth
+    end
+  end
+
   test "google callback redirects to the stored location" do
     identity, account, = create_tenant(
       email: "oauth-redirect-#{SecureRandom.hex(4)}@gmail.com",
@@ -13,9 +29,7 @@ class Identities::OmniauthCallbacksRedirectTest < ActionDispatch::IntegrationTes
 
     assert_redirected_to new_identity_session_path
 
-    get identity_google_oauth2_omniauth_callback_path, env: {
-      "omniauth.auth" => omniauth_auth_hash_for(identity)
-    }
+    google_callback(identity)
 
     assert_redirected_to app_dashboard_path(account_id: account.external_account_id)
   end
@@ -33,9 +47,7 @@ class Identities::OmniauthCallbacksRedirectTest < ActionDispatch::IntegrationTes
 
     assert_no_difference -> { Account.count } do
       assert_no_difference -> { User.count } do
-        get identity_google_oauth2_omniauth_callback_path, env: {
-          "omniauth.auth" => omniauth_auth_hash_for(identity)
-        }
+        google_callback(identity)
       end
     end
 
@@ -51,9 +63,7 @@ class Identities::OmniauthCallbacksRedirectTest < ActionDispatch::IntegrationTes
     )
 
     assert_no_difference -> { Account.count } do
-      get identity_google_oauth2_omniauth_callback_path, env: {
-        "omniauth.auth" => omniauth_auth_hash_for(identity, authoritative: false)
-      }
+      google_callback(identity, authoritative: false)
     end
 
     assert_redirected_to new_identity_session_path
@@ -63,6 +73,11 @@ class Identities::OmniauthCallbacksRedirectTest < ActionDispatch::IntegrationTes
   end
 
   private
+    def google_callback(identity, authoritative: true)
+      OmniAuth.config.mock_auth[:google_oauth2] = omniauth_auth_hash_for(identity, authoritative:)
+      get identity_google_oauth2_omniauth_callback_path
+    end
+
     def omniauth_auth_hash_for(identity, authoritative: true)
       raw_info = {
         "email" => identity.email,

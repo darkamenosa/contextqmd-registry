@@ -59,7 +59,7 @@ module DocsFetcher
     def fetch(crawl_request, on_progress: nil)
       url = crawl_request.url
       repo_url = normalize_git_url(url)
-      explicit_ref = crawl_request.metadata&.dig("detected_ref").presence || extract_branch_from_url(url)
+      explicit_ref = crawl_metadata_for(crawl_request).dig("detected_ref").presence || extract_branch_from_url(url)
       @crawl_rules = load_crawl_rules(crawl_request)
 
       # Always clone the default branch for docs content — docs on main/master
@@ -156,6 +156,10 @@ module DocsFetcher
         return {} unless crawl_request.library_id.present?
 
         crawl_request.library&.crawl_rules || {}
+      end
+
+      def crawl_metadata_for(crawl_request)
+        crawl_request.respond_to?(:metadata) ? (crawl_request.metadata || {}) : {}
       end
 
       def effective_exclude_prefixes

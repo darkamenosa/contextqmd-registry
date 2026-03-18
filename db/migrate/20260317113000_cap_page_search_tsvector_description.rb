@@ -56,21 +56,21 @@ class CapPageSearchTsvectorDescription < ActiveRecord::Migration[8.1]
 
   private
 
-  def capped_search_tsvector_expression
-    weighted_search_tsvector_expression("left(coalesce(description, ''), #{INDEXED_DESCRIPTION_LIMIT})")
-  end
+    def capped_search_tsvector_expression
+      weighted_search_tsvector_expression("left(coalesce(description, ''), #{INDEXED_DESCRIPTION_LIMIT})")
+    end
 
-  def uncapped_search_tsvector_expression
-    weighted_search_tsvector_expression("coalesce(description, '')")
-  end
+    def uncapped_search_tsvector_expression
+      weighted_search_tsvector_expression("coalesce(description, '')")
+    end
 
-  def weighted_search_tsvector_expression(description_sql)
-    <<~SQL.squish
-      (
-        setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
-        setweight(to_tsvector('english', #{description_sql}), 'B') ||
-        setweight(to_tsvector('english', coalesce(path, '')), 'C')
-      )
-    SQL
-  end
+    def weighted_search_tsvector_expression(description_sql)
+      <<~SQL.squish
+        (
+          setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
+          setweight(to_tsvector('english', #{description_sql}), 'B') ||
+          setweight(to_tsvector('english', coalesce(path, '')), 'C')
+        )
+      SQL
+    end
 end
