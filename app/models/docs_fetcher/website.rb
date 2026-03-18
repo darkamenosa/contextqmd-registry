@@ -14,6 +14,10 @@ module DocsFetcher
       /\Aloading(?:\.\.\.)?\z/i
     ].freeze
 
+    def probe_version(url)
+      ruby_runner.probe_version(url)
+    end
+
     def fetch(crawl_request, on_progress: nil)
       runner = select_runner(crawl_request)
       result = runner.fetch(crawl_request, on_progress: on_progress)

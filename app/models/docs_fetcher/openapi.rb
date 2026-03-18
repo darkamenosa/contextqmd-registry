@@ -18,6 +18,23 @@ module DocsFetcher
 
     MAX_SIZE = 10_000_000 # 10MB
 
+    def probe_version(url)
+      uri = URI.parse(url.strip)
+      raw = http_get(uri)
+      return nil if raw.blank?
+
+      spec = parse_spec(raw)
+      return nil unless spec.is_a?(Hash)
+
+      version = extract_metadata(spec, uri)[:version]
+      return nil if version.blank?
+
+      {
+        version: version,
+        crawl_url: url
+      }
+    end
+
     def fetch(crawl_request, on_progress: nil)
       url = crawl_request.url
       uri = URI.parse(url.strip)

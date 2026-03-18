@@ -4,7 +4,22 @@ require "test_helper"
 require "json"
 
 class LibrariesShowSearchTest < ActionDispatch::IntegrationTest
+  include ActiveJob::TestHelper
+
   fixtures :accounts, :libraries, :versions, :pages, :source_policies
+
+  setup do
+    @original_queue_adapter = ActiveJob::Base.queue_adapter
+    ActiveJob::Base.queue_adapter = :test
+    clear_enqueued_jobs
+    clear_performed_jobs
+  end
+
+  teardown do
+    clear_enqueued_jobs
+    clear_performed_jobs
+    ActiveJob::Base.queue_adapter = @original_queue_adapter
+  end
 
   test "two-character search stays active and uses count-less pagination" do
     version = versions(:nextjs_stable)
@@ -52,6 +67,22 @@ class LibrariesShowSearchTest < ActionDispatch::IntegrationTest
     assert_nil page_props.dig("props", "pagination", "pages")
     assert_equal 30, page_props.dig("props", "pages").size
     assert_equal true, page_props.dig("props", "pagination", "hasNext")
+  end
+
+  test "show enqueues a source check when the primary source is overdue" do
+    library = libraries(:nextjs)
+    library.library_sources.create!(
+      url: "https://nextjs.org/docs",
+      source_type: "website",
+      primary: true,
+      next_version_check_at: 1.hour.ago
+    )
+
+    assert_enqueued_jobs 1, only: CheckLibrarySourceJob do
+      get "/libraries/nextjs"
+    end
+
+    assert_response :success
   end
 
   private

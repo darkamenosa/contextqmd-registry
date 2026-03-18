@@ -173,6 +173,16 @@ class DocsFetcher::OpenapiTest < ActiveSupport::TestCase
     assert_raises(DocsFetcher::PermanentFetchError) { fetcher.fetch(Struct.new(:url).new("https://example.com/api.json")) }
   end
 
+  test "probe_version extracts version from the spec" do
+    fetcher = DocsFetcher::Openapi.new
+    fetcher.define_singleton_method(:http_get) { |*_args, **_kw| SAMPLE_SPEC.to_json }
+
+    probe = fetcher.probe_version("https://example.com/openapi.json")
+
+    assert_equal "1.0.0", probe[:version]
+    assert_equal "https://example.com/openapi.json", probe[:crawl_url]
+  end
+
   test "slugify handles special characters" do
     assert_equal "hello-world", @fetcher.send(:slugify, "Hello World!")
     assert_equal "api-v20", @fetcher.send(:slugify, "API v2.0")

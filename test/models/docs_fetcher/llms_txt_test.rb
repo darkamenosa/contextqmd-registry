@@ -209,6 +209,31 @@ class DocsFetcher::LlmsTxtTest < ActiveSupport::TestCase
     assert_equal "Vite", metadata[:display_name]
   end
 
+  test "probe_version prefers llms-full when available" do
+    fetcher = DocsFetcher::LlmsTxt.new
+    responses = {
+      "https://example.com/llms-full.txt" => <<~MD,
+        # Example Docs
+
+        version: 2.0.0
+
+        #{'A' * 140}
+      MD
+      "https://example.com/llms.txt" => <<~MD
+        # Example Docs
+      MD
+    }
+
+    fetcher.define_singleton_method(:http_get) do |uri, **_kwargs|
+      responses[uri.to_s]
+    end
+
+    probe = fetcher.probe_version("https://example.com/llms.txt")
+
+    assert_equal "2.0.0", probe[:version]
+    assert_equal "https://example.com/llms.txt", probe[:crawl_url]
+  end
+
   # --- Fallback single page ---
 
   test "fallback_single_page returns a single page hash" do

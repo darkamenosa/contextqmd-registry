@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_17_044621) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_18_091500) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -237,16 +237,23 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_17_044621) do
 
   create_table "library_sources", force: :cascade do |t|
     t.boolean "active", default: true, null: false
+    t.integer "consecutive_no_change_checks", default: 0, null: false
     t.jsonb "crawl_rules", default: {}, null: false
     t.datetime "created_at", null: false
     t.datetime "last_crawled_at"
+    t.string "last_probe_signature"
+    t.datetime "last_version_change_at"
+    t.datetime "last_version_check_at"
     t.bigint "library_id", null: false
+    t.datetime "next_version_check_at"
     t.boolean "primary", default: false, null: false
     t.string "source_type", null: false
     t.datetime "updated_at", null: false
     t.string "url", null: false
+    t.datetime "version_check_claimed_at"
     t.index ["library_id", "primary"], name: "index_library_sources_on_library_id_and_primary", unique: true, where: "(\"primary\" = true)"
     t.index ["library_id"], name: "index_library_sources_on_library_id"
+    t.index ["next_version_check_at"], name: "index_library_sources_on_next_version_check_at"
     t.index ["url"], name: "index_library_sources_on_url", unique: true
   end
 
@@ -259,13 +266,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_17_044621) do
     t.string "page_uid"
     t.string "path"
     t.jsonb "previous_paths"
-    t.virtual "search_tsvector", type: :tsvector, as: "((setweight(to_tsvector('english'::regconfig, (COALESCE(title, ''::character varying))::text), 'A'::\"char\") || setweight(to_tsvector('english'::regconfig, COALESCE(description, ''::text)), 'B'::\"char\")) || setweight(to_tsvector('english'::regconfig, (COALESCE(path, ''::character varying))::text), 'C'::\"char\"))", stored: true
+    t.virtual "search_tsvector", type: :tsvector, as: "((setweight(to_tsvector('english'::regconfig, (COALESCE(title, ''::character varying))::text), 'A'::\"char\") || setweight(to_tsvector('english'::regconfig, \"left\"(COALESCE(description, ''::text), 400000)), 'B'::\"char\")) || setweight(to_tsvector('english'::regconfig, (COALESCE(path, ''::character varying))::text), 'C'::\"char\"))", stored: true
     t.string "source_ref"
     t.string "title"
     t.datetime "updated_at", null: false
     t.string "url"
     t.bigint "version_id", null: false
-    t.index "(((setweight(to_tsvector('english'::regconfig, (COALESCE(title, ''::character varying))::text), 'A'::\"char\") || setweight(to_tsvector('english'::regconfig, COALESCE(description, ''::text)), 'B'::\"char\")) || setweight(to_tsvector('english'::regconfig, (COALESCE(path, ''::character varying))::text), 'C'::\"char\")))", name: "index_pages_on_search", using: :gin
     t.index ["search_tsvector"], name: "index_pages_on_search_tsvector", using: :gin
     t.index ["version_id", "page_uid"], name: "index_pages_on_version_id_and_page_uid", unique: true
     t.index ["version_id"], name: "index_pages_on_version_id"

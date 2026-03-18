@@ -23,6 +23,7 @@ module Api
       end
 
       def show
+        @library.enqueue_primary_source_check_if_due!
         render_data(library_detail_json(@library))
       end
 

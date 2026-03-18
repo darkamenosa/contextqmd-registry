@@ -63,6 +63,35 @@ class CrawlRequestTest < ActiveSupport::TestCase
     assert_equal "website", cr.source_type
   end
 
+  test "preserves library source source_type for scheduled generic git crawls" do
+    _identity, account, _user = create_tenant(email: "scheduled-git-#{SecureRandom.hex(4)}@example.com")
+    library = Library.create!(
+      account: account,
+      namespace: "scheduled-git",
+      name: "repo",
+      slug: "scheduled-git",
+      display_name: "Scheduled Git"
+    )
+    source = library.library_sources.create!(
+      url: "https://git.example.com/team/repo",
+      source_type: "git",
+      primary: true
+    )
+
+    cr = CrawlRequest.new(
+      identity: @identity,
+      library: library,
+      library_source: source,
+      url: source.url,
+      source_type: source.source_type,
+      requested_bundle_visibility: "public",
+      status: "pending"
+    )
+
+    cr.valid?
+    assert_equal "git", cr.source_type
+  end
+
   # --- SSRF protection ---
 
   test "rejects localhost URLs" do

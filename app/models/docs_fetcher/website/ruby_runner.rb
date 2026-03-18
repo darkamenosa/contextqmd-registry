@@ -36,6 +36,26 @@ module DocsFetcher
         /account/ /admin/ /tag/ /category/ /author/ /feed/
       ].freeze
 
+      def probe_version(url)
+        uri = URI.parse(url.strip)
+        body = http_get(
+          uri,
+          raise_on_error: true,
+          user_agent: USER_AGENT,
+          accept: "text/html,application/xhtml+xml,application/xml,text/xml;q=0.9,*/*;q=0.8",
+          read_timeout: 10,
+          max_size: 250_000,
+          oversize: :truncate,
+          allowed_content_types: [ "text/html", "application/xhtml+xml", "application/xml", "text/xml" ]
+        )
+        return nil if body.blank?
+
+        {
+          signature: website_probe_signature(body),
+          crawl_url: url
+        }
+      end
+
       def fetch(crawl_request, on_progress: nil)
         url = crawl_request.url
         seed_uri = URI.parse(url.strip)
@@ -284,6 +304,43 @@ module DocsFetcher
           end
 
           "website:#{identifier}"
+        end
+
+        def website_probe_signature(body)
+          content = if sitemap_payload?(body)
+            sitemap_probe_content(body)
+          else
+            html_probe_content(body)
+          end
+
+          Digest::SHA256.hexdigest(content)
+        end
+
+        def sitemap_payload?(body)
+          snippet = body.to_s.lstrip
+          snippet.start_with?("<?xml", "<urlset", "<sitemapindex")
+        end
+
+        def sitemap_probe_content(body)
+          doc = Nokogiri::XML(body)
+          doc.remove_namespaces!
+          locations = doc.css("url > loc, sitemap > loc").map { |node| node.text.to_s.strip }.reject(&:blank?).first(1000)
+          locations.join("\n")
+        rescue StandardError
+          body.to_s
+        end
+
+        def html_probe_content(body)
+          doc = Nokogiri::HTML(body)
+          doc.css("script, style, noscript").remove
+
+          title = doc.at_css("title")&.text.to_s.squish
+          focus = doc.at_css("main") || doc.at_css("article") || doc.at_css("body") || doc
+          text = focus.text.to_s.squish.first(20_000)
+
+          [ title, text ].join("\n")
+        rescue StandardError
+          body.to_s
         end
     end
   end

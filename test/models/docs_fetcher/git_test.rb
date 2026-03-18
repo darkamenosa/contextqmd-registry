@@ -705,4 +705,17 @@ class DocsFetcher::GitTest < ActiveSupport::TestCase
       assert_not rel_paths.any? { |p| p.start_with?("i18n-guides/") }
     end
   end
+
+  test "probe_version returns latest stable tag and ref" do
+    original_method = @generic.method(:resolve_latest_tag)
+    @generic.define_singleton_method(:resolve_latest_tag) { |_repo_url| "v8.1.2" }
+
+    probe = @generic.probe_version("https://git.example.com/team/repo")
+
+    assert_equal "8.1.2", probe[:version]
+    assert_equal "v8.1.2", probe[:ref]
+    assert_equal "https://git.example.com/team/repo", probe[:crawl_url]
+  ensure
+    @generic.define_singleton_method(:resolve_latest_tag, original_method)
+  end
 end

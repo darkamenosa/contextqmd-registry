@@ -43,10 +43,23 @@ module DocsFetcher
       CLAUDE.md AGENTS.md GEMINI.md
     ].freeze
 
+    def probe_version(source_url)
+      repo_url = normalize_git_url(source_url)
+      ref = resolve_latest_tag(repo_url)
+      version = extract_version(ref)
+      return nil if version.blank?
+
+      {
+        version: version,
+        ref: ref,
+        crawl_url: source_url
+      }
+    end
+
     def fetch(crawl_request, on_progress: nil)
       url = crawl_request.url
       repo_url = normalize_git_url(url)
-      explicit_ref = extract_branch_from_url(url)
+      explicit_ref = crawl_request.metadata&.dig("detected_ref").presence || extract_branch_from_url(url)
       @crawl_rules = load_crawl_rules(crawl_request)
 
       # Always clone the default branch for docs content — docs on main/master

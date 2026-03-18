@@ -65,4 +65,24 @@ class PageTest < ActiveSupport::TestCase
 
     assert_includes sql, "search_tsvector"
   end
+
+  test "persists oversized page content without overflowing search_tsvector" do
+    huge_description = Array.new(120_000) { |i| "tok#{i}" }.join(" ")
+
+    page = Page.new(
+      version: versions(:nextjs_stable),
+      page_uid: "pg_huge_search_index",
+      path: "examples/huge.ipynb",
+      title: "Huge Notebook",
+      description: huge_description
+    )
+
+    assert_nothing_raised do
+      page.save!
+    end
+
+    page.reload
+    assert_operator page.description.bytesize, :>, 1_000_000
+    assert_includes Page.search_content("tok100").pluck(:id), page.id
+  end
 end

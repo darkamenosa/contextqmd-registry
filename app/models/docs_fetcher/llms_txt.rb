@@ -21,6 +21,29 @@ module DocsFetcher
     MAX_SIZE = 50_000_000       # 50 MB per fetched file
     MAX_TOTAL_BYTES = 20_000_000 # 20 MB total content budget
 
+    def probe_version(url)
+      uri = URI.parse(url.strip)
+      content = nil
+
+      if uri.path.end_with?("/llms.txt")
+        full_uri = uri.dup
+        full_uri.path = uri.path.sub(/\/llms\.txt\z/, "/llms-full.txt")
+        full_content = http_get(full_uri)
+        content = full_content if full_content && full_content.strip.length > 100
+      end
+
+      content ||= http_get(uri, raise_on_error: true)
+      return nil if content.blank?
+
+      version = extract_version(content)
+      return nil if version.blank?
+
+      {
+        version: version,
+        crawl_url: url
+      }
+    end
+
     def fetch(crawl_request, on_progress: nil)
       url = crawl_request.url
       uri = URI.parse(url.strip)

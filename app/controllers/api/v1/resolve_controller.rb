@@ -13,6 +13,8 @@ module Api
         library = find_library(query)
         return render_error(code: "not_found", message: "No library found for '#{query}'", status: :not_found) unless library
 
+        library.enqueue_primary_source_check_if_due!
+
         version = resolve_version(library, params[:version_hint])
         return render_error(code: "not_found", message: "No matching version found", status: :not_found) unless version
 

@@ -90,6 +90,17 @@ class Library < ApplicationRecord
     end
   end
 
+  def primary_library_source
+    library_sources.active.order(primary: :desc, updated_at: :desc).first
+  end
+
+  def enqueue_primary_source_check_if_due!(now: Time.current)
+    source = primary_library_source
+    return false unless source&.version_check_due?(now: now)
+
+    source.enqueue_version_check!(now: now)
+  end
+
   private
 
     def self.search_by_query(query)

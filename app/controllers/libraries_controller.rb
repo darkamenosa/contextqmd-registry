@@ -25,6 +25,7 @@ class LibrariesController < InertiaController
 
   def show
     library = Library.includes(:versions, :source_policy, :library_sources).find_by!(slug: params[:slug])
+    library.enqueue_primary_source_check_if_due!
     versions = library.versions.ordered
 
     selected_version = library.best_version(requested: params[:version])

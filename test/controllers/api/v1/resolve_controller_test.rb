@@ -5,7 +5,14 @@ require "test_helper"
 module Api
   module V1
     class ResolveControllerTest < ActionDispatch::IntegrationTest
+      include ActiveJob::TestHelper
+
       setup do
+        @original_queue_adapter = ActiveJob::Base.queue_adapter
+        ActiveJob::Base.queue_adapter = :test
+        clear_enqueued_jobs
+        clear_performed_jobs
+
         @identity, @account, = create_tenant(
           email: "api-resolve-#{SecureRandom.hex(4)}@example.com",
           name: "API Resolve"
@@ -42,9 +49,20 @@ module Api
           generated_at: 1.day.ago,
           source_url: "https://nextjs.org/docs"
         )
+        @source = @nextjs.library_sources.create!(
+          url: "https://nextjs.org/docs",
+          source_type: "website",
+          primary: true,
+          next_version_check_at: 1.hour.ago
+        )
       end
 
-      teardown { Current.reset }
+      teardown do
+        clear_enqueued_jobs
+        clear_performed_jobs
+        ActiveJob::Base.queue_adapter = @original_queue_adapter
+        Current.reset
+      end
 
       # -- Authentication --
 
@@ -199,6 +217,17 @@ module Api
 
         body = response.parsed_body
         assert_equal "not_found", body["error"]["code"]
+      end
+
+      test "POST /resolve enqueues a source check when the primary source is overdue" do
+        assert_enqueued_jobs 1, only: CheckLibrarySourceJob do
+          post api_v1_resolve_path,
+            params: { query: @nextjs.slug },
+            headers: auth_headers,
+            as: :json
+        end
+
+        assert_response :ok
       end
 
       private

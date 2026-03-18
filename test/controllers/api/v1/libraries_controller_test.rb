@@ -5,9 +5,16 @@ require "test_helper"
 module Api
   module V1
     class LibrariesControllerTest < ActionDispatch::IntegrationTest
+      include ActiveJob::TestHelper
+
       fixtures :accounts, :libraries, :versions, :pages, :source_policies
 
       setup do
+        @original_queue_adapter = ActiveJob::Base.queue_adapter
+        ActiveJob::Base.queue_adapter = :test
+        clear_enqueued_jobs
+        clear_performed_jobs
+
         @identity, @account, = create_tenant(
           email: "lib-test-#{SecureRandom.hex(4)}@example.com",
           name: "Library Test"
@@ -21,9 +28,20 @@ module Api
         # Use fixture libraries (vercel/nextjs and rails/rails from libraries.yml)
         @nextjs = libraries(:nextjs)
         @rails_lib = libraries(:rails)
+        @nextjs.library_sources.create!(
+          url: "https://nextjs.org/docs",
+          source_type: "website",
+          primary: true,
+          next_version_check_at: 1.hour.ago
+        )
       end
 
-      teardown { Current.reset }
+      teardown do
+        clear_enqueued_jobs
+        clear_performed_jobs
+        ActiveJob::Base.queue_adapter = @original_queue_adapter
+        Current.reset
+      end
 
       # -- GET /api/v1/libraries (index) --
 
@@ -169,6 +187,14 @@ module Api
         body = response.parsed_body
         assert body.key?("error"), "Response should include 'error' key"
         assert_equal "not_found", body["error"]["code"]
+      end
+
+      test "show enqueues a source check when the primary source is overdue" do
+        assert_enqueued_jobs 1, only: CheckLibrarySourceJob do
+          get "/api/v1/libraries/nextjs", headers: auth_headers
+        end
+
+        assert_response :ok
       end
 
       private

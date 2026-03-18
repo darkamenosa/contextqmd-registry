@@ -32,6 +32,21 @@ class DocsFetcher::WebsiteTest < ActiveSupport::TestCase
     assert_instance_of DocsFetcher::Website::RubyRunner, runner
   end
 
+  test "Website probe delegates to RubyRunner" do
+    website = DocsFetcher::Website.new
+    ruby_runner = Struct.new(:probe) do
+      def probe_version(_url)
+        probe
+      end
+    end.new({ signature: "abc123", crawl_url: "https://docs.example.com" })
+
+    website.define_singleton_method(:ruby_runner) { ruby_runner }
+
+    probe = website.probe_version("https://docs.example.com")
+
+    assert_equal "abc123", probe[:signature]
+  end
+
   test "Website selects NodeRunner when crawl metadata requests it" do
     website = DocsFetcher::Website.new
     ruby_runner = StubRunner.new
@@ -463,5 +478,27 @@ class DocsFetcher::WebsiteTest < ActiveSupport::TestCase
     base = URI.parse("https://example.com/docs/")
     resolved = @fetcher.send(:resolve_url, "page#heading", base)
     assert_equal "https://example.com/docs/page", resolved.to_s
+  end
+
+  test "probe_version builds a stable signature from HTML content" do
+    fetcher = DocsFetcher::Website::RubyRunner.new
+    html = <<~HTML
+      <html>
+        <head><title>Example Docs</title></head>
+        <body>
+          <main>
+            <h1>Welcome</h1>
+            <p>Install the package.</p>
+          </main>
+        </body>
+      </html>
+    HTML
+
+    fetcher.define_singleton_method(:http_get) { |_uri, **_kwargs| html }
+
+    probe = fetcher.probe_version("https://docs.example.com")
+
+    assert_equal "https://docs.example.com", probe[:crawl_url]
+    assert_match(/\A[0-9a-f]{64}\z/, probe[:signature])
   end
 end
