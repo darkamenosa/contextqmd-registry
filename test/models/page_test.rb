@@ -60,30 +60,24 @@ class PageTest < ActiveSupport::TestCase
     assert_equal versions(:nextjs_stable), page.version
   end
 
-  test "search_content caps description length in the search expression" do
+  test "search_content uses plain description in the search expression" do
     sql = Page.search_content("install").to_sql
 
-    assert_includes sql, %(left("pages"."description", 400000))
+    assert_includes sql, %(coalesce(("pages"."description")::text, ''))
+    assert_not_includes sql, "left("
     assert_not_includes sql, "search_tsvector"
   end
 
-  test "persists oversized page content without overflowing search_tsvector" do
-    huge_description = Array.new(120_000) { |i| "tok#{i}" }.join(" ")
-
+  test "rejects descriptions exceeding 500_000 characters" do
     page = Page.new(
       version: versions(:nextjs_stable),
-      page_uid: "pg_huge_search_index",
+      page_uid: "pg_huge_description",
       path: "examples/huge.ipynb",
       title: "Huge Notebook",
-      description: huge_description
+      description: "x" * 500_001
     )
 
-    assert_nothing_raised do
-      page.save!
-    end
-
-    page.reload
-    assert_operator page.description.bytesize, :>, 1_000_000
-    assert_includes Page.search_content("tok100").pluck(:id), page.id
+    assert_not page.valid?
+    assert_includes page.errors[:description], "is too long (maximum is 500000 characters)"
   end
 end
