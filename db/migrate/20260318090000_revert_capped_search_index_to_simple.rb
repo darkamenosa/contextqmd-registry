@@ -4,12 +4,19 @@ class RevertCappedSearchIndexToSimple < ActiveRecord::Migration[8.1]
   disable_ddl_transaction!
 
   def up
-    # Drop any invalid index left by a failed concurrent create
+    # Drop invalid index left by failed concurrent create on production
     execute <<~SQL
       DROP INDEX CONCURRENTLY IF EXISTS index_pages_on_search_capped;
     SQL
 
-    # Recreate the original simple expression index (no description cap)
+    # Drop leftover indexes from previous migrations
+    remove_index :pages, name: "index_pages_on_search_tsvector", if_exists: true, algorithm: :concurrently
+    remove_index :pages, name: "index_pages_on_search", if_exists: true, algorithm: :concurrently
+
+    # Drop stored generated column if it still exists (from 20260316094500)
+    remove_column :pages, :search_tsvector if column_exists?(:pages, :search_tsvector)
+
+    # Recreate the simple expression index (no description cap)
     execute <<~SQL
       CREATE INDEX CONCURRENTLY IF NOT EXISTS index_pages_on_search
       ON pages
@@ -24,20 +31,6 @@ class RevertCappedSearchIndexToSimple < ActiveRecord::Migration[8.1]
   end
 
   def down
-    execute <<~SQL
-      DROP INDEX CONCURRENTLY IF EXISTS index_pages_on_search;
-    SQL
-
-    execute <<~SQL
-      CREATE INDEX CONCURRENTLY IF NOT EXISTS index_pages_on_search_capped
-      ON pages
-      USING gin (
-        (
-          setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
-          setweight(to_tsvector('english', left(coalesce(description, ''), 400000)), 'B') ||
-          setweight(to_tsvector('english', coalesce(path, '')), 'C')
-        )
-      );
-    SQL
+    remove_index :pages, name: "index_pages_on_search", if_exists: true, algorithm: :concurrently
   end
 end
