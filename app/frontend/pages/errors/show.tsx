@@ -1,4 +1,4 @@
-import { Head, Link } from "@inertiajs/react"
+import { Link } from "@inertiajs/react"
 import { ArrowLeft, Home } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -12,8 +12,7 @@ interface Props {
 
 export default function ErrorPage({ status, title, message }: Props) {
   return (
-    <PublicLayout>
-      <Head title={title} />
+    <PublicLayout title={title} seo={{ noindex: true }}>
       <main className="flex flex-1 items-center justify-center px-4 py-24">
         <div className="flex flex-col items-center gap-6 text-center">
           <div className="relative">

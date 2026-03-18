@@ -10,6 +10,7 @@ module Api
       rate_limit to: 300, within: 1.minute, by: -> { request.remote_ip }
 
       before_action :authenticate_api_token!
+      after_action { response.headers["X-Robots-Tag"] = "noindex" }
 
       rescue_from ActionController::ParameterMissing do |e|
         render_error(code: "bad_request", message: e.message, status: :bad_request)
