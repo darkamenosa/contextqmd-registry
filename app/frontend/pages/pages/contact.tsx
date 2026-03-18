@@ -3,9 +3,22 @@ import { Github, Mail } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import PublicLayout from "@/layouts/public-layout"
 
-export default function Contact() {
+interface SeoData {
+  title?: string
+  description?: string
+  url?: string
+  type?: "website" | "article" | "product"
+  noindex?: boolean
+  image?: string
+}
+
+interface Props {
+  seo?: SeoData
+}
+
+export default function Contact({ seo }: Props) {
   return (
-    <PublicLayout title="Contact">
+    <PublicLayout seo={seo}>
       <section className="mx-auto max-w-7xl px-4 pt-8 pb-12 sm:px-6 sm:pt-16 sm:pb-20 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
           <p className="text-sm font-medium tracking-widest text-muted-foreground uppercase">

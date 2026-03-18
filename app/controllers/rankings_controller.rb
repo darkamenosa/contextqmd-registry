@@ -12,7 +12,12 @@ class RankingsController < InertiaController
     render inertia: "rankings/index", props: {
       libraries: paginated.map.with_index { |lib, i| ranking_props(lib, rank: pagy.offset + i + 1) },
       pagination: pagination_props(pagy),
-      total_libraries: Library.count
+      total_libraries: Library.count,
+      seo: seo_props(
+        title: "Rankings",
+        description: "Documentation coverage rankings for libraries on ContextQMD. Sorted by page count, versions, and freshness.",
+        url: canonical_url(allowed_params: [ :page ])
+      )
     }
   end
 

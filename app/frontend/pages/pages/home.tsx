@@ -40,10 +40,20 @@ interface LibraryItem {
   updatedAt: string
 }
 
+interface SeoData {
+  title?: string
+  description?: string
+  url?: string
+  type?: "website" | "article" | "product"
+  noindex?: boolean
+  image?: string
+}
+
 interface Props {
   libraryCount: number
   libraries: LibraryItem[]
   activeTab: string
+  seo?: SeoData
 }
 
 const mcpConfig = `{
@@ -178,7 +188,12 @@ function TableFooter({ libraryCount }: { libraryCount: number }) {
   )
 }
 
-export default function Home({ libraryCount, libraries, activeTab }: Props) {
+export default function Home({
+  libraryCount,
+  libraries,
+  activeTab,
+  seo,
+}: Props) {
   const [search, setSearch] = useState("")
 
   function handleSearch(e: FormEvent) {
@@ -193,13 +208,7 @@ export default function Home({ libraryCount, libraries, activeTab }: Props) {
   }
 
   return (
-    <PublicLayout
-      title="ContextQMD — Local-First Docs for AI"
-      seo={{
-        description:
-          "Local-first documentation package system for CLI and MCP. Install, search, and retrieve version-aware docs for any library.",
-      }}
-    >
+    <PublicLayout seo={seo}>
       {/* Hero */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_30%_20%,_var(--muted)_0%,_transparent_50%)]" />

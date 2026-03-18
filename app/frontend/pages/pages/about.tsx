@@ -44,9 +44,22 @@ const techStack = [
   },
 ]
 
-export default function About() {
+interface SeoData {
+  title?: string
+  description?: string
+  url?: string
+  type?: "website" | "article" | "product"
+  noindex?: boolean
+  image?: string
+}
+
+interface Props {
+  seo?: SeoData
+}
+
+export default function About({ seo }: Props) {
   return (
-    <PublicLayout title="About">
+    <PublicLayout seo={seo}>
       <section className="mx-auto max-w-7xl px-4 pt-8 pb-6 sm:px-6 sm:pt-16 sm:pb-12 lg:px-8">
         <div className="mx-auto max-w-3xl">
           <p className="text-sm font-medium tracking-widest text-muted-foreground uppercase">

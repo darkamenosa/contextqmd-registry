@@ -3,6 +3,7 @@
 class InertiaController < ApplicationController
   include InertiaFlash
   include InertiaUtils
+  include SeoHelper
 
   # Share data with all Inertia responses
   inertia_share current_user: -> { current_user_props }

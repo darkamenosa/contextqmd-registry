@@ -28,7 +28,13 @@ class CrawlRequestsController < InertiaController
         processing: CrawlRequest.processing.count,
         completed: CrawlRequest.completed.count,
         failed: CrawlRequest.failed.count
-      }
+      },
+      seo: seo_props(
+        title: "Documentation Queue",
+        description: "Live crawl queue for ContextQMD. See active, pending, and completed documentation indexing requests.",
+        url: canonical_url(allowed_params: [ :page ]),
+        noindex: true
+      )
     }
   end
 

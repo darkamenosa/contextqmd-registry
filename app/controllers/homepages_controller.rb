@@ -12,7 +12,12 @@ class HomepagesController < InertiaController
     render inertia: "pages/home", props: {
       library_count: Library.count,
       libraries: Library.public_send(tab).limit(10).map { |lib| home_library_props(lib) },
-      active_tab: tab
+      active_tab: tab,
+      seo: seo_props(
+        title: "ContextQMD — Local-First Docs for AI",
+        description: "Local-first documentation package system for CLI and MCP. Install, search, and retrieve version-aware docs for any library.",
+        url: canonical_url(path: "/")
+      )
     }
   end
 

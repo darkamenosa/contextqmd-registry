@@ -18,7 +18,12 @@ class Libraries::PagesController < InertiaController
     render inertia: "libraries/page-show", props: {
       library: library_summary(library),
       version: params[:version],
-      page: full_page_props(page)
+      page: full_page_props(page),
+      seo: seo_props(
+        title: "#{page.title} - #{library.display_name}",
+        description: page_meta_description(page, library),
+        url: canonical_url
+      )
     }
   rescue ActiveRecord::RecordNotFound
     redirect_to libraries_path, alert: "Page not found"
@@ -31,6 +36,11 @@ class Libraries::PagesController < InertiaController
         slug: library.slug,
         display_name: library.display_name
       }
+    end
+
+    def page_meta_description(page, library)
+      snippet = page.description.to_s.gsub(/[#*`\[\]\n]/, " ").squish.truncate(140, omission: "...")
+      snippet.present? ? "#{snippet} — #{library.display_name} docs on ContextQMD." : "#{page.title} — #{library.display_name} documentation on ContextQMD."
     end
 
     def full_page_props(page)

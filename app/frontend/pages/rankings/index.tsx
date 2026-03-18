@@ -36,10 +36,20 @@ interface RankedLibrary {
   updatedAt: string
 }
 
+interface SeoData {
+  title?: string
+  description?: string
+  url?: string
+  type?: "website" | "article" | "product"
+  noindex?: boolean
+  image?: string
+}
+
 interface Props {
   libraries: RankedLibrary[]
   pagination: PaginationData
   totalLibraries: number
+  seo?: SeoData
 }
 
 function RankBadge({ rank }: { rank: number }) {
@@ -98,15 +108,10 @@ export default function RankingsIndex({
   libraries,
   pagination,
   totalLibraries,
+  seo,
 }: Props) {
   return (
-    <PublicLayout
-      title="Rankings — ContextQMD"
-      seo={{
-        description:
-          "Documentation coverage rankings for libraries on ContextQMD. Sorted by page count, versions, and freshness.",
-      }}
-    >
+    <PublicLayout seo={seo}>
       <section className="mx-auto max-w-7xl px-4 pt-8 pb-6 sm:px-6 sm:pt-16 sm:pb-12 lg:px-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>

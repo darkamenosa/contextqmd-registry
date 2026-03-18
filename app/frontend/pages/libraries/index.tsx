@@ -24,16 +24,27 @@ interface LibraryItem {
   sourceType: string | null
 }
 
+interface SeoData {
+  title?: string
+  description?: string
+  url?: string
+  type?: "website" | "article" | "product"
+  noindex?: boolean
+  image?: string
+}
+
 interface Props {
   libraries: LibraryItem[]
   pagination: PaginationData
   query: string
+  seo?: SeoData
 }
 
 export default function LibrariesIndex({
   libraries,
   pagination,
   query,
+  seo,
 }: Props) {
   const [search, setSearch] = useState(query)
 
@@ -46,7 +57,7 @@ export default function LibrariesIndex({
   }
 
   return (
-    <PublicLayout title="Libraries">
+    <PublicLayout seo={seo}>
       <section className="mx-auto max-w-7xl px-4 pt-8 pb-6 sm:px-6 sm:pt-16 sm:pb-12 lg:px-8">
         <div className="mx-auto max-w-3xl text-center">
           <h1 className="text-3xl font-bold tracking-tight sm:text-5xl">

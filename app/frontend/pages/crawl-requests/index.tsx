@@ -48,11 +48,21 @@ interface Counts {
   failed: number
 }
 
+interface SeoData {
+  title?: string
+  description?: string
+  url?: string
+  type?: "website" | "article" | "product"
+  noindex?: boolean
+  image?: string
+}
+
 interface Props {
   crawlRequests: CrawlRequestItem[]
   pagination: PaginationData
   activeTab: string
   counts: Counts
+  seo?: SeoData
 }
 
 // --- Helpers ---
@@ -264,6 +274,7 @@ export default function CrawlRequestsIndex({
   pagination,
   activeTab,
   counts,
+  seo,
 }: Props) {
   const activeCount = counts.pending + counts.processing
   const completedCount = counts.completed + counts.failed
@@ -273,7 +284,7 @@ export default function CrawlRequestsIndex({
   }
 
   return (
-    <PublicLayout title="Documentation Queue">
+    <PublicLayout seo={seo}>
       <section className="mx-auto max-w-7xl px-4 pt-8 pb-6 sm:px-6 sm:pt-16 sm:pb-12 lg:px-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>

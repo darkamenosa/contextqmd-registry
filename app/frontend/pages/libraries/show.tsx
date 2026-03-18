@@ -70,6 +70,15 @@ interface PageItem {
   content: string | null
 }
 
+interface SeoData {
+  title?: string
+  description?: string
+  url?: string
+  type?: "website" | "article" | "product"
+  noindex?: boolean
+  image?: string
+}
+
 interface Props {
   library: LibraryDetail
   versions: VersionItem[]
@@ -88,6 +97,7 @@ interface Props {
   }
   search: string
   searchActive: boolean
+  seo?: SeoData
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -196,6 +206,7 @@ export default function LibraryShow({
   pagination,
   search: initialSearch,
   searchActive,
+  seo,
 }: Props) {
   const [expandedPage, setExpandedPage] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState(initialSearch)
@@ -273,7 +284,7 @@ get_doc({ library: "${slug}", version: "${sampleVersion}", doc_path: "${samplePa
   const apiPages = `curl /api/v1/libraries/${slug}/versions/${selectedVersion || "latest"}/page-index`
 
   return (
-    <PublicLayout title={`${library.displayName} — ContextQMD`}>
+    <PublicLayout seo={seo}>
       <section className="mx-auto max-w-7xl px-4 pt-6 pb-4 sm:px-6 sm:pt-8 sm:pb-6 lg:px-8">
         {/* Back link */}
         <Button

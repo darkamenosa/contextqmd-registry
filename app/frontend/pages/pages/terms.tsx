@@ -1,8 +1,21 @@
 import PublicLayout from "@/layouts/public-layout"
 
-export default function Terms() {
+interface SeoData {
+  title?: string
+  description?: string
+  url?: string
+  type?: "website" | "article" | "product"
+  noindex?: boolean
+  image?: string
+}
+
+interface Props {
+  seo?: SeoData
+}
+
+export default function Terms({ seo }: Props) {
   return (
-    <PublicLayout title="Terms of Service">
+    <PublicLayout seo={seo}>
       <section className="mx-auto max-w-3xl px-4 pt-8 pb-12 sm:px-6 sm:pt-16 sm:pb-20 lg:px-8">
         <p className="text-sm font-medium tracking-widest text-muted-foreground uppercase">
           Legal

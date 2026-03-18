@@ -19,7 +19,13 @@ class LibrariesController < InertiaController
     render inertia: "libraries/index", props: {
       libraries: paginated.map { |lib| library_props(lib) },
       pagination: pagination_props(pagy),
-      query: params[:query] || ""
+      query: params[:query] || "",
+      seo: seo_props(
+        title: "Libraries",
+        description: "Browse version-aware documentation packages for libraries. Search, install, and use with CLI or MCP.",
+        url: canonical_url(allowed_params: [ :page ]),
+        noindex: params[:query].present? ? true : nil
+      )
     }
   end
 
@@ -52,7 +58,13 @@ class LibrariesController < InertiaController
       selected_version: selected_version&.version,
       pagination: pagination_props(pagy),
       search: search_query,
-      search_active: search_active
+      search_active: search_active,
+      seo: seo_props(
+        title: "#{library.display_name} Documentation",
+        description: library_meta_description(library),
+        url: canonical_url(path: "/libraries/#{library.slug}", allowed_params: [ :page ]),
+        noindex: search_active ? true : nil
+      )
     }
   rescue ActiveRecord::RecordNotFound
     redirect_to libraries_path, alert: "Library not found"
@@ -125,6 +137,14 @@ class LibrariesController < InertiaController
     def truncate_content(content)
       return nil unless content
       content.length > 5000 ? "#{content[0, 5000]}..." : content
+    end
+
+    def library_meta_description(library)
+      parts = [ library.display_name, "documentation" ]
+      parts << "— #{library.versions.size} versions" if library.versions.size > 0
+      parts << "and #{library.total_pages_count} pages" if library.total_pages_count > 0
+      parts << "on ContextQMD. Install, search, and retrieve version-aware docs."
+      parts.join(" ")
     end
 
     def manual_library_params
