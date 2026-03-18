@@ -18,6 +18,21 @@ module SeoHelper
       ENV.fetch("APP_HOST", "contextqmd.com")
     end
 
+    def breadcrumb_json_ld(items)
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        itemListElement: items.each_with_index.map { |item, i|
+          {
+            "@type": "ListItem",
+            position: i + 1,
+            name: item[:name],
+            item: item[:url]
+          }
+        }
+      }
+    end
+
     def seo_props(title: nil, description: nil, url: nil, type: nil, noindex: nil, image: nil)
       props = {}
       props[:title] = title if title

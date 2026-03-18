@@ -54,6 +54,7 @@ interface Props {
   libraries: LibraryItem[]
   activeTab: string
   seo?: SeoData
+  jsonLd?: object
 }
 
 const mcpConfig = `{
@@ -193,6 +194,7 @@ export default function Home({
   libraries,
   activeTab,
   seo,
+  jsonLd,
 }: Props) {
   const [search, setSearch] = useState("")
 
@@ -208,7 +210,7 @@ export default function Home({
   }
 
   return (
-    <PublicLayout seo={seo}>
+    <PublicLayout seo={seo} jsonLd={jsonLd}>
       {/* Hero */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_30%_20%,_var(--muted)_0%,_transparent_50%)]" />

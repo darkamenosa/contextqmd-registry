@@ -17,11 +17,21 @@ class HomepagesController < InertiaController
         title: "ContextQMD — Local-First Docs for AI",
         description: "Local-first documentation package system for CLI and MCP. Install, search, and retrieve version-aware docs for any library.",
         url: canonical_url(path: "/")
-      )
+      ),
+      json_ld: website_json_ld
     }
   end
 
   private
+
+    def website_json_ld
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        name: "ContextQMD",
+        url: "https://#{canonical_host}/"
+      }
+    end
 
     def home_library_props(library)
       {

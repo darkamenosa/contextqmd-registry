@@ -64,7 +64,11 @@ class LibrariesController < InertiaController
         description: library_meta_description(library),
         url: canonical_url(path: "/libraries/#{library.slug}", allowed_params: [ :page ]),
         noindex: search_active ? true : nil
-      )
+      ),
+      json_ld: breadcrumb_json_ld([
+        { name: "Libraries", url: "https://#{canonical_host}/libraries" },
+        { name: library.display_name, url: "https://#{canonical_host}/libraries/#{library.slug}" }
+      ])
     }
   rescue ActiveRecord::RecordNotFound
     redirect_to libraries_path, alert: "Library not found"

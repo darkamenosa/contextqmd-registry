@@ -98,6 +98,7 @@ interface Props {
   search: string
   searchActive: boolean
   seo?: SeoData
+  jsonLd?: object
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -207,6 +208,7 @@ export default function LibraryShow({
   search: initialSearch,
   searchActive,
   seo,
+  jsonLd,
 }: Props) {
   const [expandedPage, setExpandedPage] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState(initialSearch)
@@ -284,7 +286,7 @@ get_doc({ library: "${slug}", version: "${sampleVersion}", doc_path: "${samplePa
   const apiPages = `curl /api/v1/libraries/${slug}/versions/${selectedVersion || "latest"}/page-index`
 
   return (
-    <PublicLayout seo={seo}>
+    <PublicLayout seo={seo} jsonLd={jsonLd}>
       <section className="mx-auto max-w-7xl px-4 pt-6 pb-4 sm:px-6 sm:pt-8 sm:pb-6 lg:px-8">
         {/* Back link */}
         <Button

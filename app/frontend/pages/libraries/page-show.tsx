@@ -47,6 +47,7 @@ interface Props {
   version: string
   page: PageDetail
   seo?: SeoData
+  jsonLd?: object
 }
 
 function CopyMarkdownButton({ content }: { content: string }) {
@@ -80,11 +81,12 @@ export default function LibraryPageShow({
   version,
   page,
   seo,
+  jsonLd,
 }: Props) {
   const slug = library.slug
 
   return (
-    <PublicLayout seo={seo}>
+    <PublicLayout seo={seo} jsonLd={jsonLd}>
       <section className="mx-auto max-w-7xl px-4 pt-6 pb-8 sm:px-6 sm:pt-8 sm:pb-12 lg:px-8">
         {/* Back link */}
         <Button
