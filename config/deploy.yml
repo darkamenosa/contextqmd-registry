@@ -29,6 +29,8 @@ servers:
 proxy:
   ssl: true
   host: contextqmd.com
+  deploy_timeout: 120s
+  drain_timeout: 30s
 
 # Credentials for your image host.
 registry:
