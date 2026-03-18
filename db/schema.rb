@@ -266,13 +266,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_18_091500) do
     t.string "page_uid"
     t.string "path"
     t.jsonb "previous_paths"
-    t.virtual "search_tsvector", type: :tsvector, as: "((setweight(to_tsvector('english'::regconfig, (COALESCE(title, ''::character varying))::text), 'A'::\"char\") || setweight(to_tsvector('english'::regconfig, \"left\"(COALESCE(description, ''::text), 400000)), 'B'::\"char\")) || setweight(to_tsvector('english'::regconfig, (COALESCE(path, ''::character varying))::text), 'C'::\"char\"))", stored: true
     t.string "source_ref"
     t.string "title"
     t.datetime "updated_at", null: false
     t.string "url"
     t.bigint "version_id", null: false
-    t.index ["search_tsvector"], name: "index_pages_on_search_tsvector", using: :gin
+    t.index "(((setweight(to_tsvector('english'::regconfig, (COALESCE(title, ''::character varying))::text), 'A'::\"char\") || setweight(to_tsvector('english'::regconfig, \"left\"(COALESCE(description, ''::text), 400000)), 'B'::\"char\")) || setweight(to_tsvector('english'::regconfig, (COALESCE(path, ''::character varying))::text), 'C'::\"char\")))", name: "index_pages_on_search_capped", using: :gin
     t.index ["version_id", "page_uid"], name: "index_pages_on_version_id_and_page_uid", unique: true
     t.index ["version_id"], name: "index_pages_on_version_id"
   end

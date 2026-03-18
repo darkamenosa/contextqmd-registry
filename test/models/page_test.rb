@@ -60,10 +60,11 @@ class PageTest < ActiveSupport::TestCase
     assert_equal versions(:nextjs_stable), page.version
   end
 
-  test "search_content uses the stored search_tsvector column" do
+  test "search_content caps description length in the search expression" do
     sql = Page.search_content("install").to_sql
 
-    assert_includes sql, "search_tsvector"
+    assert_includes sql, %(left("pages"."description", 400000))
+    assert_not_includes sql, "search_tsvector"
   end
 
   test "persists oversized page content without overflowing search_tsvector" do
