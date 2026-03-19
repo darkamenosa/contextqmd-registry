@@ -174,7 +174,7 @@ GEM
       actionpack (>= 6.0.0)
       activesupport (>= 6.0.0)
       railties (>= 6.0.0)
-    inertia_rails (3.17.0)
+    inertia_rails (3.18.0)
       railties (>= 6)
     io-console (0.8.2)
     irb (1.17.0)
@@ -532,7 +532,7 @@ DEPENDENCIES
   devise (~> 5.0)
   dotenv-rails
   image_processing (~> 1.2)
-  inertia_rails (~> 3.17)
+  inertia_rails (~> 3.18)
   jbuilder
   js-routes (~> 2.3)
   kamal
@@ -618,7 +618,7 @@ CHECKSUMS
   i18n (1.14.8) sha256=285778639134865c5e0f6269e0b818256017e8cde89993fdfcbfb64d088824a5
   image_processing (1.14.0) sha256=754cc169c9c262980889bec6bfd325ed1dafad34f85242b5a07b60af004742fb
   importmap-rails (2.2.3) sha256=7101be2a4dc97cf1558fb8f573a718404c5f6bcfe94f304bf1f39e444feeb16a
-  inertia_rails (3.17.0) sha256=67d8975904f96fd924ec279eeda0bdeb2958afcc2b6b456123e00b52d617e35c
+  inertia_rails (3.18.0) sha256=b351448078bbf28b0bb64d878ece45c8eeb4e019fcbafb7e3bb559e57b139749
   io-console (0.8.2) sha256=d6e3ae7a7cc7574f4b8893b4fca2162e57a825b223a177b7afa236c5ef9814cc
   irb (1.17.0) sha256=168c4ddb93d8a361a045c41d92b2952c7a118fa73f23fe14e55609eb7a863aae
   jbuilder (2.14.1) sha256=4eb26376ff60ef100cb4fd6fd7533cd271f9998327e86adf20fd8c0e69fabb42
