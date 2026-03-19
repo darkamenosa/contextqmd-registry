@@ -3,6 +3,9 @@
 <% @sitemaps.each do |sitemap| %>
   <sitemap>
     <loc><%= sitemap[:loc] %></loc>
+<% if sitemap[:lastmod] %>
+    <lastmod><%= sitemap[:lastmod].iso8601 %></lastmod>
+<% end %>
   </sitemap>
 <% end %>
 </sitemapindex>

@@ -1,9 +1,16 @@
 User-agent: *
+Allow: /
 Disallow: /app/
 Disallow: /admin/
 Disallow: /api/
 Disallow: /crawl
 Disallow: /errors/
+
+# Block query params that create duplicate content
+Disallow: /*?*query=*
+Disallow: /*?*search=*
+Disallow: /*?*version=*
+Disallow: /*?*page=*
 
 # Block aggressive scrapers / content farms
 User-agent: Bytespider
@@ -11,5 +18,15 @@ Disallow: /
 
 User-agent: CCBot
 Disallow: /
+
+# Crawl delay for SEO tool bots
+User-agent: AhrefsBot
+Crawl-delay: 10
+
+User-agent: SemrushBot
+Crawl-delay: 10
+
+User-agent: MJ12bot
+Crawl-delay: 10
 
 Sitemap: https://contextqmd.com/sitemap.xml

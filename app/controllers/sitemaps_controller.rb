@@ -36,6 +36,7 @@ class SitemapsController < ApplicationController
 
     if stale?(last_modified: latest_update, public: true)
       @host = default_host
+      @latest_update = latest_update
       @sitemaps = build_sitemap_entries(latest_update)
       expires_in 6.hours, public: true
       render formats: :xml
@@ -45,25 +46,28 @@ class SitemapsController < ApplicationController
   private
 
     def build_sitemap_entries(cache_version)
+      lib_lastmod = Library.not_cancelled.maximum(:updated_at)
+      page_lastmod = Page.maximum(:updated_at)
+
       entries = []
-      entries << { loc: "#{@host}/sitemap_static_1.xml" }
-      entries.concat(library_entries(cache_version))
-      entries.concat(page_entries(cache_version))
+      entries << { loc: "#{@host}/sitemap_static_1.xml", lastmod: Time.current.beginning_of_day }
+      entries.concat(library_entries(cache_version, lib_lastmod))
+      entries.concat(page_entries(cache_version, page_lastmod))
       entries
     end
 
-    def library_entries(cache_version)
+    def library_entries(cache_version, lastmod)
       chunks = Rails.cache.fetch("sitemap:library_chunks:#{cache_version.to_i}") do
         Library.not_cancelled.order(:id).pluck(:id).each_slice(PER_SITEMAP).map { |c| [ c.first, c.last ] }
       end
 
       chunks.each_with_index.map do |range, i|
         # Use raw & — ERB will escape to &amp; in the XML template
-        { loc: "#{@host}/sitemap_libraries_#{i + 1}.xml?from=#{range.first}&to=#{range.last}" }
+        { loc: "#{@host}/sitemap_libraries_#{i + 1}.xml?from=#{range.first}&to=#{range.last}", lastmod: lastmod }
       end
     end
 
-    def page_entries(cache_version)
+    def page_entries(cache_version, lastmod)
       chunks = Rails.cache.fetch("sitemap:page_chunks:#{cache_version.to_i}") do
         default_version_ids = Version.joins(:library)
                                      .merge(Library.indexable)
@@ -75,7 +79,7 @@ class SitemapsController < ApplicationController
       end
 
       chunks.each_with_index.map do |range, i|
-        { loc: "#{@host}/sitemap_pages_#{i + 1}.xml?from=#{range.first}&to=#{range.last}" }
+        { loc: "#{@host}/sitemap_pages_#{i + 1}.xml?from=#{range.first}&to=#{range.last}", lastmod: lastmod }
       end
     end
 end
