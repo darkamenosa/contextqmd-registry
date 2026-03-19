@@ -12,7 +12,7 @@ class SeoTest < ActionDispatch::IntegrationTest
   end
 
   test "sitemap.xml includes library sub-sitemaps when libraries exist" do
-    skip "No libraries in test DB" unless Library.any?
+    skip "No libraries in test DB" unless Library.not_cancelled.any?
 
     get "/sitemap.xml"
     assert_includes response.body, "https://contextqmd.com/sitemaps/libraries/1.xml"
@@ -29,14 +29,22 @@ class SeoTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "<loc>https://contextqmd.com/about</loc>"
   end
 
-  test "libraries sitemap includes library URLs" do
-    lib = Library.first
+  test "libraries sitemap includes all non-cancelled library URLs" do
+    lib = Library.not_cancelled.first
     skip "No libraries in test DB" unless lib
 
     get "/sitemaps/libraries/1.xml"
     assert_response :success
     assert_includes response.body, "<urlset"
     assert_includes response.body, "<loc>https://contextqmd.com/libraries/#{lib.slug}</loc>"
+  end
+
+  test "libraries sitemap includes libraries even without pages" do
+    empty_lib = Library.not_cancelled.where(total_pages_count: 0).first
+    skip "No empty libraries in test DB" unless empty_lib
+
+    get "/sitemaps/libraries/1.xml"
+    assert_includes response.body, "<loc>https://contextqmd.com/libraries/#{empty_lib.slug}</loc>"
   end
 
   test "pages sitemap includes doc page URLs" do

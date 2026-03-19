@@ -35,6 +35,10 @@ class Library < ApplicationRecord
   scope :recent,   -> { order(Arel.sql("latest_version_at DESC NULLS LAST"), :slug) }
   scope :trending, -> { where("total_pages_count > 0").order(Arel.sql("latest_version_at DESC NULLS LAST"), :slug) }
   scope :ranked,   -> { order(total_pages_count: :desc, versions_count: :desc, slug: :asc) }
+  scope :not_cancelled, -> {
+    where.not(account_id: Account::Cancellation.select(:account_id))
+  }
+  scope :indexable, -> { not_cancelled.where("total_pages_count > 0") }
 
   before_validation :populate_slug
 

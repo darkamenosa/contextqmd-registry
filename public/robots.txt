@@ -5,26 +5,11 @@ Disallow: /api/
 Disallow: /crawl
 Disallow: /errors/
 
-# Block AI training bots — docs are served via API/MCP, not for scraping
-User-agent: GPTBot
-Disallow: /
-
-User-agent: CCBot
-Disallow: /
-
-User-agent: Google-Extended
-Disallow: /
-
-User-agent: anthropic-ai
-Disallow: /
-
-User-agent: ClaudeBot
-Disallow: /
-
+# Block aggressive scrapers / content farms
 User-agent: Bytespider
 Disallow: /
 
-User-agent: FacebookBot
+User-agent: CCBot
 Disallow: /
 
 Sitemap: https://contextqmd.com/sitemap.xml

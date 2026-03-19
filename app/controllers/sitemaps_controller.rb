@@ -31,7 +31,7 @@ class SitemapsController < ApplicationController
     render formats: :xml
   end
 
-  # GET /sitemaps/libraries/:page — paginated library landing pages
+  # GET /sitemaps/libraries/:page — all non-cancelled library landing pages
   def libraries
     page_num = validated_page_num(library_shard_count)
     return head(:not_found) unless page_num
@@ -39,7 +39,8 @@ class SitemapsController < ApplicationController
     @host = "https://#{canonical_host}"
     offset = (page_num - 1) * PER_SITEMAP
 
-    @libraries = Library.select(:slug, :updated_at)
+    @libraries = Library.not_cancelled
+                        .select(:slug, :updated_at)
                         .order(:id)
                         .offset(offset)
                         .limit(PER_SITEMAP)
@@ -48,7 +49,7 @@ class SitemapsController < ApplicationController
     render formats: :xml
   end
 
-  # GET /sitemaps/pages/:page — paginated doc pages (default version only)
+  # GET /sitemaps/pages/:page — doc pages for libraries with content (default version only)
   # Uses default_version as the stable canonical target for SEO.
   # This intentionally differs from best_version (UI fallback logic).
   def pages
@@ -59,6 +60,7 @@ class SitemapsController < ApplicationController
     offset = (page_num - 1) * PER_SITEMAP
 
     default_version_ids = Version.joins(:library)
+                                 .merge(Library.indexable)
                                  .where("versions.version = libraries.default_version")
                                  .select(:id)
 
@@ -83,12 +85,13 @@ class SitemapsController < ApplicationController
     # Use versions.pages_count counter cache instead of counting millions of page rows
     def default_version_pages_count
       Version.joins(:library)
+             .merge(Library.indexable)
              .where("versions.version = libraries.default_version")
              .sum(:pages_count)
     end
 
     def library_shard_count
-      @library_shard_count ||= [ (Library.count.to_f / PER_SITEMAP).ceil, 0 ].max
+      @library_shard_count ||= [ (Library.not_cancelled.count.to_f / PER_SITEMAP).ceil, 0 ].max
     end
 
     def page_shard_count
