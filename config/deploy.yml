@@ -43,6 +43,8 @@ env:
     - POSTGRES_PASSWORD
     - CLOUDFLARE_R2_ACCESS_KEY_ID
     - CLOUDFLARE_R2_SECRET_ACCESS_KEY
+    - GOOGLE_CLIENT_ID
+    - GOOGLE_CLIENT_SECRET
   clear:
     # Dedicated job container handles queue processing.
     SOLID_QUEUE_IN_PUMA: false
