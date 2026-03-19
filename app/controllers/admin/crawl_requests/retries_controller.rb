@@ -8,7 +8,7 @@ module Admin
       def create
         new_cr = CrawlRequest.create!(
           url: @crawl_request.url,
-          identity: @crawl_request.identity,
+          creator: @crawl_request.creator,
           status: "pending",
           requested_bundle_visibility: @crawl_request.requested_bundle_visibility,
           metadata: (@crawl_request.metadata || {}).except("progress_current", "progress_total")

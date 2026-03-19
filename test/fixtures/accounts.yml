@@ -5,3 +5,7 @@ personal:
 organization:
   name: "ACME Corp"
   personal: false
+
+system:
+  name: "ContextQMD System"
+  personal: false

@@ -6,17 +6,20 @@ class Account < ApplicationRecord
   has_many :users, dependent: :destroy
   has_many :identities, through: :users
 
+  SYSTEM_ACCOUNT_NAME = "ContextQMD System"
+
   scope :orphaned, -> { where.not(id: User.where.not(identity_id: nil).select(:account_id)) }
 
   validates :name, presence: true
 
-  def self.create_with_user(identity:, name:)
-    first_name = name.strip.split(" ", 2).first
-    transaction do
-      account = create!(name: "#{first_name}'s Account", personal: true)
-      account.users.create!(name: "System", role: :system)
-      user = account.users.create!(identity: identity, name: name, role: :owner)
-      [ user, account ]
+  def self.system
+    find_by!(name: SYSTEM_ACCOUNT_NAME)
+  end
+
+  def self.create_with_owner(account:, owner:)
+    create!(**account).tap do |account|
+      account.users.create!(role: :system, name: "System")
+      account.users.create!(**owner.with_defaults(role: :owner))
     end
   end
 

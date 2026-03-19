@@ -16,7 +16,11 @@ module Identities
       Identity.transaction do
         resource.save!
         resource.mark_password_set
-        Account.create_with_user(identity: resource, name: user_name)
+        first_name = user_name.strip.split(" ", 2).first
+        Account.create_with_owner(
+          account: { name: "#{first_name}'s Account", personal: true },
+          owner: { identity: resource, name: user_name }
+        )
       end
 
       set_flash_message!(:notice, :signed_up)

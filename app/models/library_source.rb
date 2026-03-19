@@ -155,7 +155,6 @@ class LibrarySource < ApplicationRecord
     end
 
     crawl_requests.create!(
-      identity: CrawlRequest.system_identity,
       library: library,
       url: probe[:crawl_url].presence || url,
       source_type: source_type,
@@ -310,7 +309,6 @@ class LibrarySource < ApplicationRecord
 
     def queue_signature_refresh!(probe:, detected_signature:, now:)
       crawl_requests.create!(
-        identity: CrawlRequest.system_identity,
         library: library,
         url: probe[:crawl_url].presence || url,
         source_type: source_type,

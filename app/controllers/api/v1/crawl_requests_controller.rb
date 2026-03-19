@@ -8,7 +8,8 @@ module Api
       # Params:
       #   url - URL to crawl (required). source_type is auto-detected.
       def create
-        crawl_request = Current.identity.crawl_requests.new(crawl_request_params)
+        creator = Current.user || Current.identity&.users&.first
+        crawl_request = CrawlRequest.new(crawl_request_params.merge(creator: creator))
 
         if crawl_request.save
           render_data(crawl_request_json(crawl_request), meta: { status: "queued" })

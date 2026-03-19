@@ -437,7 +437,7 @@ export default function AdminCrawlRequestShow({ crawlRequest: cr }: Props) {
                   <div>
                     <dt className="text-muted-foreground">Submitter</dt>
                     <dd className="mt-0.5">
-                      <span className="font-medium">{cr.identityEmail}</span>
+                      <span className="font-medium">{cr.creatorName}</span>
                     </dd>
                   </div>
                   <div>

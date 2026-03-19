@@ -11,7 +11,7 @@ module Admin
     private
 
       def set_crawl_request
-        @crawl_request = CrawlRequest.includes(:identity, :library, :library_source).find(params[:crawl_request_id] || params[:id])
+        @crawl_request = CrawlRequest.includes(:creator, :library, :library_source).find(params[:crawl_request_id] || params[:id])
       end
   end
 end

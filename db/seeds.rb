@@ -8,7 +8,8 @@
 
 puts "Seeding ContextQMD development data..."
 
-# System account used by the import pipeline for registry-owned libraries.
-Account.find_or_create_by!(name: "ContextQMD System") { |a| a.personal = false }
+# System account — owns registry-managed libraries and acts as the system actor.
+system_account = Account.find_or_create_by!(name: Account::SYSTEM_ACCOUNT_NAME) { |a| a.personal = false }
+system_account.users.find_or_create_by!(role: :system) { |u| u.name = "System" }
 
 puts "Done."

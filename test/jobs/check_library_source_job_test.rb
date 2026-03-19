@@ -68,7 +68,7 @@ class CheckLibrarySourceJobTest < ActiveSupport::TestCase
     assert_equal "public", crawl_request.requested_bundle_visibility
     assert_equal "1.1.0", crawl_request.metadata["detected_version"]
     assert_equal "v1.1.0", crawl_request.metadata["detected_ref"]
-    assert_equal CrawlRequest.system_identity, crawl_request.identity
+    assert_nil crawl_request.creator, "system-initiated crawls should have no creator"
 
     @source.reload
     assert_nil @source.version_check_claimed_at
@@ -79,7 +79,6 @@ class CheckLibrarySourceJobTest < ActiveSupport::TestCase
   test "skips creating a duplicate crawl request for the same detected version" do
     @source.claim_version_check!
     CrawlRequest.create!(
-      identity: @identity,
       library: @library,
       library_source: @source,
       url: @source.url,

@@ -1,19 +1,17 @@
 # Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
 
 one:
-  identity: one
   url: MyString
   source_type: MyString
   status: MyString
   library: one
   error_message: MyText
-  metadata: 
+  metadata:
 
 two:
-  identity: two
   url: MyString
   source_type: MyString
   status: MyString
   library: two
   error_message: MyText
-  metadata: 
+  metadata:

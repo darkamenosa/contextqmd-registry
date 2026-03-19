@@ -7,6 +7,8 @@ class User < ApplicationRecord
   belongs_to :identity, optional: true
   belongs_to :account
 
+  has_many :crawl_requests, foreign_key: :creator_id, inverse_of: :creator, dependent: :nullify
+
   validates :name, presence: true
   validates :account_id,
     uniqueness: {

@@ -6,8 +6,8 @@ require "json"
 class App::DashboardScopingTest < ActionDispatch::IntegrationTest
   include Devise::Test::IntegrationHelpers
 
-  test "dashboard props show the identity's crawl requests and resulting libraries" do
-    identity, account, = create_tenant(
+  test "dashboard props show the user's crawl requests and resulting libraries" do
+    identity, account, user = create_tenant(
       email: "dashboard-scope-#{SecureRandom.hex(4)}@example.com",
       name: "Dashboard User"
     )
@@ -17,10 +17,9 @@ class App::DashboardScopingTest < ActionDispatch::IntegrationTest
       password: "password123456"
     )
     other_account = Account.create!(name: "Other Account", personal: true)
-    other_account.users.create!(identity: other_identity, name: "Other User", role: :owner)
+    other_user = other_account.users.create!(identity: other_identity, name: "Other User", role: :owner)
 
-    system_account = Account.find_or_create_by!(name: "ContextQMD System", personal: false)
-    system_account.users.find_or_create_by!(role: :system) { |u| u.name = "System" }
+    system_account = Account.system
 
     hex = SecureRandom.hex(4)
     library = Library.create!(
@@ -55,14 +54,14 @@ class App::DashboardScopingTest < ActionDispatch::IntegrationTest
     )
 
     CrawlRequest.create!(
-      identity: identity,
+      creator: user,
       library: library,
       url: "https://a.example/docs",
       source_type: "website",
       status: "pending"
     )
     CrawlRequest.create!(
-      identity: other_identity,
+      creator: other_user,
       library: other_library,
       url: "https://b.example/docs",
       source_type: "website",

@@ -21,6 +21,12 @@ module ActiveSupport
       ActiveStorage::Blob.service.root = storage_root if ActiveStorage::Blob.service.respond_to?(:root=)
     end
 
+    setup do
+      # Ensure the system account + system user exist (mirrors db/seeds.rb).
+      system_acct = Account.find_or_create_by!(name: Account::SYSTEM_ACCOUNT_NAME) { |a| a.personal = false }
+      system_acct.users.find_or_create_by!(role: :system) { |u| u.name = "System" }
+    end
+
     parallelize_teardown do |worker|
       FileUtils.rm_rf(Rails.root.join("tmp/storage-#{worker}"))
     end

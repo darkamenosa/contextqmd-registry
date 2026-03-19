@@ -7,7 +7,12 @@ module TenantTestHelper
   # Returns [identity, account, user].
   def create_tenant(email: "test_#{SecureRandom.hex(4)}@example.com", password: "password123", name: "Test User")
     identity = Identity.create!(email: email, password: password, password_confirmation: password)
-    user, account = Account.create_with_user(identity: identity, name: name)
+    first_name = name.strip.split(" ", 2).first
+    account = Account.create_with_owner(
+      account: { name: "#{first_name}'s Account", personal: true },
+      owner: { identity: identity, name: name }
+    )
+    user = account.owner
     [ identity, account, user ]
   end
 

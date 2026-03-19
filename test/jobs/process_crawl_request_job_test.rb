@@ -6,11 +6,10 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
   include ActiveJob::TestHelper
 
   setup do
-    identity, @account, _user = create_tenant
-    @identity = identity
+    _identity, @account, @user = create_tenant
 
     @crawl_request = CrawlRequest.create!(
-      identity: @identity,
+      creator: @user,
       url: "https://example.com/llms.txt",
       source_type: "llms_txt",
       status: "pending"
@@ -207,7 +206,7 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
 
   test "rolls back partial import rows when page import fails" do
     crawl_request = CrawlRequest.create!(
-      identity: @identity,
+      creator: @user,
       url: "https://github.com/example/docs-repo",
       source_type: "github",
       status: "pending"
@@ -299,7 +298,7 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     ns = "ns-#{SecureRandom.hex(4)}"
     lib_name = "lib-#{SecureRandom.hex(4)}"
 
-    system_account = Account.create!(name: "ContextQMD System", personal: false)
+    system_account = Account.system
     existing = Library.create!(
       account: system_account,
       namespace: ns,
@@ -353,7 +352,7 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     assert_equal "laravel", first_library.slug
 
     second_request = CrawlRequest.create!(
-      identity: @identity,
+      creator: @user,
       url: "https://github.com/basecamp/kamal-site",
       source_type: "github",
       status: "pending"
@@ -399,7 +398,7 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     )
 
     crawl_request = CrawlRequest.create!(
-      identity: @identity,
+      creator: @user,
       url: "https://github.com/nektos/act-docs",
       source_type: "github",
       status: "pending"
@@ -447,7 +446,7 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     )
 
     crawl_request = CrawlRequest.create!(
-      identity: @identity,
+      creator: @user,
       url: "https://github.com/nektos/act-docs",
       source_type: "github",
       status: "pending",
@@ -511,7 +510,7 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     )
 
     crawl_request = CrawlRequest.create!(
-      identity: @identity,
+      creator: @user,
       url: "https://github.com/nektos/act-docs",
       source_type: "github",
       status: "pending",
@@ -579,7 +578,7 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     )
 
     crawl_request = CrawlRequest.create!(
-      identity: @identity,
+      creator: @user,
       url: "https://github.com/redis/docs",
       source_type: "github",
       status: "pending",
@@ -644,7 +643,7 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     first_library = @crawl_request.reload.library
 
     second_request = CrawlRequest.create!(
-      identity: @identity,
+      creator: @user,
       url: "https://github.com/rust-lang/cargo",
       source_type: "github",
       status: "pending"
@@ -697,7 +696,7 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     end
 
     second_request = CrawlRequest.create!(
-      identity: @identity,
+      creator: @user,
       url: "https://github.com/rust-lang/log",
       source_type: "github",
       status: "pending"
@@ -771,10 +770,7 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     refute_includes library.aliases, "docs", "generic names like 'docs' must not be stored as aliases"
   end
 
-  test "creates a non-personal system account instead of reusing a personal one with the same name" do
-    Account.where(name: "ContextQMD System", personal: false).destroy_all
-    Account.create!(name: "ContextQMD System", personal: true)
-
+  test "imports library into the seeded system account" do
     result = CrawlResult.new(
       namespace: "ns-#{SecureRandom.hex(4)}",
       name: "lib-#{SecureRandom.hex(4)}",
@@ -789,13 +785,12 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     )
 
     with_stub_fetcher(result) do
-      assert_difference -> { Account.where(name: "ContextQMD System", personal: false).count }, 1 do
-        ProcessCrawlRequestJob.perform_now(@crawl_request)
-      end
+      ProcessCrawlRequestJob.perform_now(@crawl_request)
     end
 
     library = @crawl_request.reload.library
     assert_not_nil library
+    assert_equal Account.system, library.account
     assert_equal false, library.account.personal
   end
 
@@ -820,7 +815,7 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     original_page_id = version.pages.find_by(page_uid: "intro").id
 
     # Re-crawl — pages are deleted and recreated
-    cr2 = CrawlRequest.create!(identity: @identity, url: "https://example.com/llms.txt", source_type: "llms_txt", status: "pending")
+    cr2 = CrawlRequest.create!(creator: @user, url: "https://example.com/llms.txt", source_type: "llms_txt", status: "pending")
     with_stub_fetcher(result) { ProcessCrawlRequestJob.perform_now(cr2) }
 
     version.reload
@@ -862,7 +857,7 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
       ]
     )
 
-    cr2 = CrawlRequest.create!(identity: @identity, url: "https://example.com/llms.txt", source_type: "llms_txt", status: "pending")
+    cr2 = CrawlRequest.create!(creator: @user, url: "https://example.com/llms.txt", source_type: "llms_txt", status: "pending")
     with_stub_fetcher(result_v2) { ProcessCrawlRequestJob.perform_now(cr2) }
 
     version.reload
@@ -900,7 +895,7 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
       ]
     )
 
-    cr2 = CrawlRequest.create!(identity: @identity, url: "https://example.com/llms.txt", source_type: "llms_txt", status: "pending")
+    cr2 = CrawlRequest.create!(creator: @user, url: "https://example.com/llms.txt", source_type: "llms_txt", status: "pending")
 
     with_stub_fetcher(result_v2) do
       assert_difference -> { library.versions.count }, 1 do

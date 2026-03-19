@@ -21,7 +21,7 @@ module App
     private
 
       def my_crawl_requests
-        Current.identity.crawl_requests
+        Current.user.crawl_requests
       end
 
       def my_libraries

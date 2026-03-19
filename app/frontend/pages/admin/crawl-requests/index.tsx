@@ -260,9 +260,9 @@ export default function AdminCrawlRequestsIndex({
               <span
                 key="identity"
                 className="max-w-[160px] truncate text-xs text-muted-foreground"
-                title={cr.identityEmail}
+                title={cr.creatorName}
               >
-                {cr.identityEmail}
+                {cr.creatorName}
               </span>,
               <span
                 key="duration"

@@ -26,11 +26,11 @@ module ContextqmdDevTasks
   end
 
   def submit_catalog!(out: $stdout)
-    identity = submitter_identity!
+    creator = submitter_user!
     entries = crawl_entries
 
     entries.each do |entry|
-      crawl_request = identity.crawl_requests.create!(
+      crawl_request = creator.crawl_requests.create!(
         url: entry.fetch(:url),
         metadata: entry.fetch(:metadata, {})
       )
@@ -73,7 +73,7 @@ module ContextqmdDevTasks
     end
   end
 
-  def submitter_identity!
+  def submitter_user!
     email = ENV["SUBMITTER_EMAIL"].to_s.strip
     identity = if email.present?
       Identity.find_by(email: email)
@@ -81,10 +81,11 @@ module ContextqmdDevTasks
       Identity.where(staff: true).order(:id).first || Identity.order(:id).first
     end
 
-    return identity if identity.present?
+    user = identity&.users&.first
+    return user if user.present?
 
     raise <<~MESSAGE
-      No submitter identity found.
+      No submitter found.
       Create a local identity first or pass SUBMITTER_EMAIL=you@example.com.
     MESSAGE
   end

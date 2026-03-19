@@ -9,7 +9,7 @@ module App
     end
 
     def create
-      crawl_request = Current.identity.crawl_requests.new(crawl_request_params)
+      crawl_request = Current.user.crawl_requests.new(crawl_request_params)
 
       if crawl_request.save
         redirect_to crawl_requests_path, notice: "URL submitted for crawling!"

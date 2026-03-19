@@ -51,7 +51,11 @@ module Identities
 
           if created_identity
             user_name = auth.info.name.presence || identity.email.split("@").first
-            Account.create_with_user(identity: identity, name: user_name)
+            first_name = user_name.strip.split(" ", 2).first
+            Account.create_with_owner(
+              account: { name: "#{first_name}'s Account", personal: true },
+              owner: { identity: identity, name: user_name }
+            )
           end
 
           identity

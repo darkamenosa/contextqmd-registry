@@ -12,7 +12,7 @@ module Admin
         CrawlRequest.all
       end
 
-      scope = apply_tab_filter(base).includes(:identity, :library)
+      scope = apply_tab_filter(base).includes(:creator, :library)
 
       pagy, crawl_requests = pagy(:offset,
         scope.order(sort_column => sort_direction),
@@ -40,7 +40,7 @@ module Admin
     end
 
     def show
-      cr = CrawlRequest.includes(:identity, :library, :library_source).find(params[:id])
+      cr = CrawlRequest.includes(:creator, :library, :library_source).find(params[:id])
 
       render inertia: "admin/crawl-requests/show", props: {
         crawl_request: crawl_detail_props(cr)
@@ -83,7 +83,7 @@ module Admin
           status_message: cr.status_message,
           error_message: cr.error_message,
           requested_bundle_visibility: cr.requested_bundle_visibility,
-          identity_email: cr.identity.email,
+          creator_name: cr.creator&.name || "System",
           library_id: cr.library_id,
           library_slug: cr.library&.slug,
           library_display_name: cr.library&.display_name,
@@ -104,7 +104,7 @@ module Admin
           status_message: cr.status_message,
           error_message: cr.error_message,
           requested_bundle_visibility: cr.requested_bundle_visibility,
-          identity_email: cr.identity.email,
+          creator_name: cr.creator&.name || "System",
           library_id: cr.library_id,
           library_slug: cr.library&.slug,
           library_display_name: cr.library&.display_name,

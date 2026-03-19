@@ -138,7 +138,7 @@ export type AdminCrawlRequest = {
   statusMessage: string | null
   errorMessage: string | null
   requestedBundleVisibility: string
-  identityEmail: string
+  creatorName: string
   libraryId: number | null
   librarySlug: string | null
   libraryDisplayName: string | null

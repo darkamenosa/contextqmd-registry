@@ -1,16 +1,9 @@
 # frozen_string_literal: true
 
-require "zlib"
-
 class CrawlRequest < ApplicationRecord
   include Importable
 
-  SYSTEM_ACCOUNT_NAME = "ContextQMD System"
-  SYSTEM_ACCOUNT_LOCK_KEY = Zlib.crc32(SYSTEM_ACCOUNT_NAME).freeze
-  SYSTEM_IDENTITY_EMAIL = "crawler@contextqmd.local"
-  SYSTEM_IDENTITY_LOCK_KEY = Zlib.crc32(SYSTEM_IDENTITY_EMAIL).freeze
-
-  belongs_to :identity
+  belongs_to :creator, class_name: "User", optional: true
   belongs_to :library, optional: true
   belongs_to :library_source, optional: true
 
@@ -31,16 +24,6 @@ class CrawlRequest < ApplicationRecord
   after_create_commit :enqueue_processing
 
   scope :recent, -> { order(created_at: :desc) }
-
-  def self.system_identity
-    with_system_identity_lock do
-      Identity.find_or_create_by!(email: SYSTEM_IDENTITY_EMAIL) do |identity|
-        password = SecureRandom.hex(24)
-        identity.password = password
-        identity.password_confirmation = password
-      end
-    end
-  end
 
   def mark_cancelled
     raise "Cannot cancel from #{status}" if completed? || cancelled?
@@ -134,18 +117,5 @@ class CrawlRequest < ApplicationRecord
 
     def enqueue_processing
       ProcessCrawlRequestJob.perform_later(self)
-    end
-
-    def self.with_system_identity_lock
-      return yield unless Identity.connection.adapter_name == "PostgreSQL"
-
-      Identity.transaction do
-        lock_sql = Identity.send(
-          :sanitize_sql_array,
-          [ "SELECT pg_advisory_xact_lock(?)", SYSTEM_IDENTITY_LOCK_KEY ]
-        )
-        Identity.connection.execute(lock_sql)
-        yield
-      end
     end
 end

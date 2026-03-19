@@ -13,10 +13,9 @@ module Admin
           return
         end
 
-        # Use the admin's own identity to submit the crawl request
         crawl_request = CrawlRequest.new(
           url: url,
-          identity: Current.identity,
+          creator: Current.user,
           library: @library
         )
 

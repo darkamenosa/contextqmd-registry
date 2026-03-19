@@ -3,14 +3,18 @@
 require "test_helper"
 
 class AccountTest < ActiveSupport::TestCase
-  test "create_with_user creates owner and system memberships with roles" do
+  test "create_with_owner creates owner and system memberships with roles" do
     identity = Identity.create!(
       email: "account-owner-#{SecureRandom.hex(4)}@example.com",
       password: "password123",
       password_confirmation: "password123"
     )
 
-    user, account = Account.create_with_user(identity: identity, name: "Account Owner")
+    account = Account.create_with_owner(
+      account: { name: "Account Owner's Account", personal: true },
+      owner: { identity: identity, name: "Account Owner" }
+    )
+    user = account.owner
 
     assert_equal account, user.account
     assert_predicate user, :owner?

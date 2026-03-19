@@ -397,24 +397,7 @@ module CrawlRequest::Importable
     end
 
     def ensure_system_account
-      with_system_account_lock do
-        account = Account.find_or_create_by!(name: CrawlRequest::SYSTEM_ACCOUNT_NAME, personal: false)
-        account.users.find_or_create_by!(role: :system) { |user| user.name = "System" }
-        account
-      end
-    end
-
-    def with_system_account_lock
-      return yield unless Account.connection.adapter_name == "PostgreSQL"
-
-      Account.transaction do
-        lock_sql = Account.send(
-          :sanitize_sql_array,
-          [ "SELECT pg_advisory_xact_lock(?)", CrawlRequest::SYSTEM_ACCOUNT_LOCK_KEY ]
-        )
-        Account.connection.execute(lock_sql)
-        yield
-      end
+      Account.system
     end
 
     def find_or_create_record(relation, unique_attrs, create_attrs = {})

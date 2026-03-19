@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_18_091500) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_19_071630) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -151,8 +151,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_18_091500) do
   create_table "crawl_requests", force: :cascade do |t|
     t.datetime "completed_at"
     t.datetime "created_at", null: false
+    t.bigint "creator_id"
     t.text "error_message"
-    t.bigint "identity_id", null: false
     t.bigint "library_id"
     t.bigint "library_source_id"
     t.jsonb "metadata", default: {}
@@ -163,7 +163,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_18_091500) do
     t.string "status_message"
     t.datetime "updated_at", null: false
     t.string "url", null: false
-    t.index ["identity_id"], name: "index_crawl_requests_on_identity_id"
+    t.index ["creator_id"], name: "index_crawl_requests_on_creator_id"
     t.index ["library_id"], name: "index_crawl_requests_on_library_id"
     t.index ["library_source_id"], name: "index_crawl_requests_on_library_source_id"
     t.index ["status"], name: "index_crawl_requests_on_status"
@@ -331,9 +331,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_18_091500) do
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "bundles", "versions"
   add_foreign_key "crawl_proxy_leases", "crawl_proxy_configs"
-  add_foreign_key "crawl_requests", "identities"
   add_foreign_key "crawl_requests", "libraries"
   add_foreign_key "crawl_requests", "library_sources"
+  add_foreign_key "crawl_requests", "users", column: "creator_id"
   add_foreign_key "fetch_recipes", "library_sources"
   add_foreign_key "fetch_recipes", "versions"
   add_foreign_key "libraries", "accounts"
