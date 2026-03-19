@@ -3,8 +3,23 @@
 require "test_helper"
 
 class SeoTest < ActionDispatch::IntegrationTest
-  test "sitemap.xml returns valid XML with required URLs" do
+  test "sitemap.xml returns sitemap index with static sub-sitemap" do
     get "/sitemap.xml"
+    assert_response :success
+    assert_equal "application/xml; charset=utf-8", response.content_type
+    assert_includes response.body, "<sitemapindex"
+    assert_includes response.body, "https://contextqmd.com/sitemaps/static.xml"
+  end
+
+  test "sitemap.xml includes library sub-sitemaps when libraries exist" do
+    skip "No libraries in test DB" unless Library.any?
+
+    get "/sitemap.xml"
+    assert_includes response.body, "https://contextqmd.com/sitemaps/libraries/1.xml"
+  end
+
+  test "static sitemap includes marketing pages" do
+    get "/sitemaps/static.xml"
     assert_response :success
     assert_equal "application/xml; charset=utf-8", response.content_type
     assert_includes response.body, "<urlset"
@@ -14,12 +29,31 @@ class SeoTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "<loc>https://contextqmd.com/about</loc>"
   end
 
-  test "sitemap.xml includes library URLs" do
+  test "libraries sitemap includes library URLs" do
     lib = Library.first
     skip "No libraries in test DB" unless lib
 
-    get "/sitemap.xml"
+    get "/sitemaps/libraries/1.xml"
+    assert_response :success
+    assert_includes response.body, "<urlset"
     assert_includes response.body, "<loc>https://contextqmd.com/libraries/#{lib.slug}</loc>"
+  end
+
+  test "pages sitemap includes doc page URLs" do
+    page = Page.joins(version: :library)
+               .where("versions.version = libraries.default_version")
+               .first
+    skip "No default-version pages in test DB" unless page
+
+    get "/sitemaps/pages/1.xml"
+    assert_response :success
+    assert_includes response.body, "<urlset"
+    assert_includes response.body, page.page_uid
+  end
+
+  test "sitemap sub-sitemaps return 404 for out-of-range page" do
+    get "/sitemaps/libraries/9999.xml"
+    assert_response :not_found
   end
 
   test "robots.txt is served with sitemap directive" do
@@ -28,6 +62,8 @@ class SeoTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Sitemap: https://contextqmd.com/sitemap.xml"
     assert_includes response.body, "Disallow: /admin/"
     assert_includes response.body, "Disallow: /api/"
+    assert_includes response.body, "Disallow: /crawl"
+    assert_includes response.body, "Disallow: /errors/"
   end
 
   test "error page returns correct status code" do

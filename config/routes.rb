@@ -122,8 +122,11 @@ Rails.application.routes.draw do
 
   get "up" => "rails/health#show", as: :rails_health_check
 
-  # Sitemap
-  get "sitemap.xml", to: "sitemaps#show", defaults: { format: :xml }
+  # Sitemap index + paginated sub-sitemaps
+  get "sitemap.xml", to: "sitemaps#index", defaults: { format: :xml }
+  get "sitemaps/static.xml", to: "sitemaps#static_pages", defaults: { format: :xml }
+  get "sitemaps/libraries/:page", to: "sitemaps#libraries", defaults: { format: :xml }, constraints: { page: /\d+/ }
+  get "sitemaps/pages/:page", to: "sitemaps#pages", defaults: { format: :xml }, constraints: { page: /\d+/ }
 
   # Catch-all: render Inertia 404 instead of static public/404.html
   get "*unmatched", to: "errors#show", defaults: { status: "404" },
