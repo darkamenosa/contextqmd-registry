@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <title data-inertia><%= content_for(:title) || "ContextQMD" %></title>
+    <%# Fallback title only when SSR is unavailable (Inertia SSR provides its own) %>
+    <% unless inertia_ssr_head.present? %><title>ContextQMD</title><% end %>
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
     <meta name="theme-color" content="#09090B">
     <meta name="apple-mobile-web-app-capable" content="yes">

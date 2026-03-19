@@ -12,4 +12,17 @@ class ApplicationController < ActionController::Base
 
   etag { "v1" }
   allow_browser versions: :modern
+
+  before_action :redirect_trailing_slash
+
+  private
+
+    # Prevent duplicate content from trailing-slash URLs (preserves query params)
+    def redirect_trailing_slash
+      if request.get? && request.path.length > 1 && request.path.end_with?("/")
+        path = request.path.chomp("/")
+        path = "#{path}?#{request.query_string}" if request.query_string.present?
+        redirect_to path, status: :moved_permanently
+      end
+    end
 end

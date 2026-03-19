@@ -37,10 +37,17 @@ export default function PublicLayout({
 }: PublicLayoutProps) {
   const seoTitle = seo?.title ?? title ?? DEFAULT_SEO.title
   const seoDescription = seo?.description ?? DEFAULT_SEO.description
-  const seoImage = seo?.image ?? DEFAULT_SEO.image
   const seoUrl = seo?.url
   const seoType = seo?.type ?? "website"
   const noindex = seo?.noindex
+
+  // OG spec requires absolute URLs for images
+  const baseImage = seo?.image ?? DEFAULT_SEO.image
+  const seoImage = baseImage.startsWith("http")
+    ? baseImage
+    : seoUrl
+      ? new URL(baseImage, seoUrl).href
+      : `https://contextqmd.com${baseImage}`
 
   const jsonLdItems = jsonLd
     ? Array.isArray(jsonLd)
