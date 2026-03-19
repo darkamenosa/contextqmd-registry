@@ -4,7 +4,7 @@ module Admin
   class DashboardsController < BaseController
     def show
       pagy, recent_crawls = pagy(:offset,
-        CrawlRequest.includes(:identity, :library).recent,
+        CrawlRequest.includes(:creator, :library).recent,
         limit: 10
       )
 
@@ -33,7 +33,7 @@ module Admin
           source_type: cr.source_type,
           status: cr.status,
           error_message: cr.error_message,
-          submitted_by: cr.identity.email,
+          submitted_by: cr.creator&.email || "unknown",
           library_name: cr.library&.display_name,
           library_slug: cr.library&.slug,
           created_at: cr.created_at.iso8601
