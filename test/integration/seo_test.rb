@@ -3,64 +3,67 @@
 require "test_helper"
 
 class SeoTest < ActionDispatch::IntegrationTest
-  test "sitemap.xml returns sitemap index with static sub-sitemap" do
+  # request.base_url in test env is http://www.example.com
+  HOST = "http://www.example.com"
+
+  test "sitemap.xml returns sitemap index with static child" do
     get "/sitemap.xml"
     assert_response :success
     assert_equal "application/xml; charset=utf-8", response.content_type
     assert_includes response.body, "<sitemapindex"
-    assert_includes response.body, "https://contextqmd.com/sitemaps/static.xml"
+    assert_includes response.body, "#{HOST}/sitemap_static_1.xml"
   end
 
-  test "sitemap.xml includes library sub-sitemaps when libraries exist" do
+  test "sitemap.xml includes library child sitemaps with properly escaped ID ranges" do
     skip "No libraries in test DB" unless Library.not_cancelled.any?
 
     get "/sitemap.xml"
-    assert_includes response.body, "https://contextqmd.com/sitemaps/libraries/1.xml"
+    # ERB escapes & to &amp; — exactly once
+    assert_includes response.body, "sitemap_libraries_1.xml?from="
+    assert_includes response.body, "&amp;to="
+    assert_not_includes response.body, "&amp;amp;"
   end
 
   test "static sitemap includes marketing pages" do
-    get "/sitemaps/static.xml"
+    get "/sitemap_static_1.xml"
     assert_response :success
     assert_equal "application/xml; charset=utf-8", response.content_type
     assert_includes response.body, "<urlset"
-    assert_includes response.body, "<loc>https://contextqmd.com/</loc>"
-    assert_includes response.body, "<loc>https://contextqmd.com/libraries</loc>"
-    assert_includes response.body, "<loc>https://contextqmd.com/rankings</loc>"
-    assert_includes response.body, "<loc>https://contextqmd.com/about</loc>"
+    assert_includes response.body, "<loc>#{HOST}/</loc>"
+    assert_includes response.body, "<loc>#{HOST}/libraries</loc>"
+    assert_includes response.body, "<loc>#{HOST}/rankings</loc>"
+    assert_includes response.body, "<loc>#{HOST}/about</loc>"
   end
 
-  test "libraries sitemap includes all non-cancelled library URLs" do
+  test "libraries sitemap returns data with valid from/to params" do
     lib = Library.not_cancelled.first
     skip "No libraries in test DB" unless lib
 
-    get "/sitemaps/libraries/1.xml"
+    get "/sitemap_libraries_1.xml", params: { from: lib.id, to: lib.id }
     assert_response :success
     assert_includes response.body, "<urlset"
-    assert_includes response.body, "<loc>https://contextqmd.com/libraries/#{lib.slug}</loc>"
+    assert_includes response.body, "<loc>#{HOST}/libraries/#{lib.slug}</loc>"
   end
 
-  test "libraries sitemap includes libraries even without pages" do
-    empty_lib = Library.not_cancelled.where(total_pages_count: 0).first
-    skip "No empty libraries in test DB" unless empty_lib
-
-    get "/sitemaps/libraries/1.xml"
-    assert_includes response.body, "<loc>https://contextqmd.com/libraries/#{empty_lib.slug}</loc>"
+  test "libraries sitemap returns 404 without from/to params" do
+    get "/sitemap_libraries_1.xml"
+    assert_response :not_found
   end
 
-  test "pages sitemap includes doc page URLs" do
+  test "pages sitemap returns data with valid from/to params" do
     page = Page.joins(version: :library)
                .where("versions.version = libraries.default_version")
                .first
     skip "No default-version pages in test DB" unless page
 
-    get "/sitemaps/pages/1.xml"
+    get "/sitemap_pages_1.xml", params: { from: page.id, to: page.id }
     assert_response :success
     assert_includes response.body, "<urlset"
     assert_includes response.body, page.page_uid
   end
 
-  test "sitemap sub-sitemaps return 404 for out-of-range page" do
-    get "/sitemaps/libraries/9999.xml"
+  test "pages sitemap returns 404 without from/to params" do
+    get "/sitemap_pages_1.xml"
     assert_response :not_found
   end
 

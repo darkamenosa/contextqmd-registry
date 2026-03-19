@@ -2,7 +2,7 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 <% @pages.each do |page| %>
   <url>
-    <loc><%= @host %>/libraries/<%= page.library_slug %>/versions/<%= encode_path_segments(page.version_number) %>/pages/<%= encode_path_segments(page.page_uid) %></loc>
+    <loc><%= @host %>/libraries/<%= page.library_slug %>/versions/<%= encode_path(page.version_number) %>/pages/<%= encode_path(page.page_uid) %></loc>
     <lastmod><%= page.updated_at.iso8601 %></lastmod>
   </url>
 <% end %>

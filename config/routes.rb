@@ -122,11 +122,11 @@ Rails.application.routes.draw do
 
   get "up" => "rails/health#show", as: :rails_health_check
 
-  # Sitemap index + paginated sub-sitemaps
-  get "sitemap.xml", to: "sitemaps#index", defaults: { format: :xml }
-  get "sitemaps/static.xml", to: "sitemaps#static_pages", defaults: { format: :xml }
-  get "sitemaps/libraries/:page", to: "sitemaps#libraries", defaults: { format: :xml }, constraints: { page: /\d+/ }
-  get "sitemaps/pages/:page", to: "sitemaps#pages", defaults: { format: :xml }, constraints: { page: /\d+/ }
+  # Sitemap index + child sitemaps (Shopify pattern with ID-range pagination)
+  get "sitemap.xml", to: "sitemaps#show", defaults: { format: :xml }
+  get "sitemap_static_1.xml", to: "sitemaps/static#index", defaults: { format: :xml }
+  get "sitemap_libraries_:page.xml", to: "sitemaps/libraries#index", defaults: { format: :xml }, constraints: { page: /\d+/ }
+  get "sitemap_pages_:page.xml", to: "sitemaps/pages#index", defaults: { format: :xml }, constraints: { page: /\d+/ }
 
   # Catch-all: render Inertia 404 instead of static public/404.html
   get "*unmatched", to: "errors#show", defaults: { status: "404" },
