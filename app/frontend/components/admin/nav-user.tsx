@@ -2,8 +2,8 @@ import { router, usePage } from "@inertiajs/react"
 import type { SharedProps } from "@/types"
 import { ArrowLeft, EllipsisVertical, LogOut, UserCircle } from "lucide-react"
 
-import { userInitials } from "@/lib/user-initials"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { withAccountScope } from "@/lib/account-scope"
+import { currentUserSummary } from "@/lib/current-user"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,19 +19,14 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { NavUserSummary } from "@/components/shared/nav-user-summary"
 
 export function NavUser() {
-  const { currentUser, currentIdentity } = usePage<SharedProps>().props
+  const page = usePage<SharedProps>()
+  const summary = currentUserSummary(page.props)
   const { isMobile } = useSidebar()
-
-  const displayName = currentUser?.name ?? currentIdentity?.name
-  const name = displayName ?? "User"
-  const email =
-    currentUser?.email ?? currentIdentity?.email ?? "user@example.com"
-  const initials = displayName ? userInitials(displayName) : "U"
-  const accountId = currentUser?.accountId ?? currentIdentity?.defaultAccountId
-  const hasAccount = accountId != null
-  const appPath = (path: string) => path.replace(/^\/app/, `/app/${accountId}`)
+  const appPath = (path: string) =>
+    withAccountScope(page.url, path, summary.accountId)
 
   return (
     <SidebarMenu>
@@ -45,15 +40,11 @@ export function NavUser() {
               />
             }
           >
-            <Avatar className="size-10 rounded-lg transition-[width,height] group-data-[collapsible=icon]:size-8">
-              <AvatarFallback className="rounded-lg bg-primary text-primary-foreground">
-                {initials}
-              </AvatarFallback>
-            </Avatar>
-            <div className="grid flex-1 text-left text-sm leading-tight">
-              <span className="truncate font-medium">{name}</span>
-              <span className="truncate text-xs">{email}</span>
-            </div>
+            <NavUserSummary
+              email={summary.email}
+              initials={summary.initials}
+              name={summary.name}
+            />
             <EllipsisVertical className="ml-auto size-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent
@@ -65,20 +56,17 @@ export function NavUser() {
             <DropdownMenuGroup>
               <DropdownMenuLabel className="p-0 font-normal">
                 <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                  <Avatar className="size-10 rounded-lg">
-                    <AvatarFallback className="rounded-lg bg-primary text-primary-foreground">
-                      {initials}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-medium">{name}</span>
-                    <span className="truncate text-xs">{email}</span>
-                  </div>
+                  <NavUserSummary
+                    compact
+                    email={summary.email}
+                    initials={summary.initials}
+                    name={summary.name}
+                  />
                 </div>
               </DropdownMenuLabel>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            {hasAccount && (
+            {summary.hasAccount && (
               <>
                 <DropdownMenuGroup>
                   <DropdownMenuItem

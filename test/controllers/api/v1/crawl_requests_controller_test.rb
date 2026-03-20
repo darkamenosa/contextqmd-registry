@@ -68,16 +68,16 @@ module Api
         assert_response :unauthorized
       end
 
-      # --- Bulk endpoint ---
+      # --- Crawl batches endpoint ---
 
-      test "bulk creates multiple crawl requests" do
+      test "crawl batches create multiple crawl requests" do
         urls = [
           "https://github.com/rails/rails",
           "https://github.com/facebook/react"
         ]
 
         assert_difference -> { CrawlRequest.count }, 2 do
-          post "/api/v1/crawl/bulk",
+          post "/api/v1/crawl/batches",
             params: { urls: urls },
             headers: auth_headers,
             as: :json
@@ -93,14 +93,14 @@ module Api
         assert body["data"].all? { |r| r["status"] == "queued" }
       end
 
-      test "bulk rejects read-only token" do
+      test "crawl batches reject read-only token" do
         _read_token_record, read_raw = AccessToken.generate(
           identity: @identity,
           name: "Read Only",
           permission: :read
         )
 
-        post "/api/v1/crawl/bulk",
+        post "/api/v1/crawl/batches",
           params: { urls: [ "https://github.com/rails/rails" ] },
           headers: { "Authorization" => "Token #{read_raw}" },
           as: :json
@@ -108,10 +108,10 @@ module Api
         assert_response :unauthorized
       end
 
-      test "bulk enforces max URL limit" do
+      test "crawl batches enforce max URL limit" do
         urls = 501.times.map { |i| "https://github.com/org/repo-#{i}" }
 
-        post "/api/v1/crawl/bulk",
+        post "/api/v1/crawl/batches",
           params: { urls: urls },
           headers: auth_headers,
           as: :json
@@ -121,13 +121,13 @@ module Api
         assert_equal "too_many_urls", body["error"]["code"]
       end
 
-      test "bulk reports failed URLs inline" do
+      test "crawl batches report failed URLs inline" do
         urls = [
           "https://github.com/rails/rails",
           "not-a-valid-url"
         ]
 
-        post "/api/v1/crawl/bulk",
+        post "/api/v1/crawl/batches",
           params: { urls: urls },
           headers: auth_headers,
           as: :json
@@ -139,7 +139,7 @@ module Api
         assert_equal 2, body["meta"]["total"]
       end
 
-      test "bulk reports blank URLs as skipped" do
+      test "crawl batches report blank URLs as skipped" do
         urls = [
           "https://github.com/rails/rails",
           "",
@@ -147,7 +147,7 @@ module Api
         ]
 
         assert_difference -> { CrawlRequest.count }, 2 do
-          post "/api/v1/crawl/bulk",
+          post "/api/v1/crawl/batches",
             params: { urls: urls },
             headers: auth_headers,
             as: :json
@@ -163,8 +163,8 @@ module Api
         assert_equal 1, skipped_entries.size
       end
 
-      test "bulk requires authentication" do
-        post "/api/v1/crawl/bulk",
+      test "crawl batches require authentication" do
+        post "/api/v1/crawl/batches",
           params: { urls: [ "https://github.com/rails/rails" ] },
           as: :json
 

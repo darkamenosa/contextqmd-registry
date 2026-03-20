@@ -69,4 +69,47 @@ class VersionTest < ActiveSupport::TestCase
     version = versions(:nextjs_stable)
     assert_equal libraries(:nextjs), version.library
   end
+
+  test "query_docs returns matching chunks" do
+    version = libraries(:rails).versions.create!(
+      version: "query-docs-#{SecureRandom.hex(4)}",
+      channel: "stable",
+      generated_at: Time.current
+    )
+
+    version.pages.create!(
+      page_uid: "installing",
+      path: "installing.md",
+      title: "Installing",
+      description: "Install the library and configure the adapter for local development.",
+      bytes: 80,
+      headings: [ "Install", "Configure" ]
+    )
+
+    results = version.query_docs(query: "install configure", max_tokens: 50_000)
+
+    assert_equal 1, results[:total_matches]
+    assert_equal "installing", results[:results].first[:page_uid]
+  end
+
+  test "query_docs fast mode returns whole page content" do
+    version = libraries(:rails).versions.create!(
+      version: "query-fast-#{SecureRandom.hex(4)}",
+      channel: "stable",
+      generated_at: Time.current
+    )
+
+    version.pages.create!(
+      page_uid: "reference",
+      path: "reference.md",
+      title: "Reference",
+      description: "Full API reference for the library.",
+      bytes: 40,
+      headings: [ "API" ]
+    )
+
+    results = version.query_docs(query: "reference", max_tokens: 50_000, mode: :fast)
+
+    assert_equal "Full API reference for the library.", results[:results].first[:content_md]
+  end
 end

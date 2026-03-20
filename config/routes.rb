@@ -120,7 +120,7 @@ Rails.application.routes.draw do
       end
       post "resolve", to: "resolve#create"
       post "crawl", to: "crawl_requests#create"
-      post "crawl/bulk", to: "crawl_requests#bulk"
+      resources :crawl_batches, only: :create, path: "crawl/batches"
     end
   end
 

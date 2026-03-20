@@ -3,6 +3,8 @@
 require "rubygems"
 
 class Version < ApplicationRecord
+  include DocsQuerying
+
   belongs_to :library, counter_cache: true
   has_many :pages, dependent: :destroy
   has_many :bundles, dependent: :destroy

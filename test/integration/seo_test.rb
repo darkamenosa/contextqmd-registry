@@ -6,6 +6,39 @@ class SeoTest < ActionDispatch::IntegrationTest
   # request.base_url in test env is http://www.example.com
   HOST = "http://www.example.com"
 
+  setup do
+    hex = SecureRandom.hex(4)
+    account = Account.system
+
+    @library = Library.create!(
+      account: account,
+      namespace: "seo-#{hex}",
+      name: "seo-lib-#{hex}",
+      slug: "seo-lib-#{hex}",
+      display_name: "SEO Library #{hex}",
+      default_version: "1.0.0"
+    )
+
+    @version = @library.versions.create!(
+      version: "1.0.0",
+      channel: "stable",
+      generated_at: Time.current,
+      pages_count: 1
+    )
+
+    @page = @version.pages.create!(
+      page_uid: "seo-page-#{hex}",
+      path: "guides/overview.md",
+      title: "Overview",
+      url: "https://docs.example.com/guides/overview",
+      checksum: "sha256:seo-page-#{hex}",
+      bytes: 1024,
+      headings: [ "Overview" ]
+    )
+
+    @library.update_columns(total_pages_count: 1, latest_version_at: @version.created_at)
+  end
+
   test "sitemap.xml returns sitemap index with static child" do
     get "/sitemap.xml"
     assert_response :success
@@ -15,8 +48,6 @@ class SeoTest < ActionDispatch::IntegrationTest
   end
 
   test "sitemap.xml includes library child sitemaps with properly escaped ID ranges" do
-    skip "No libraries in test DB" unless Library.not_cancelled.any?
-
     get "/sitemap.xml"
     # ERB escapes & to &amp; — exactly once
     assert_includes response.body, "sitemap_libraries_1.xml?from="
@@ -36,13 +67,10 @@ class SeoTest < ActionDispatch::IntegrationTest
   end
 
   test "libraries sitemap returns data with valid from/to params" do
-    lib = Library.not_cancelled.first
-    skip "No libraries in test DB" unless lib
-
-    get "/sitemap_libraries_1.xml", params: { from: lib.id, to: lib.id }
+    get "/sitemap_libraries_1.xml", params: { from: @library.id, to: @library.id }
     assert_response :success
     assert_includes response.body, "<urlset"
-    assert_includes response.body, "<loc>#{HOST}/libraries/#{lib.slug}</loc>"
+    assert_includes response.body, "<loc>#{HOST}/libraries/#{@library.slug}</loc>"
   end
 
   test "libraries sitemap returns 404 without from/to params" do
@@ -51,15 +79,10 @@ class SeoTest < ActionDispatch::IntegrationTest
   end
 
   test "pages sitemap returns data with valid from/to params" do
-    page = Page.joins(version: :library)
-               .where("versions.version = libraries.default_version")
-               .first
-    skip "No default-version pages in test DB" unless page
-
-    get "/sitemap_pages_1.xml", params: { from: page.id, to: page.id }
+    get "/sitemap_pages_1.xml", params: { from: @page.id, to: @page.id }
     assert_response :success
     assert_includes response.body, "<urlset"
-    assert_includes response.body, page.page_uid
+    assert_includes response.body, @page.page_uid
   end
 
   test "pages sitemap returns 404 without from/to params" do

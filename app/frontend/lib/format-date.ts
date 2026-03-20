@@ -88,8 +88,3 @@ export function formatCount(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1)}K`
   return String(n)
 }
-
-/** Strip inline HTML tags (especially img) from markdown source before rendering */
-export function cleanMarkdown(md: string): string {
-  return md.replace(/<img[^>]*>/gi, "").replace(/<br\s*\/?>/gi, "\n")
-}

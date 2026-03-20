@@ -150,7 +150,7 @@ module ContextqmdDiscovery
   #
   # API mode (remote CLI):
   #   INPUT=file.tsv API_URL=https://contextqmd.com API_TOKEN=your_write_token
-  #   POSTs to /api/v1/crawl/bulk in batches of 100.
+  #   POSTs to /api/v1/crawl/batches with up to 100 URLs per request.
 
   def submit(input: nil, urls: nil, api_url: nil, api_token: nil, out: $stderr)
     entries = if input.present?
@@ -200,7 +200,7 @@ module ContextqmdDiscovery
   end
 
   def submit_via_api(entries, api_url:, api_token:, batch_size: 100, out:)
-    endpoint = URI("#{api_url.chomp('/')}/api/v1/crawl/bulk")
+    endpoint = URI("#{api_url.chomp('/')}/api/v1/crawl/batches")
 
     unless endpoint.scheme == "https"
       out.puts "ERROR: API_URL must use HTTPS to protect your token. Got: #{endpoint.scheme}"

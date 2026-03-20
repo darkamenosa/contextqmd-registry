@@ -16,7 +16,7 @@ import {
   X,
 } from "lucide-react"
 
-import { formatBytes } from "@/lib/format-date"
+import { formatBytes, formatDateShort } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -188,15 +188,6 @@ function PageNumbers({
       )}
     </>
   )
-}
-
-function formatDate(iso: string | null): string {
-  if (!iso) return "-"
-  return new Date(iso).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  })
 }
 
 export default function LibraryShow({
@@ -720,7 +711,7 @@ get_doc({ library: "${slug}", version: "${sampleVersion}", doc_path: "${samplePa
                           <ChannelBadge channel={v.channel} />
                         </TableCell>
                         <TableCell className="hidden sm:table-cell">
-                          {formatDate(v.generatedAt)}
+                          {v.generatedAt ? formatDateShort(v.generatedAt) : "-"}
                         </TableCell>
                         <TableCell className="text-right">
                           {v.pageCount}

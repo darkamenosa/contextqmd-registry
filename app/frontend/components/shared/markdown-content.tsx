@@ -5,8 +5,8 @@ import remarkGfm from "remark-gfm"
 
 import "highlight.js/styles/github-dark.min.css"
 
-import { cleanMarkdown } from "@/lib/format-date"
 import { slugify } from "@/lib/heading-slug"
+import { cleanMarkdown } from "@/lib/markdown"
 import { parseMarkdownWithTabs } from "@/lib/parse-markdown-tabs"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 

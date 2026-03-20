@@ -1,4 +1,4 @@
-import type { FormEvent } from "react"
+import type { ComponentProps, ComponentType, FormEvent } from "react"
 import { Head, useForm, usePage } from "@inertiajs/react"
 import { BookOpen } from "lucide-react"
 
@@ -32,8 +32,7 @@ import AppLayout from "@/layouts/app-layout"
 interface SourceType {
   value: string
   label: string
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  icon: React.ComponentType<any>
+  icon: ComponentType<ComponentProps<"svg">>
   description: string
   placeholder: string
 }
