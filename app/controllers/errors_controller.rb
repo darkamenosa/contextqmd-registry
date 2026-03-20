@@ -6,6 +6,11 @@ class ErrorsController < InertiaController
   disallow_account_scope
 
   def show
+    if redirect_guest_to_login?
+      redirect_to new_identity_session_path
+      return
+    end
+
     payload = error_payload(params[:status].to_i)
 
     render_error_response(payload[:status], payload[:title], payload[:message])
@@ -13,8 +18,19 @@ class ErrorsController < InertiaController
 
   private
 
+    def redirect_guest_to_login?
+      (request.path.start_with?("/admin") || request.path.start_with?("/app")) && !authenticated?
+    end
+
     def error_payload(status)
       ERROR_PAGES.fetch(status, ERROR_PAGES[404])
+    end
+
+    def error_component
+      return "admin/errors/show" if request.path.start_with?("/admin") && Current.identity&.staff?
+      return "errors/show" if request.path.start_with?("/admin")
+
+      super
     end
 
     ERROR_PAGES = {

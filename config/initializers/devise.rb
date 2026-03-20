@@ -10,7 +10,7 @@ class AuthFailure < Devise::FailureApp
   end
 
   def redirect_url
-    new_identity_session_url
+    new_identity_session_url(script_name: nil)
   end
 end
 

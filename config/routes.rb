@@ -71,6 +71,9 @@ Rails.application.routes.draw do
       end
     end
     mount MissionControl::Jobs::Engine, at: "/admin/jobs" if defined?(MissionControl::Jobs::Engine)
+
+    get "admin/*unmatched", to: "errors#show", defaults: { status: "404" },
+      constraints: ->(req) { req.format.html? }
   end
   get "admin", to: redirect("/admin/dashboard")
 
