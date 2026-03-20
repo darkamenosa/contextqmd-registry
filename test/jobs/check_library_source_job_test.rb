@@ -20,7 +20,7 @@ class CheckLibrarySourceJobTest < ActiveSupport::TestCase
       display_name: "Check Source Docs"
     )
     @source = @library.library_sources.create!(
-      url: "https://git.example.com/team/repo",
+      url: "https://github.com/team/repo",
       source_type: "git",
       primary: true,
       next_version_check_at: 1.hour.ago
@@ -48,7 +48,7 @@ class CheckLibrarySourceJobTest < ActiveSupport::TestCase
     end.new({
       version: "1.1.0",
       ref: "v1.1.0",
-      crawl_url: "https://git.example.com/team/repo"
+      crawl_url: "https://github.com/team/repo"
     })
 
     original_for = DocsFetcher.method(:for)
@@ -98,7 +98,7 @@ class CheckLibrarySourceJobTest < ActiveSupport::TestCase
     end.new({
       version: "1.1.0",
       ref: "v1.1.0",
-      crawl_url: "https://git.example.com/team/repo"
+      crawl_url: "https://github.com/team/repo"
     })
 
     original_for = DocsFetcher.method(:for)
@@ -121,7 +121,7 @@ class CheckLibrarySourceJobTest < ActiveSupport::TestCase
       display_name: "Website Source Docs"
     )
     website_source = website_library.library_sources.create!(
-      url: "https://docs.example.com",
+      url: "https://docs.github.com",
       source_type: "website",
       primary: true,
       next_version_check_at: 1.hour.ago,
@@ -135,7 +135,7 @@ class CheckLibrarySourceJobTest < ActiveSupport::TestCase
       end
     end.new({
       signature: "new-signature",
-      crawl_url: "https://docs.example.com"
+      crawl_url: "https://docs.github.com"
     })
 
     original_for = DocsFetcher.method(:for)

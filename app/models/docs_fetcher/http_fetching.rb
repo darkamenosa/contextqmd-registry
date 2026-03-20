@@ -28,6 +28,13 @@ module DocsFetcher
 
         proxy_target = proxy_lease || ProxyPool.next_proxy_config(scope: scope, target_host: uri.host)
         proxy_config = proxy_target&.respond_to?(:crawl_proxy_config) ? proxy_target.crawl_proxy_config : proxy_target
+
+        # Re-validate SSRF at fetch time to mitigate DNS rebinding (TOCTOU).
+        # Only for direct (non-proxied) connections — proxied requests resolve DNS
+        # on the proxy side, so our local DNS check is meaningless for those.
+        if proxy_config.nil? && !SsrfGuard.safe_uri?(uri)
+          raise DocsFetcher::PermanentFetchError, "SSRF blocked: #{uri.host} resolves to private address"
+        end
         response = perform_http_get(
           uri,
           proxy_config,

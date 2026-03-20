@@ -36,7 +36,7 @@ class AccessToken < ApplicationRecord
   end
 
   def active?
-    expires_at.nil? || expires_at > Time.current
+    expires_at.nil? || expires_at >= Time.current
   end
 
   def revoke

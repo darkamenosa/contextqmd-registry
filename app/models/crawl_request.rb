@@ -26,20 +26,27 @@ class CrawlRequest < ApplicationRecord
   scope :recent, -> { order(created_at: :desc) }
 
   def mark_cancelled
-    raise "Cannot cancel from #{status}" if completed? || cancelled?
+    raise "Cannot cancel from #{status}" if terminal?
     update!(status: "cancelled", completed_at: Time.current, status_message: "Cancelled")
   end
 
   # Owns the full crawl lifecycle: fetch → import → complete/fail.
   # Called by ProcessCrawlRequestJob (thin job, rich model pattern).
+  # Uses row lock + pending? guard to prevent duplicate processing.
   def process
-    return unless pending? || processing?
-    return if cancelled?
+    with_lock do
+      return unless pending?
+      return if cancelled?
 
-    mark_processing if pending?
+      update!(status: "processing", started_at: Time.current, status_message: "Starting")
+    end
 
     update_progress("Fetching documentation")
     result = DocsFetcher.for(source_type).fetch(self, on_progress: method(:update_progress))
+
+    # Re-check cancellation after fetch (which can be slow)
+    reload
+    return if cancelled?
 
     update_progress("Importing 0/#{result.pages.size} pages", current: 0, total: result.pages.size)
     self.class.transaction do
@@ -51,14 +58,10 @@ class CrawlRequest < ApplicationRecord
     update_progress("Waiting to retry")
     raise
   rescue StandardError => e
-    # Permanent failure — mark failed immediately
-    mark_failed(e.message) unless completed?
+    # Permanent failure — mark failed, but reload first to avoid overwriting terminal state
+    reload
+    mark_failed(e.message) unless terminal?
     raise
-  end
-
-  def mark_processing
-    raise "Cannot start processing from #{status}" unless pending?
-    update!(status: "processing", started_at: Time.current, status_message: "Starting")
   end
 
   def mark_completed(library, source = nil)
@@ -68,9 +71,13 @@ class CrawlRequest < ApplicationRecord
   end
 
   def mark_failed(message)
-    raise "Cannot fail from #{status}" if completed?
+    raise "Cannot fail from #{status}" if terminal?
     update!(status: "failed", error_message: message,
             completed_at: Time.current, status_message: "Failed")
+  end
+
+  def terminal?
+    completed? || failed? || cancelled?
   end
 
   def update_progress(message, current: nil, total: nil)

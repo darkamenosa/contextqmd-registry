@@ -117,6 +117,7 @@ Rails.application.routes.draw do
       end
       post "resolve", to: "resolve#create"
       post "crawl", to: "crawl_requests#create"
+      post "crawl/bulk", to: "crawl_requests#bulk"
     end
   end
 

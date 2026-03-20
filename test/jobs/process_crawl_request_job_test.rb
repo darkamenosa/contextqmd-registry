@@ -280,18 +280,13 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
       ]
     )
 
-    # Track status transitions
-    @crawl_request.define_singleton_method(:mark_processing) do
-      statuses << "processing"
-      super()
-    end
-
     with_stub_fetcher(result) do
       ProcessCrawlRequestJob.perform_now(@crawl_request)
     end
 
-    assert_includes statuses, "processing"
-    assert_equal "completed", @crawl_request.reload.status
+    @crawl_request.reload
+    assert_equal "completed", @crawl_request.status
+    assert_not_nil @crawl_request.started_at
   end
 
   test "reuses existing library when namespace and name match" do

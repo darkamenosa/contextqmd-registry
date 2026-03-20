@@ -56,14 +56,14 @@ class App::DashboardScopingTest < ActionDispatch::IntegrationTest
     CrawlRequest.create!(
       creator: user,
       library: library,
-      url: "https://a.example/docs",
+      url: "https://example.com/docs-a",
       source_type: "website",
       status: "pending"
     )
     CrawlRequest.create!(
       creator: other_user,
       library: other_library,
-      url: "https://b.example/docs",
+      url: "https://example.com/docs-b",
       source_type: "website",
       status: "pending"
     )

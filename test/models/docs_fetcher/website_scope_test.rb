@@ -31,7 +31,7 @@ class DocsFetcher::WebsiteScopeTest < ActiveSupport::TestCase
     end
     Net::HTTP.define_singleton_method(:new) { |*_args| http }
 
-    fetcher.send(:http_get_with_redirects, URI("https://docs.example.com/guide"))
+    fetcher.send(:http_get_with_redirects, URI("https://example.com/guide"))
 
     assert_equal "website", scope_seen
   ensure
