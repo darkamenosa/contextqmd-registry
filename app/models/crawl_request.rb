@@ -1,11 +1,10 @@
 # frozen_string_literal: true
 
 class CrawlRequest < ApplicationRecord
-  include Importable
-
   belongs_to :creator, class_name: "User", optional: true
   belongs_to :library, optional: true
   belongs_to :library_source, optional: true
+  has_one :website_crawl, dependent: :destroy
 
   SOURCE_TYPES = %w[github gitlab bitbucket git website openapi llms_txt].freeze
   STATUSES = %w[pending processing completed failed cancelled].freeze
@@ -30,38 +29,14 @@ class CrawlRequest < ApplicationRecord
     update!(status: "cancelled", completed_at: Time.current, status_message: "Cancelled")
   end
 
-  # Owns the full crawl lifecycle: fetch → import → complete/fail.
-  # Called by ProcessCrawlRequestJob (thin job, rich model pattern).
-  # Uses row lock + pending? guard to prevent duplicate processing.
-  def process
+  def begin_processing!(message: "Starting")
     with_lock do
-      return unless pending?
-      return if cancelled?
+      return false unless pending?
+      return false if cancelled?
 
-      update!(status: "processing", started_at: Time.current, status_message: "Starting")
+      update!(status: "processing", started_at: Time.current, status_message: message)
+      true
     end
-
-    update_progress("Fetching documentation")
-    result = DocsFetcher.for(source_type).fetch(self, on_progress: method(:update_progress))
-
-    # Re-check cancellation after fetch (which can be slow)
-    reload
-    return if cancelled?
-
-    update_progress("Importing 0/#{result.pages.size} pages", current: 0, total: result.pages.size)
-    self.class.transaction do
-      library, source = import_result(result)
-      mark_completed(library, source)
-    end
-  rescue DocsFetcher::TransientFetchError
-    # Let job framework retry — don't mark as failed yet
-    update_progress("Waiting to retry")
-    raise
-  rescue StandardError => e
-    # Permanent failure — mark failed, but reload first to avoid overwriting terminal state
-    reload
-    mark_failed(e.message) unless terminal?
-    raise
   end
 
   def mark_completed(library, source = nil)

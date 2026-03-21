@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_19_071630) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_21_003000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -167,9 +167,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_19_071630) do
     t.index ["library_id"], name: "index_crawl_requests_on_library_id"
     t.index ["library_source_id"], name: "index_crawl_requests_on_library_source_id"
     t.index ["status"], name: "index_crawl_requests_on_status"
-    t.check_constraint "requested_bundle_visibility::text = ANY (ARRAY['public'::character varying, 'private'::character varying]::text[])", name: "crawl_requests_bundle_visibility_check"
-    t.check_constraint "source_type::text = ANY (ARRAY['github'::character varying, 'gitlab'::character varying, 'bitbucket'::character varying, 'git'::character varying, 'website'::character varying, 'openapi'::character varying, 'llms_txt'::character varying]::text[])", name: "crawl_requests_source_type_check"
-    t.check_constraint "status::text = ANY (ARRAY['pending'::character varying, 'processing'::character varying, 'completed'::character varying, 'failed'::character varying, 'cancelled'::character varying]::text[])", name: "crawl_requests_status_check"
+    t.check_constraint "requested_bundle_visibility::text = ANY (ARRAY['public'::character varying::text, 'private'::character varying::text])", name: "crawl_requests_bundle_visibility_check"
+    t.check_constraint "source_type::text = ANY (ARRAY['github'::character varying::text, 'gitlab'::character varying::text, 'bitbucket'::character varying::text, 'git'::character varying::text, 'website'::character varying::text, 'openapi'::character varying::text, 'llms_txt'::character varying::text])", name: "crawl_requests_source_type_check"
+    t.check_constraint "status::text = ANY (ARRAY['pending'::character varying::text, 'processing'::character varying::text, 'completed'::character varying::text, 'failed'::character varying::text, 'cancelled'::character varying::text])", name: "crawl_requests_status_check"
   end
 
   create_table "fetch_recipes", force: :cascade do |t|
@@ -321,6 +321,51 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_19_071630) do
     t.index ["library_id"], name: "index_versions_on_library_id"
   end
 
+  create_table "website_crawl_pages", force: :cascade do |t|
+    t.text "content", null: false
+    t.datetime "created_at", null: false
+    t.jsonb "headings", default: [], null: false
+    t.string "page_uid", null: false
+    t.string "path", null: false
+    t.string "title", null: false
+    t.datetime "updated_at", null: false
+    t.string "url", null: false
+    t.bigint "website_crawl_id", null: false
+    t.bigint "website_crawl_url_id", null: false
+    t.index ["website_crawl_id", "id"], name: "index_website_crawl_pages_on_website_crawl_id_and_id"
+    t.index ["website_crawl_id"], name: "index_website_crawl_pages_on_website_crawl_id"
+    t.index ["website_crawl_url_id"], name: "index_website_crawl_pages_on_website_crawl_url_id", unique: true
+  end
+
+  create_table "website_crawl_urls", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "normalized_url", null: false
+    t.datetime "processed_at"
+    t.string "status", default: "pending", null: false
+    t.datetime "updated_at", null: false
+    t.string "url", null: false
+    t.bigint "website_crawl_id", null: false
+    t.index ["website_crawl_id", "normalized_url"], name: "idx_on_website_crawl_id_normalized_url_929719a98d", unique: true
+    t.index ["website_crawl_id", "status", "id"], name: "index_website_crawl_urls_on_website_crawl_id_and_status_and_id"
+    t.index ["website_crawl_id"], name: "index_website_crawl_urls_on_website_crawl_id"
+    t.check_constraint "status::text = ANY (ARRAY['pending'::character varying, 'fetched'::character varying, 'skipped'::character varying, 'failed'::character varying]::text[])", name: "website_crawl_urls_status_check"
+  end
+
+  create_table "website_crawls", force: :cascade do |t|
+    t.datetime "completed_at"
+    t.bigint "crawl_request_id", null: false
+    t.datetime "created_at", null: false
+    t.integer "discovered_urls_count", default: 0, null: false
+    t.text "error_message"
+    t.integer "processed_urls_count", default: 0, null: false
+    t.string "runner", default: "auto", null: false
+    t.datetime "started_at"
+    t.string "status", default: "pending", null: false
+    t.datetime "updated_at", null: false
+    t.index ["crawl_request_id"], name: "index_website_crawls_on_crawl_request_id", unique: true
+    t.check_constraint "status::text = ANY (ARRAY['pending'::character varying, 'processing'::character varying, 'completed'::character varying, 'failed'::character varying, 'cancelled'::character varying]::text[])", name: "website_crawls_status_check"
+  end
+
   add_foreign_key "access_tokens", "identities"
   add_foreign_key "account_cancellations", "accounts", on_delete: :cascade
   add_foreign_key "account_cancellations", "users", column: "initiated_by_id", on_delete: :nullify
@@ -343,4 +388,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_19_071630) do
   add_foreign_key "users", "accounts"
   add_foreign_key "users", "identities", on_delete: :nullify
   add_foreign_key "versions", "libraries"
+  add_foreign_key "website_crawl_pages", "website_crawl_urls"
+  add_foreign_key "website_crawl_pages", "website_crawls"
+  add_foreign_key "website_crawl_urls", "website_crawls"
+  add_foreign_key "website_crawls", "crawl_requests"
 end

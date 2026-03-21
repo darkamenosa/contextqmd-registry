@@ -31,7 +31,7 @@ try {
     return route.continue();
   });
 
-  const result = await crawl(context, INPUT.url, SETTINGS);
+  const result = Array.isArray(INPUT.urls) ? await renderBatch(context, INPUT.urls, SETTINGS) : await crawl(context, INPUT.url, SETTINGS);
 
   await mkdir(dirname(INPUT.output_path), { recursive: true });
   await writeFile(INPUT.output_path, JSON.stringify(result), "utf8");
@@ -90,6 +90,34 @@ async function crawl(context, seedUrl, settings) {
       if (pages.length % 10 === 0) {
         emitProgress(`Rendered ${pages.length} pages`, pages.length, null);
       }
+    } finally {
+      await page.close().catch(() => {});
+    }
+  }
+
+  return { pages };
+}
+
+async function renderBatch(context, urls, settings) {
+  const pages = [];
+
+  for (const currentUrl of urls) {
+    const page = await context.newPage();
+
+    try {
+      const snapshot = await capturePage(page, currentUrl, settings);
+      if (!snapshot) {
+        continue;
+      }
+
+      pages.push({
+        requested_url: currentUrl,
+        url: snapshot.url,
+        html: snapshot.html,
+        links: snapshot.links,
+      });
+
+      emitProgress(`Rendered ${pages.length}/${urls.length} pages`, pages.length, urls.length);
     } finally {
       await page.close().catch(() => {});
     }

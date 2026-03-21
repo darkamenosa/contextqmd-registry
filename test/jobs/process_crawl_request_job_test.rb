@@ -264,6 +264,43 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     end
   end
 
+  test "creates website crawl domain and enqueues website crawl job for website source types" do
+    website_request = CrawlRequest.create!(
+      creator: @user,
+      url: "https://example.com/docs",
+      source_type: "website",
+      status: "pending"
+    )
+
+    clear_enqueued_jobs
+
+    assert_difference -> { WebsiteCrawl.count }, 1 do
+      assert_enqueued_with(job: ProcessWebsiteCrawlJob) do
+        ProcessCrawlRequestJob.perform_now(website_request)
+      end
+    end
+
+    website_crawl = WebsiteCrawl.find_by!(crawl_request: website_request)
+    assert_equal "pending", website_crawl.status
+  end
+
+  test "does not enqueue duplicate website crawl jobs when website crawl already exists" do
+    website_request = CrawlRequest.create!(
+      creator: @user,
+      url: "https://example.com/docs",
+      source_type: "website",
+      status: "pending"
+    )
+    WebsiteCrawl.create!(crawl_request: website_request)
+    clear_enqueued_jobs
+
+    assert_no_difference -> { WebsiteCrawl.count } do
+      assert_no_enqueued_jobs only: ProcessWebsiteCrawlJob do
+        ProcessCrawlRequestJob.perform_now(website_request)
+      end
+    end
+  end
+
   test "transitions status to processing then completed" do
     statuses = []
 

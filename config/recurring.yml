@@ -23,3 +23,8 @@ production:
     class: AccountIncinerationJob
     queue: background
     schedule: at 3am every day
+
+  cleanup_website_crawl_state:
+    class: CleanupWebsiteCrawlStateJob
+    queue: background
+    schedule: at 3:30am every day

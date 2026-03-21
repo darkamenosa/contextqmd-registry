@@ -37,6 +37,30 @@ module DocsFetcher
         proxy_lease&.release!
       end
 
+      def fetch_batch(crawl_request, urls, on_progress: nil)
+        uri = URI.parse(crawl_request.url)
+        proxy_lease = ProxyPool.checkout(
+          scope: proxy_scope,
+          target_host: uri.host,
+          session_key: proxy_session_key(crawl_request),
+          sticky_session: true
+        )
+
+        Dir.mktmpdir("contextqmd-website-node-") do |tmpdir|
+          output_path = File.join(tmpdir, "batch.json")
+          payload = build_payload(crawl_request, output_path, proxy_lease&.crawl_proxy_config).merge(urls: urls)
+          artifact = run_crawler(payload, on_progress: on_progress)
+
+          record_proxy_success(proxy_lease, uri)
+          artifact.fetch("pages", []).filter_map { |page| build_batch_snapshot(page) }
+        end
+      rescue DocsFetcher::TransientFetchError, DocsFetcher::PermanentFetchError => error
+        record_proxy_failure(proxy_lease, uri, error)
+        raise
+      ensure
+        proxy_lease&.release!
+      end
+
       def ready?
         script_path.exist? && system(*readiness_command, chdir: Rails.root.to_s, out: File::NULL, err: File::NULL)
       rescue Errno::ENOENT
@@ -161,6 +185,19 @@ module DocsFetcher
             headings: result[:headings]
           }
         rescue URI::InvalidURIError
+          nil
+        end
+
+        def build_batch_snapshot(page_data)
+          page = build_page(page_data)
+
+          {
+            requested_url: page_data.fetch("requested_url"),
+            url: page_data.fetch("url"),
+            page: page,
+            links: page_data.fetch("links", [])
+          }
+        rescue KeyError
           nil
         end
 

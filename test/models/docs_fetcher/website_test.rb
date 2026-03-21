@@ -267,6 +267,35 @@ class DocsFetcher::WebsiteTest < ActiveSupport::TestCase
     assert_equal "Page 0", pages.first[:title]
   end
 
+  test "fetch_batch returns page snapshots with discovered links" do
+    crawl_request = Struct.new(:url, :library_id, :library, :metadata).new(
+      "https://example.com/docs",
+      nil,
+      nil,
+      {}
+    )
+    html = <<~HTML
+      <html>
+        <body>
+          <main>
+            <h1>Guide</h1>
+            <p>Hello from docs.</p>
+            <a href="https://example.com/docs/next">Next</a>
+          </main>
+        </body>
+      </html>
+    HTML
+
+    @fetcher.define_singleton_method(:http_get_with_redirects) { |_uri| html }
+
+    snapshots = @fetcher.fetch_batch(crawl_request, [ "https://example.com/docs" ])
+
+    assert_equal 1, snapshots.size
+    assert_equal "https://example.com/docs", snapshots.first[:requested_url]
+    assert_equal "docs", snapshots.first.dig(:page, :page_uid)
+    assert_includes snapshots.first[:links], "https://example.com/docs/next"
+  end
+
   # --- URL normalization ---
 
   test "normalize_url removes fragment" do

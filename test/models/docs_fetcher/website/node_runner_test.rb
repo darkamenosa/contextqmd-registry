@@ -147,6 +147,49 @@ class DocsFetcher::Website::NodeRunnerTest < ActiveSupport::TestCase
     assert_equal 1, payload[:max_pages]
   end
 
+  test "fetch_batch renders provided urls and preserves discovered links" do
+    runner = DocsFetcher::Website::NodeRunner.new
+    script_path = write_node_script(<<~JAVASCRIPT)
+      import { mkdir, writeFile } from "node:fs/promises";
+      import { dirname } from "node:path";
+
+      const inputChunks = [];
+      for await (const chunk of process.stdin) inputChunks.push(chunk);
+      const input = JSON.parse(inputChunks.join(""));
+
+      await mkdir(dirname(input.output_path), { recursive: true });
+      await writeFile(input.output_path, JSON.stringify({
+        pages: input.urls.map((url) => ({
+          requested_url: url,
+          url,
+          html: "<html><body><main><h1>Guide</h1><p>Hello from the browser.</p></main></body></html>",
+          links: [url + \"/next\"]
+        }))
+      }));
+
+      console.log(JSON.stringify({ type: "result", output_path: input.output_path }));
+    JAVASCRIPT
+    proxy_lease = build_proxy_lease
+    crawl_request = Struct.new(:url, :library_id, :library, :metadata).new(
+      "https://docs.example.com/guide",
+      nil,
+      nil,
+      {}
+    )
+
+    runner.define_singleton_method(:command) { [ "node", script_path ] }
+    ProxyPool.define_singleton_method(:checkout) { |**_options| proxy_lease }
+
+    snapshots = runner.fetch_batch(crawl_request, [ "https://docs.example.com/guide" ])
+
+    assert_equal 1, snapshots.size
+    assert_equal "https://docs.example.com/guide", snapshots.first[:requested_url]
+    assert_equal "guide", snapshots.first.dig(:page, :page_uid)
+    assert_includes snapshots.first[:links], "https://docs.example.com/guide/next"
+  ensure
+    reset_proxy_pool
+  end
+
   test "build_payload ignores non-string bypass values" do
     runner = DocsFetcher::Website::NodeRunner.new
     proxy_config = Struct.new(:bypass) do

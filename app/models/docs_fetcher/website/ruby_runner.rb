@@ -59,17 +59,7 @@ module DocsFetcher
       def fetch(crawl_request, on_progress: nil)
         url = crawl_request.url
         seed_uri = URI.parse(url.strip)
-        @domain = seed_uri.host
-        @scheme = seed_uri.scheme
-        @base_path = compute_base_path(seed_uri.path)
-        @crawl_rules = load_crawl_rules(crawl_request)
-        @max_pages = max_pages_for(crawl_request)
-        @proxy_lease = ProxyPool.checkout(
-          scope: proxy_scope,
-          target_host: @domain,
-          session_key: proxy_session_key(crawl_request),
-          sticky_session: true
-        )
+        setup_crawl_context(crawl_request, seed_uri)
 
         on_progress&.call("Crawling #{@domain}")
         pages = crawl(seed_uri, on_progress: on_progress)
@@ -96,7 +86,55 @@ module DocsFetcher
         @proxy_lease = nil
       end
 
+      def fetch_batch(crawl_request, urls)
+        seed_uri = URI.parse(crawl_request.url.strip)
+        setup_crawl_context(crawl_request, seed_uri)
+
+        urls.filter_map do |current_url|
+          uri = URI.parse(current_url)
+          html = http_get_with_redirects(uri)
+          next unless html
+
+          doc = Nokogiri::HTML(html)
+          result = HtmlToMarkdown.convert(html)
+          content = result[:content].to_s.strip
+
+          {
+            requested_url: current_url,
+            url: current_url,
+            page: content.present? ? {
+              page_uid: url_to_page_uid(uri),
+              path: "#{url_to_page_uid(uri)}.md",
+              title: result[:title] || @domain,
+              url: current_url,
+              content: content,
+              headings: result[:headings]
+            } : nil,
+            links: discover_links(doc, uri)
+          }
+        rescue URI::InvalidURIError
+          nil
+        end
+      ensure
+        @proxy_lease&.release!
+        @proxy_lease = nil
+      end
+
       private
+
+        def setup_crawl_context(crawl_request, seed_uri)
+          @domain = seed_uri.host
+          @scheme = seed_uri.scheme
+          @base_path = compute_base_path(seed_uri.path)
+          @crawl_rules = load_crawl_rules(crawl_request)
+          @max_pages = max_pages_for(crawl_request)
+          @proxy_lease = ProxyPool.checkout(
+            scope: proxy_scope,
+            target_host: @domain,
+            session_key: proxy_session_key(crawl_request),
+            sticky_session: true
+          )
+        end
 
         # --- Crawling ---
 
