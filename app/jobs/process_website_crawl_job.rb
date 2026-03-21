@@ -15,6 +15,7 @@ class ProcessWebsiteCrawlJob < ApplicationJob
 
   def perform(website_crawl)
     @website_crawl = website_crawl
+    @website_crawl.resume_processing! if continuation.started?
     return if @website_crawl.terminal?
 
     step :prepare do

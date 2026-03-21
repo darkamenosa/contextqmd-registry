@@ -192,6 +192,87 @@ class ProcessWebsiteCrawlJobTest < ActiveSupport::TestCase
     assert_equal "cancelled", website_crawl.status
   end
 
+  test "resumes after transient website errors without reprocessing completed urls" do
+    website_crawl = WebsiteCrawl.create!(crawl_request: @crawl_request, runner: "ruby")
+    seed_url = "https://example.com/docs"
+    next_url = "https://example.com/docs/getting-started"
+    website_crawl.crawl_urls.create!(url: seed_url, normalized_url: seed_url)
+    website_crawl.crawl_urls.create!(url: next_url, normalized_url: next_url)
+
+    attempts_by_url = Hash.new(0)
+    test_case = self
+    ruby_runner = RunnerStub.new
+
+    ruby_runner.define_singleton_method(:fetch_batch) do |crawl_request, urls, on_progress: nil|
+      calls << [ crawl_request, urls, on_progress ]
+      requested_url = urls.fetch(0)
+      attempts_by_url[requested_url] += 1
+
+      case requested_url
+      when seed_url
+        [
+          {
+            requested_url: requested_url,
+            url: requested_url,
+            page: {
+              page_uid: "docs",
+              path: "docs.md",
+              title: "Example Docs",
+              url: requested_url,
+              content: "Website documentation",
+              headings: [ "Index" ]
+            },
+            links: [ next_url ]
+          }
+        ]
+      when next_url
+        if attempts_by_url[requested_url] == 1
+          raise DocsFetcher::TransientFetchError, "Temporary website fetch failure"
+        end
+
+        test_case.assert_equal "processing", WebsiteCrawl.find(website_crawl.id).status
+
+        [
+          {
+            requested_url: requested_url,
+            url: requested_url,
+            page: {
+              page_uid: "docs-getting-started",
+              path: "docs-getting-started.md",
+              title: "Example Docs",
+              url: requested_url,
+              content: "Getting started",
+              headings: [ "Getting Started" ]
+            },
+            links: []
+          }
+        ]
+      else
+        test_case.flunk("Unexpected URL #{requested_url.inspect}")
+      end
+    end
+
+    with_runner_stubs(ruby_runner: ruby_runner) do
+      ProcessWebsiteCrawlJob.perform_now(website_crawl)
+
+      website_crawl.reload
+
+      assert_equal "pending", website_crawl.status
+      assert_equal [ [ seed_url ], [ next_url ] ], ruby_runner.calls.map { |_, urls, _| urls }
+      assert_equal 1, enqueued_jobs.size
+
+      resumed_job = enqueued_jobs.shift.except(:job, :args, :queue, :priority).deep_stringify_keys
+      ActiveJob::Base.execute(resumed_job)
+    end
+
+    @crawl_request.reload
+    website_crawl.reload
+
+    assert_equal "completed", @crawl_request.status
+    assert_equal "completed", website_crawl.status
+    assert_equal [ [ seed_url ], [ next_url ], [ next_url ] ], ruby_runner.calls.map { |_, urls, _| urls }
+  end
+
   private
 
     def with_runner_stubs(ruby_runner:, node_runner: RunnerStub.new)

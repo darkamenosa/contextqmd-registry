@@ -3,8 +3,6 @@
 class WebsiteCrawl < ApplicationRecord
   STATUSES = %w[pending processing completed failed cancelled].freeze
   RUNNERS = %w[auto ruby node].freeze
-  NODE_BATCH_SIZE = 5
-  RUBY_BATCH_SIZE = 10
   STAGED_STATE_RETENTION = 3.days
 
   belongs_to :crawl_request
@@ -74,16 +72,18 @@ class WebsiteCrawl < ApplicationRecord
       break if terminal?
       break if crawl_limit_reached?
 
-      urls = next_pending_urls
-      break if urls.empty?
+      crawl_url = next_pending_url
+      break unless crawl_url
 
       if node_runner_active?
-        fetch_node_batch!(urls)
+        fetch_node_batch!([ crawl_url ])
       else
-        fetch_ruby_batch!(urls)
+        fetch_ruby_batch!([ crawl_url ])
       end
 
-      step.advance! from: urls.last.id
+      # The persisted crawl_url state drives resumption; the cursor checkpoints
+      # per-URL progress so Continuable can resume after interruptions/errors.
+      step.set!(crawl_url.id)
     end
 
     return if terminal?
@@ -153,6 +153,15 @@ class WebsiteCrawl < ApplicationRecord
     return unless processing?
 
     update!(status: "pending", error_message: nil)
+  end
+
+  def resume_processing!
+    return if terminal? || processing? || !pending?
+
+    crawl_request.reload
+    return unless crawl_request.processing?
+
+    update!(status: "processing", error_message: nil)
   end
 
   def sync_request_terminal_state!
@@ -259,32 +268,8 @@ class WebsiteCrawl < ApplicationRecord
       increment!(:discovered_urls_count, result.rows.size) if result.rows.any?
     end
 
-    def next_pending_urls
-      limit = batch_limit
-      return [] if limit&.zero?
-
-      scope = crawl_urls.pending.order(:id)
-      scope = scope.limit(limit) if limit
-      scope.to_a
-    end
-
-    def batch_limit
-      limit = if node_runner_active?
-        NODE_BATCH_SIZE
-      else
-        RUBY_BATCH_SIZE
-      end
-
-      remaining = remaining_url_budget
-      return limit if remaining.nil?
-
-      [ limit, remaining ].min
-    end
-
-    def remaining_url_budget
-      return if crawl_limit.nil?
-
-      [ crawl_limit - self.processed_urls_count, 0 ].max
+    def next_pending_url
+      crawl_urls.pending.order(:id).first
     end
 
     def crawl_limit
