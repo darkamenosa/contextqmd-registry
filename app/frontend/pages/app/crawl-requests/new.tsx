@@ -86,6 +86,29 @@ const sourceTypes: SourceType[] = [
   },
 ]
 
+// --- Auto-detect source type from URL ---
+
+function detectSourceType(url: string): string | null {
+  const trimmed = url.trim().toLowerCase()
+  if (!trimmed) return null
+
+  // llms.txt variants (check before domain matching)
+  if (/llms(-full|-small)?\.txt/.test(trimmed)) return "llms_txt"
+
+  // OpenAPI / Swagger specs
+  if (/(openapi|swagger)\.(json|ya?ml)/.test(trimmed)) return "openapi"
+
+  // Domain-based detection
+  if (trimmed.includes("github.com")) return "github"
+  if (trimmed.includes("gitlab.com")) return "gitlab"
+  if (trimmed.includes("bitbucket.org")) return "bitbucket"
+
+  // Any other URL → website
+  if (/^https?:\/\//.test(trimmed)) return "website"
+
+  return null
+}
+
 // --- Page ---
 
 export default function AppCrawlRequestsNew() {
@@ -94,6 +117,15 @@ export default function AppCrawlRequestsNew() {
     url: "",
     sourceType: "github",
   })
+
+  function handleUrlChange(url: string) {
+    const detected = detectSourceType(url)
+    if (detected) {
+      setData((prev) => ({ ...prev, url, sourceType: detected }))
+    } else {
+      setData("url", url)
+    }
+  }
 
   const selectedSource = sourceTypes.find((s) => s.value === data.sourceType)
 
@@ -175,7 +207,7 @@ export default function AppCrawlRequestsNew() {
                     type="url"
                     placeholder={selectedSource?.placeholder}
                     value={data.url}
-                    onChange={(e) => setData("url", e.target.value)}
+                    onChange={(e) => handleUrlChange(e.target.value)}
                     required
                   />
                   <FieldDescription>
