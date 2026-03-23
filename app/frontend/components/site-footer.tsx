@@ -5,7 +5,7 @@ export function SiteFooter() {
   return (
     <footer className="border-t bg-background">
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-8 sm:grid-cols-3">
           <div>
             <h3 className="text-sm font-semibold">Registry</h3>
             <ul className="mt-4 flex flex-col gap-2 text-sm text-muted-foreground">
@@ -88,7 +88,7 @@ export function SiteFooter() {
             </ul>
           </div>
         </div>
-        <div className="mt-8 flex items-center justify-between border-t pt-8 text-sm text-muted-foreground">
+        <div className="mt-8 flex flex-col items-center gap-4 border-t pt-8 text-center text-sm text-muted-foreground sm:flex-row sm:justify-between sm:text-left">
           <Link href="/" className="flex items-center gap-2">
             <div className="flex size-6 items-center justify-center rounded-lg bg-foreground text-background">
               <Command className="size-3" />

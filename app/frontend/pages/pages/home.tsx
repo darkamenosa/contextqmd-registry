@@ -109,6 +109,28 @@ const features = [
   },
 ]
 
+function CodeWindow({
+  label,
+  code,
+}: {
+  label: string
+  code: string
+}) {
+  return (
+    <div className="overflow-hidden rounded-xl border bg-zinc-950 text-zinc-100">
+      <div className="flex items-center gap-2 border-b border-zinc-800 px-4 py-3">
+        <div className="size-3 rounded-full bg-red-500/70" />
+        <div className="size-3 rounded-full bg-yellow-500/70" />
+        <div className="size-3 rounded-full bg-green-500/70" />
+        <span className="ml-2 text-xs text-zinc-500">{label}</span>
+      </div>
+      <pre className="overflow-x-auto whitespace-pre-wrap break-all p-4 text-[13px] leading-relaxed sm:whitespace-pre sm:break-normal sm:text-sm">
+        <code>{code}</code>
+      </pre>
+    </div>
+  )
+}
+
 function LibraryTable({ libraries }: { libraries: LibraryItem[] }) {
   return (
     <Table>
@@ -174,13 +196,56 @@ function LibraryTable({ libraries }: { libraries: LibraryItem[] }) {
   )
 }
 
+function LibraryCards({ libraries }: { libraries: LibraryItem[] }) {
+  return (
+    <div className="divide-y sm:hidden">
+      {libraries.map((lib) => (
+        <article key={lib.slug} className="space-y-3 px-4 py-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 space-y-1">
+              <Link
+                href={`/libraries/${lib.slug}`}
+                className="block truncate font-medium text-primary hover:underline"
+              >
+                {lib.displayName}
+              </Link>
+              {lib.homepageUrl ? (
+                <a
+                  href={lib.homepageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex max-w-full items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+                >
+                  <SourceTypeIcon sourceType={lib.sourceType} size="size-4" />
+                  <span className="truncate">{lib.slug}</span>
+                </a>
+              ) : (
+                <span className="inline-flex max-w-full items-center gap-1.5 text-sm text-muted-foreground">
+                  <SourceTypeIcon sourceType={lib.sourceType} size="size-4" />
+                  <span className="truncate">{lib.slug}</span>
+                </span>
+              )}
+            </div>
+            <Badge variant="secondary" className="shrink-0">
+              {formatCount(lib.pageCount)} pages
+            </Badge>
+          </div>
+          <p className="text-xs tracking-wide text-muted-foreground uppercase">
+            Updated {formatTimeAgo(lib.updatedAt)}
+          </p>
+        </article>
+      ))}
+    </div>
+  )
+}
+
 function TableFooter({ libraryCount }: { libraryCount: number }) {
   return (
-    <div className="flex items-center justify-between border-t px-4 py-2.5 text-xs tracking-wide text-muted-foreground">
+    <div className="flex flex-col gap-2 border-t px-4 py-3 text-center text-xs tracking-wide text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:text-left">
       <span>{libraryCount.toLocaleString()} LIBRARIES</span>
       <Link
         href="/crawl"
-        className="flex items-center gap-1 uppercase hover:text-foreground"
+        className="inline-flex items-center justify-center gap-1 uppercase hover:text-foreground sm:justify-start"
       >
         See tasks in progress
         <ArrowRight className="size-3" />
@@ -229,7 +294,7 @@ export default function Home({
             {/* Search bar */}
             <form
               onSubmit={handleSearch}
-              className="mx-auto mt-5 flex max-w-lg gap-2 sm:mt-8"
+              className="mx-auto mt-5 flex max-w-lg flex-col gap-2 sm:mt-8 sm:flex-row"
             >
               <div className="relative flex-1">
                 <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -241,7 +306,9 @@ export default function Home({
                   className="pl-9"
                 />
               </div>
-              <Button type="submit">Search</Button>
+              <Button type="submit" className="w-full sm:w-auto">
+                Search
+              </Button>
             </form>
           </div>
         </div>
@@ -251,7 +318,7 @@ export default function Home({
       <section className="mx-auto max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <TabsList>
+            <TabsList className="h-auto w-full flex-wrap justify-start sm:w-fit">
               <TabsTrigger value="popular" className="gap-1.5">
                 <Star className="size-3.5" />
                 Popular
@@ -270,6 +337,7 @@ export default function Home({
               size="sm"
               nativeButton={false}
               render={<Link href="/crawl/new" />}
+              className="w-full sm:w-auto"
             >
               <Plus className="size-4" />
               Submit Docs
@@ -277,7 +345,7 @@ export default function Home({
           </div>
 
           <TabsContent value={activeTab} className="mt-4">
-            <div className="overflow-x-auto rounded-xl border">
+            <div className="overflow-hidden rounded-xl border">
               {libraries.length === 0 ? (
                 <div className="py-16 text-center">
                   <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-muted">
@@ -301,7 +369,12 @@ export default function Home({
                   </Button>
                 </div>
               ) : (
-                <LibraryTable libraries={libraries} />
+                <>
+                  <LibraryCards libraries={libraries} />
+                  <div className="hidden overflow-x-auto sm:block">
+                    <LibraryTable libraries={libraries} />
+                  </div>
+                </>
               )}
               <TableFooter libraryCount={libraryCount} />
             </div>
@@ -312,7 +385,7 @@ export default function Home({
       {/* CLI + MCP Quickstart */}
       <section className="border-t">
         <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-24 lg:px-8">
-          <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
+          <div className="grid gap-8 sm:gap-12 lg:grid-cols-2 lg:items-center">
             <div>
               <Badge variant="secondary" className="mb-3">
                 Quick Start
@@ -370,29 +443,9 @@ export default function Home({
                 </div>
               </div>
             </div>
-            <div className="space-y-6">
-              <div className="overflow-hidden rounded-xl border bg-zinc-950 text-zinc-100">
-                <div className="flex items-center gap-2 border-b border-zinc-800 px-4 py-3">
-                  <div className="size-3 rounded-full bg-red-500/70" />
-                  <div className="size-3 rounded-full bg-yellow-500/70" />
-                  <div className="size-3 rounded-full bg-green-500/70" />
-                  <span className="ml-2 text-xs text-zinc-500">terminal</span>
-                </div>
-                <pre className="overflow-x-auto p-4 text-sm leading-relaxed">
-                  <code>{cliQuickstart}</code>
-                </pre>
-              </div>
-              <div className="overflow-hidden rounded-xl border bg-zinc-950 text-zinc-100">
-                <div className="flex items-center gap-2 border-b border-zinc-800 px-4 py-3">
-                  <div className="size-3 rounded-full bg-red-500/70" />
-                  <div className="size-3 rounded-full bg-yellow-500/70" />
-                  <div className="size-3 rounded-full bg-green-500/70" />
-                  <span className="ml-2 text-xs text-zinc-500">mcp.json</span>
-                </div>
-                <pre className="overflow-x-auto p-4 text-sm leading-relaxed">
-                  <code>{mcpConfig}</code>
-                </pre>
-              </div>
+            <div className="space-y-4 sm:space-y-6">
+              <CodeWindow label="terminal" code={cliQuickstart} />
+              <CodeWindow label="mcp.json" code={mcpConfig} />
             </div>
           </div>
         </div>
@@ -410,19 +463,19 @@ export default function Home({
               server, both backed by the same open registry.
             </p>
           </div>
-          <div className="mt-16 grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-10 grid gap-4 sm:mt-16 sm:gap-8 md:grid-cols-2 lg:grid-cols-3">
             {features.map((feature) => (
               <Card
                 key={feature.title}
                 className="border-transparent bg-transparent shadow-none"
               >
-                <CardHeader>
+                <CardHeader className="px-0 pt-0 pb-4">
                   <div className="flex size-11 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                     <feature.icon className="size-5" />
                   </div>
                   <CardTitle className="mt-3">{feature.title}</CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="px-0 pb-0">
                   <p className="text-sm/relaxed text-muted-foreground">
                     {feature.description}
                   </p>
@@ -444,18 +497,18 @@ export default function Home({
               Install a library in one command. Give your AI coding tools the
               context they need.
             </p>
-            <div className="mx-auto mt-6 max-w-md">
-              <div className="overflow-hidden rounded-lg border bg-zinc-950 text-zinc-100">
-                <pre className="px-4 py-3 text-sm">
-                  <code>npx -y contextqmd libraries install react</code>
-                </pre>
-              </div>
+            <div className="mx-auto mt-6 max-w-md text-left">
+              <CodeWindow
+                label="terminal"
+                code="npx -y contextqmd libraries install react"
+              />
             </div>
             <div className="mt-6 flex items-center justify-center gap-3">
               <Button
                 size="lg"
                 nativeButton={false}
                 render={<Link href="/libraries" />}
+                className="w-full sm:w-auto"
               >
                 Browse Libraries
                 <ArrowRight className="size-4" />

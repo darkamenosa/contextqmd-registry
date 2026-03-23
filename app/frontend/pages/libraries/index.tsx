@@ -72,7 +72,7 @@ export default function LibrariesIndex({
         {/* Search + Submit */}
         <form
           onSubmit={handleSearch}
-          className="mx-auto mt-5 flex max-w-xl flex-wrap gap-2 sm:mt-10"
+          className="mx-auto mt-5 flex max-w-xl flex-col gap-2 sm:mt-10 sm:flex-row sm:flex-wrap"
         >
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -84,11 +84,14 @@ export default function LibrariesIndex({
               className="pl-9"
             />
           </div>
-          <Button type="submit">Search</Button>
+          <Button type="submit" className="w-full sm:w-auto">
+            Search
+          </Button>
           <Button
             variant="outline"
             nativeButton={false}
             render={<Link href="/crawl/new" />}
+            className="w-full sm:w-auto"
           >
             <Plus className="size-4" />
             Submit

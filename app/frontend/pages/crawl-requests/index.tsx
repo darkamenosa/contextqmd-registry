@@ -131,6 +131,12 @@ function shortenUrl(url: string): string {
   }
 }
 
+function taskTimeLabel(cr: CrawlRequestItem): string {
+  return cr.status === "completed" || cr.status === "failed"
+    ? formatTimeAgo(cr.updatedAt, true)
+    : formatTimeAgo(cr.createdAt, true)
+}
+
 // --- Task Table ---
 
 function ActiveEmptyState() {
@@ -197,30 +203,14 @@ function TaskTable({
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border">
-      <Table>
-        <TableHeader>
-          <TableRow className="hover:bg-transparent">
-            <TableHead className="pl-4 text-xs font-medium tracking-wider text-muted-foreground/70">
-              LIBRARY
-            </TableHead>
-            <TableHead className="text-xs font-medium tracking-wider text-muted-foreground/70">
-              SOURCE
-            </TableHead>
-            <TableHead className="pr-4 text-xs font-medium tracking-wider text-muted-foreground/70 sm:pr-2">
-              STATE
-            </TableHead>
-            <TableHead className="hidden pr-4 text-right text-xs font-medium tracking-wider text-muted-foreground/70 sm:table-cell">
-              TIME
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {tasks.map((cr) => {
-            const source = getSourceTypeConfig(cr.sourceType)
-            return (
-              <TableRow key={cr.id}>
-                <TableCell className="pl-4">
+    <div className="overflow-hidden rounded-xl border">
+      <div className="divide-y sm:hidden">
+        {tasks.map((cr) => {
+          const source = getSourceTypeConfig(cr.sourceType)
+          return (
+            <article key={cr.id} className="space-y-3 px-4 py-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
                   {cr.librarySlug ? (
                     <Link
                       href={`/libraries/${cr.librarySlug}`}
@@ -229,36 +219,93 @@ function TaskTable({
                       {cr.libraryName}
                     </Link>
                   ) : (
-                    <span className="text-sm text-muted-foreground">—</span>
+                    <span className="text-sm text-muted-foreground">Unlinked library</span>
                   )}
-                </TableCell>
-                <TableCell>
                   <a
                     href={cr.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="group inline-flex items-center gap-1.5"
+                    className="mt-1 inline-flex max-w-full items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
                   >
-                    <span className="text-muted-foreground">{source.icon}</span>
-                    <span className="text-sm text-muted-foreground group-hover:text-foreground">
-                      {shortenUrl(cr.url)}
-                    </span>
-                    <ExternalLink className="size-3 text-muted-foreground/50 group-hover:text-foreground" />
+                    <span>{source.icon}</span>
+                    <span className="truncate">{shortenUrl(cr.url)}</span>
+                    <ExternalLink className="size-3 shrink-0" />
                   </a>
-                </TableCell>
-                <TableCell className="pr-4 sm:pr-2">
-                  {stateDisplay(cr)}
-                </TableCell>
-                <TableCell className="hidden pr-4 text-right text-sm text-muted-foreground sm:table-cell">
-                  {cr.status === "completed" || cr.status === "failed"
-                    ? formatTimeAgo(cr.updatedAt, true)
-                    : formatTimeAgo(cr.createdAt, true)}
-                </TableCell>
-              </TableRow>
-            )
-          })}
-        </TableBody>
-      </Table>
+                </div>
+                <p className="shrink-0 text-xs text-muted-foreground">
+                  {taskTimeLabel(cr)}
+                </p>
+              </div>
+              <div>{stateDisplay(cr)}</div>
+            </article>
+          )
+        })}
+      </div>
+
+      <div className="hidden overflow-x-auto sm:block">
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="pl-4 text-xs font-medium tracking-wider text-muted-foreground/70">
+                LIBRARY
+              </TableHead>
+              <TableHead className="text-xs font-medium tracking-wider text-muted-foreground/70">
+                SOURCE
+              </TableHead>
+              <TableHead className="pr-4 text-xs font-medium tracking-wider text-muted-foreground/70 sm:pr-2">
+                STATE
+              </TableHead>
+              <TableHead className="hidden pr-4 text-right text-xs font-medium tracking-wider text-muted-foreground/70 sm:table-cell">
+                TIME
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {tasks.map((cr) => {
+              const source = getSourceTypeConfig(cr.sourceType)
+              return (
+                <TableRow key={cr.id}>
+                  <TableCell className="pl-4">
+                    {cr.librarySlug ? (
+                      <Link
+                        href={`/libraries/${cr.librarySlug}`}
+                        className="font-medium text-foreground hover:underline"
+                      >
+                        {cr.libraryName}
+                      </Link>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <a
+                      href={cr.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group inline-flex items-center gap-1.5"
+                    >
+                      <span className="text-muted-foreground">
+                        {source.icon}
+                      </span>
+                      <span className="text-sm text-muted-foreground group-hover:text-foreground">
+                        {shortenUrl(cr.url)}
+                      </span>
+                      <ExternalLink className="size-3 text-muted-foreground/50 group-hover:text-foreground" />
+                    </a>
+                  </TableCell>
+                  <TableCell className="pr-4 sm:pr-2">
+                    {stateDisplay(cr)}
+                  </TableCell>
+                  <TableCell className="hidden pr-4 text-right text-sm text-muted-foreground sm:table-cell">
+                    {taskTimeLabel(cr)}
+                  </TableCell>
+                </TableRow>
+              )
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
       <PaginationFooter
         pagination={pagination}
         buildParams={(page) => ({ tab: activeTab, page })}
@@ -296,7 +343,7 @@ export default function CrawlRequestsIndex({
               the registry.
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <Button
               variant="outline"
               onClick={() =>
@@ -304,11 +351,16 @@ export default function CrawlRequestsIndex({
                   only: ["crawlRequests", "counts", "pagination"],
                 })
               }
+              className="w-full sm:w-auto"
             >
               <RefreshCw className="size-4" />
               Refresh
             </Button>
-            <Button nativeButton={false} render={<Link href="/crawl/new" />}>
+            <Button
+              nativeButton={false}
+              render={<Link href="/crawl/new" />}
+              className="w-full sm:w-auto"
+            >
               <Plus className="size-4" />
               Add Docs
             </Button>
@@ -318,7 +370,7 @@ export default function CrawlRequestsIndex({
 
       <section className="mx-auto max-w-7xl px-4 pb-24 sm:px-6 lg:px-8">
         <Tabs value={activeTab} onValueChange={handleTabChange}>
-          <TabsList>
+          <TabsList className="h-auto w-full flex-wrap justify-start sm:w-fit">
             <TabsTrigger value="active" className="gap-1.5">
               <span className="relative flex size-2">
                 {activeCount > 0 && (

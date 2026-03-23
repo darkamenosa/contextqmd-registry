@@ -136,6 +136,17 @@ function ChannelBadge({ channel }: { channel: string }) {
   return <Badge variant={variant}>{channel}</Badge>
 }
 
+function CodePanel({ text }: { text: string }) {
+  return (
+    <div className="relative overflow-hidden rounded-lg border bg-zinc-950 text-zinc-100">
+      <CopyButton text={text} />
+      <pre className="overflow-x-auto whitespace-pre-wrap break-all p-4 text-[13px] leading-relaxed sm:whitespace-pre sm:break-normal sm:text-sm">
+        <code>{text}</code>
+      </pre>
+    </div>
+  )
+}
+
 function getPageRange(current: number, total: number): (number | "...")[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
   const pages: (number | "...")[] = []
@@ -292,7 +303,7 @@ get_doc({ library: "${slug}", version: "${sampleVersion}", doc_path: "${samplePa
         </Button>
 
         {/* Header */}
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
               {library.displayName}
@@ -316,7 +327,7 @@ get_doc({ library: "${slug}", version: "${sampleVersion}", doc_path: "${samplePa
               ))}
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex w-full gap-2 sm:w-auto">
             {library.homepageUrl && (
               <Button
                 variant="outline"
@@ -329,6 +340,7 @@ get_doc({ library: "${slug}", version: "${sampleVersion}", doc_path: "${samplePa
                     rel="noopener noreferrer"
                   />
                 }
+                className="w-full sm:w-auto"
               >
                 <ExternalLink className="size-4" />
                 Homepage
@@ -391,7 +403,7 @@ get_doc({ library: "${slug}", version: "${sampleVersion}", doc_path: "${samplePa
       {/* Tabs */}
       <section className="mx-auto max-w-7xl px-4 pb-24 sm:px-6 lg:px-8">
         <Tabs defaultValue="pages">
-          <TabsList>
+          <TabsList className="h-auto w-full flex-wrap justify-start sm:w-fit">
             <TabsTrigger value="pages">
               <FileText className="mr-1.5 size-4" />
               Pages
@@ -678,60 +690,109 @@ get_doc({ library: "${slug}", version: "${sampleVersion}", doc_path: "${samplePa
                 No versions published yet.
               </p>
             ) : (
-              <div className="overflow-x-auto rounded-xl border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="pl-4">Version</TableHead>
-                      <TableHead>Channel</TableHead>
-                      <TableHead className="hidden sm:table-cell">
-                        Generated
-                      </TableHead>
-                      <TableHead className="text-right">Pages</TableHead>
-                      <TableHead className="pr-4" />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {versions.map((v) => (
-                      <TableRow key={v.version}>
-                        <TableCell className="pl-4 font-medium">
-                          {v.version}
-                          {v.version === selectedVersion && (
-                            <Badge variant="secondary" className="ml-2 text-xs">
-                              viewing
-                            </Badge>
-                          )}
-                          {v.version === library.defaultVersion && (
-                            <Badge variant="outline" className="ml-2 text-xs">
-                              default
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <ChannelBadge channel={v.channel} />
-                        </TableCell>
-                        <TableCell className="hidden sm:table-cell">
+              <>
+                <div className="space-y-3 sm:hidden">
+                  {versions.map((v) => (
+                    <Card key={v.version}>
+                      <CardContent className="space-y-3 pt-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-medium">{v.version}</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <ChannelBadge channel={v.channel} />
+                              {v.version === selectedVersion && (
+                                <Badge variant="secondary" className="text-xs">
+                                  viewing
+                                </Badge>
+                              )}
+                              {v.version === library.defaultVersion && (
+                                <Badge variant="outline" className="text-xs">
+                                  default
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-sm font-medium">{v.pageCount} pages</p>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Generated{" "}
                           {v.generatedAt ? formatDateShort(v.generatedAt) : "-"}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {v.pageCount}
-                        </TableCell>
-                        <TableCell className="pr-4 text-right">
-                          {v.version !== selectedVersion && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => switchVersion(v.version)}
-                            >
-                              View pages
-                            </Button>
-                          )}
-                        </TableCell>
+                        </p>
+                        {v.version !== selectedVersion && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => switchVersion(v.version)}
+                            className="w-full"
+                          >
+                            View pages
+                          </Button>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+
+                <div className="hidden overflow-x-auto rounded-xl border sm:block">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="pl-4">Version</TableHead>
+                        <TableHead>Channel</TableHead>
+                        <TableHead className="hidden sm:table-cell">
+                          Generated
+                        </TableHead>
+                        <TableHead className="text-right">Pages</TableHead>
+                        <TableHead className="pr-4" />
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody>
+                      {versions.map((v) => (
+                        <TableRow key={v.version}>
+                          <TableCell className="pl-4 font-medium">
+                            {v.version}
+                            {v.version === selectedVersion && (
+                              <Badge
+                                variant="secondary"
+                                className="ml-2 text-xs"
+                              >
+                                viewing
+                              </Badge>
+                            )}
+                            {v.version === library.defaultVersion && (
+                              <Badge variant="outline" className="ml-2 text-xs">
+                                default
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <ChannelBadge channel={v.channel} />
+                          </TableCell>
+                          <TableCell className="hidden sm:table-cell">
+                            {v.generatedAt
+                              ? formatDateShort(v.generatedAt)
+                              : "-"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {v.pageCount}
+                          </TableCell>
+                          <TableCell className="pr-4 text-right">
+                            {v.version !== selectedVersion && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => switchVersion(v.version)}
+                              >
+                                View pages
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
             )}
           </TabsContent>
 
@@ -752,12 +813,7 @@ get_doc({ library: "${slug}", version: "${sampleVersion}", doc_path: "${samplePa
                   </code>{" "}
                   to search, install, and read {library.displayName} docs:
                 </p>
-                <div className="relative overflow-hidden rounded-lg border bg-zinc-950 text-zinc-100">
-                  <CopyButton text={cliUsage} />
-                  <pre className="overflow-x-auto p-4 text-sm leading-relaxed">
-                    <code>{cliUsage}</code>
-                  </pre>
-                </div>
+                <CodePanel text={cliUsage} />
               </CardContent>
             </Card>
 
@@ -777,12 +833,7 @@ get_doc({ library: "${slug}", version: "${sampleVersion}", doc_path: "${samplePa
                   in your editor to install and search {library.displayName}{" "}
                   docs:
                 </p>
-                <div className="relative overflow-hidden rounded-lg border bg-zinc-950 text-zinc-100">
-                  <CopyButton text={mcpUsage} />
-                  <pre className="overflow-x-auto p-4 text-sm leading-relaxed">
-                    <code>{mcpUsage}</code>
-                  </pre>
-                </div>
+                <CodePanel text={mcpUsage} />
               </CardContent>
             </Card>
 
@@ -797,12 +848,7 @@ get_doc({ library: "${slug}", version: "${sampleVersion}", doc_path: "${samplePa
                 <p className="mb-3 text-sm text-muted-foreground">
                   Resolve this library via the REST API:
                 </p>
-                <div className="relative overflow-hidden rounded-lg border bg-zinc-950 text-zinc-100">
-                  <CopyButton text={apiResolve} />
-                  <pre className="overflow-x-auto p-4 text-sm leading-relaxed">
-                    <code>{apiResolve}</code>
-                  </pre>
-                </div>
+                <CodePanel text={apiResolve} />
               </CardContent>
             </Card>
 
@@ -823,12 +869,7 @@ get_doc({ library: "${slug}", version: "${sampleVersion}", doc_path: "${samplePa
                     : "the default version"}
                   :
                 </p>
-                <div className="relative overflow-hidden rounded-lg border bg-zinc-950 text-zinc-100">
-                  <CopyButton text={apiPages} />
-                  <pre className="overflow-x-auto p-4 text-sm leading-relaxed">
-                    <code>{apiPages}</code>
-                  </pre>
-                </div>
+                <CodePanel text={apiPages} />
               </CardContent>
             </Card>
           </TabsContent>

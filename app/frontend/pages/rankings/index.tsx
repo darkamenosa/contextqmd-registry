@@ -104,6 +104,59 @@ function FreshnessBar({ pct }: { pct: number }) {
   )
 }
 
+function RankingsCards({ libraries }: { libraries: RankedLibrary[] }) {
+  return (
+    <div className="space-y-3 sm:hidden">
+      {libraries.map((lib) => (
+        <Card key={lib.slug}>
+          <CardContent className="space-y-3 pt-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-3">
+                <RankBadge rank={lib.rank} />
+                <div className="min-w-0">
+                  <Link
+                    href={`/libraries/${lib.slug}`}
+                    className="font-medium text-primary hover:underline"
+                  >
+                    {lib.displayName}
+                  </Link>
+                  <p className="truncate text-sm text-muted-foreground">
+                    {lib.slug}
+                  </p>
+                </div>
+              </div>
+              <Badge variant="outline" className="shrink-0">
+                {lib.versionCount} version{lib.versionCount !== 1 ? "s" : ""}
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <p className="text-xs tracking-wide text-muted-foreground uppercase">
+                  Pages
+                </p>
+                <p className="mt-1 font-mono">{lib.pageCount}</p>
+              </div>
+              <div>
+                <p className="text-xs tracking-wide text-muted-foreground uppercase">
+                  Freshness
+                </p>
+                <div className="mt-1">
+                  <FreshnessBar pct={lib.freshnessPct} />
+                </div>
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Updated {formatTimeAgo(lib.updatedAt)}
+            </p>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  )
+}
+
 export default function RankingsIndex({
   libraries,
   pagination,
@@ -178,64 +231,67 @@ export default function RankingsIndex({
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-xl border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12 pl-4">RANK</TableHead>
-                  <TableHead>LIBRARY</TableHead>
-                  <TableHead className="text-right">PAGES</TableHead>
-                  <TableHead className="pr-4 text-right sm:pr-2">
-                    VERSIONS
-                  </TableHead>
-                  <TableHead className="hidden sm:table-cell">
-                    FRESHNESS
-                  </TableHead>
-                  <TableHead className="hidden pr-4 text-right sm:table-cell">
-                    UPDATED
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {libraries.map((lib) => (
-                  <TableRow key={lib.slug}>
-                    <TableCell className="pl-4">
-                      <RankBadge rank={lib.rank} />
-                    </TableCell>
-                    <TableCell>
-                      <Link
-                        href={`/libraries/${lib.slug}`}
-                        className="group flex items-center gap-2"
-                      >
-                        <div>
-                          <span className="font-medium text-primary group-hover:underline">
-                            {lib.displayName}
-                          </span>
-                          <span className="ml-2 hidden text-sm text-muted-foreground sm:inline">
-                            {lib.slug}
-                          </span>
-                        </div>
-                        <ArrowUpRight className="size-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-sm">
-                      {lib.pageCount}
-                    </TableCell>
-                    <TableCell className="pr-4 text-right font-mono text-sm sm:pr-2">
-                      {lib.versionCount}
-                    </TableCell>
-                    <TableCell className="hidden sm:table-cell">
-                      <FreshnessBar pct={lib.freshnessPct} />
-                    </TableCell>
-                    <TableCell className="hidden pr-4 text-right text-sm text-muted-foreground sm:table-cell">
-                      {formatTimeAgo(lib.updatedAt)}
-                    </TableCell>
+          <>
+            <RankingsCards libraries={libraries} />
+            <div className="hidden overflow-x-auto rounded-xl border sm:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12 pl-4">RANK</TableHead>
+                    <TableHead>LIBRARY</TableHead>
+                    <TableHead className="text-right">PAGES</TableHead>
+                    <TableHead className="pr-4 text-right sm:pr-2">
+                      VERSIONS
+                    </TableHead>
+                    <TableHead className="hidden sm:table-cell">
+                      FRESHNESS
+                    </TableHead>
+                    <TableHead className="hidden pr-4 text-right sm:table-cell">
+                      UPDATED
+                    </TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {libraries.map((lib) => (
+                    <TableRow key={lib.slug}>
+                      <TableCell className="pl-4">
+                        <RankBadge rank={lib.rank} />
+                      </TableCell>
+                      <TableCell>
+                        <Link
+                          href={`/libraries/${lib.slug}`}
+                          className="group flex items-center gap-2"
+                        >
+                          <div>
+                            <span className="font-medium text-primary group-hover:underline">
+                              {lib.displayName}
+                            </span>
+                            <span className="ml-2 hidden text-sm text-muted-foreground sm:inline">
+                              {lib.slug}
+                            </span>
+                          </div>
+                          <ArrowUpRight className="size-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">
+                        {lib.pageCount}
+                      </TableCell>
+                      <TableCell className="pr-4 text-right font-mono text-sm sm:pr-2">
+                        {lib.versionCount}
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell">
+                        <FreshnessBar pct={lib.freshnessPct} />
+                      </TableCell>
+                      <TableCell className="hidden pr-4 text-right text-sm text-muted-foreground sm:table-cell">
+                        {formatTimeAgo(lib.updatedAt)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
             <PaginationFooter pagination={pagination} />
-          </div>
+          </>
         )}
       </section>
     </PublicLayout>
