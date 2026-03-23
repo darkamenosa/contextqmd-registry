@@ -17,7 +17,6 @@ import {
 import { formatCount, formatTimeAgo } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import {
   Table,
@@ -109,13 +108,7 @@ const features = [
   },
 ]
 
-function CodeWindow({
-  label,
-  code,
-}: {
-  label: string
-  code: string
-}) {
+function CodeWindow({ label, code }: { label: string; code: string }) {
   return (
     <div className="overflow-hidden rounded-xl border bg-zinc-950 text-zinc-100">
       <div className="flex items-center gap-2 border-b border-zinc-800 px-4 py-3">
@@ -124,7 +117,7 @@ function CodeWindow({
         <div className="size-3 rounded-full bg-green-500/70" />
         <span className="ml-2 text-xs text-zinc-500">{label}</span>
       </div>
-      <pre className="overflow-x-auto whitespace-pre-wrap break-all p-4 text-[13px] leading-relaxed sm:whitespace-pre sm:break-normal sm:text-sm">
+      <pre className="overflow-x-auto p-4 text-[13px] leading-relaxed break-all whitespace-pre-wrap sm:text-sm sm:break-normal sm:whitespace-pre">
         <code>{code}</code>
       </pre>
     </div>
@@ -463,24 +456,26 @@ export default function Home({
               server, both backed by the same open registry.
             </p>
           </div>
-          <div className="mt-10 grid gap-4 sm:mt-16 sm:gap-8 md:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-10 grid gap-4 sm:mt-16 sm:gap-6 md:grid-cols-2 lg:grid-cols-3">
             {features.map((feature) => (
-              <Card
+              <article
                 key={feature.title}
-                className="border-transparent bg-transparent shadow-none"
+                className="rounded-2xl border bg-background/95 p-5 shadow-sm sm:p-6"
               >
-                <CardHeader className="px-0 pt-0 pb-4">
-                  <div className="flex size-11 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                <div className="flex items-start gap-4">
+                  <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
                     <feature.icon className="size-5" />
                   </div>
-                  <CardTitle className="mt-3">{feature.title}</CardTitle>
-                </CardHeader>
-                <CardContent className="px-0 pb-0">
-                  <p className="text-sm/relaxed text-muted-foreground">
-                    {feature.description}
-                  </p>
-                </CardContent>
-              </Card>
+                  <div className="min-w-0">
+                    <h3 className="text-base font-semibold tracking-tight">
+                      {feature.title}
+                    </h3>
+                    <p className="mt-3 text-sm/relaxed text-muted-foreground">
+                      {feature.description}
+                    </p>
+                  </div>
+                </div>
+              </article>
             ))}
           </div>
         </div>

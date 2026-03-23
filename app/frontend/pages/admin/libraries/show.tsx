@@ -655,7 +655,7 @@ export default function AdminLibraryShow({
                 <CardTitle>Library details</CardTitle>
               </CardHeader>
               <CardContent>
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:gap-x-6">
+                <dl className="grid grid-cols-1 gap-x-4 gap-y-3 text-sm sm:grid-cols-2 sm:gap-x-6">
                   <div>
                     <dt className="text-muted-foreground">Display name</dt>
                     <dd className="mt-0.5 font-medium">
@@ -668,7 +668,7 @@ export default function AdminLibraryShow({
                       {library.accountName}
                     </dd>
                   </div>
-                  <div className="col-span-2">
+                  <div className="sm:col-span-2">
                     <dt className="text-muted-foreground">Homepage</dt>
                     <dd className="mt-0.5 font-medium">
                       {library.homepageUrl ? (
@@ -711,7 +711,7 @@ export default function AdminLibraryShow({
                     </dd>
                   </div>
                   {library.aliases.length > 0 && (
-                    <div className="col-span-2">
+                    <div className="sm:col-span-2">
                       <dt className="text-muted-foreground">Aliases</dt>
                       <dd className="mt-1 flex flex-wrap gap-1">
                         {library.aliases.map((alias) => (
@@ -746,31 +746,89 @@ export default function AdminLibraryShow({
                     No versions published yet.
                   </p>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="pl-4">Version</TableHead>
-                          <TableHead>Channel</TableHead>
-                          <TableHead className="text-right">Pages</TableHead>
-                          <TableHead className="hidden text-right sm:table-cell">
-                            Created
-                          </TableHead>
-                          <TableHead className="w-24 pr-4 sm:w-32" />
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {versions.map((v) => (
-                          <VersionRow
-                            key={v.id}
-                            v={v}
-                            libraryId={library.id}
-                            isDefault={v.version === library.defaultVersion}
-                          />
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
+                  <>
+                    <div className="divide-y sm:hidden">
+                      {versions.map((v) => (
+                        <article key={v.id} className="space-y-3 px-4 py-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-medium">{v.version}</p>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <Badge variant="secondary" className="text-xs">
+                                  {v.channel}
+                                </Badge>
+                                {v.version === library.defaultVersion && (
+                                  <Badge variant="outline" className="text-xs">
+                                    default
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                            <p className="text-sm font-medium">
+                              {v.pageCount} pages
+                            </p>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Created {formatDateTime(v.createdAt)}
+                          </p>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1"
+                              nativeButton={false}
+                              render={
+                                <Link
+                                  href={`/admin/libraries/${library.id}/versions/${v.id}`}
+                                />
+                              }
+                            >
+                              View
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="flex-1"
+                              nativeButton={false}
+                              render={
+                                <Link
+                                  href={`/admin/libraries/${library.id}/versions/${v.id}/pages`}
+                                />
+                              }
+                            >
+                              Pages
+                            </Button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+
+                    <div className="hidden overflow-x-auto sm:block">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="pl-4">Version</TableHead>
+                            <TableHead>Channel</TableHead>
+                            <TableHead className="text-right">Pages</TableHead>
+                            <TableHead className="hidden text-right sm:table-cell">
+                              Created
+                            </TableHead>
+                            <TableHead className="w-24 pr-4 sm:w-32" />
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {versions.map((v) => (
+                            <VersionRow
+                              key={v.id}
+                              v={v}
+                              libraryId={library.id}
+                              isDefault={v.version === library.defaultVersion}
+                            />
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -782,57 +840,93 @@ export default function AdminLibraryShow({
                   <CardTitle>Crawl History</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="pl-4">URL</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead className="pr-4 sm:pr-2">Status</TableHead>
-                          <TableHead className="hidden pr-4 text-right sm:table-cell">
-                            Date
-                          </TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {crawlRequests.map((cr) => (
-                          <TableRow key={cr.id}>
-                            <TableCell className="pl-4">
-                              <a
-                                href={cr.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-1 text-sm hover:underline"
-                              >
-                                <span className="max-w-xs truncate">
-                                  {cr.url}
-                                </span>
-                                <ExternalLink className="size-3 shrink-0" />
-                              </a>
-                              {cr.errorMessage && (
-                                <p className="mt-1 text-xs text-destructive">
-                                  {cr.errorMessage}
-                                </p>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-sm">
-                              <SourceTypeIcon
-                                sourceType={cr.sourceType}
-                                size="size-3.5"
-                                showLabel
-                              />
-                            </TableCell>
-                            <TableCell className="pr-4 sm:pr-2">
-                              <CrawlStatusBadge status={cr.status} />
-                            </TableCell>
-                            <TableCell className="hidden pr-4 text-right text-sm text-muted-foreground sm:table-cell">
-                              {formatDateTime(cr.createdAt)}
-                            </TableCell>
+                  <>
+                    <div className="divide-y sm:hidden">
+                      {crawlRequests.map((cr) => (
+                        <article key={cr.id} className="space-y-3 px-4 py-4">
+                          <a
+                            href={cr.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex max-w-full items-center gap-1 text-sm hover:underline"
+                          >
+                            <span className="truncate">{cr.url}</span>
+                            <ExternalLink className="size-3 shrink-0" />
+                          </a>
+                          <div className="flex items-center justify-between gap-3">
+                            <SourceTypeIcon
+                              sourceType={cr.sourceType}
+                              size="size-3.5"
+                              showLabel
+                            />
+                            <CrawlStatusBadge status={cr.status} />
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {formatDateTime(cr.createdAt)}
+                          </p>
+                          {cr.errorMessage && (
+                            <p className="text-xs text-destructive">
+                              {cr.errorMessage}
+                            </p>
+                          )}
+                        </article>
+                      ))}
+                    </div>
+
+                    <div className="hidden overflow-x-auto sm:block">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="pl-4">URL</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead className="pr-4 sm:pr-2">
+                              Status
+                            </TableHead>
+                            <TableHead className="hidden pr-4 text-right sm:table-cell">
+                              Date
+                            </TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
+                        </TableHeader>
+                        <TableBody>
+                          {crawlRequests.map((cr) => (
+                            <TableRow key={cr.id}>
+                              <TableCell className="pl-4">
+                                <a
+                                  href={cr.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1 text-sm hover:underline"
+                                >
+                                  <span className="max-w-xs truncate">
+                                    {cr.url}
+                                  </span>
+                                  <ExternalLink className="size-3 shrink-0" />
+                                </a>
+                                {cr.errorMessage && (
+                                  <p className="mt-1 text-xs text-destructive">
+                                    {cr.errorMessage}
+                                  </p>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                <SourceTypeIcon
+                                  sourceType={cr.sourceType}
+                                  size="size-3.5"
+                                  showLabel
+                                />
+                              </TableCell>
+                              <TableCell className="pr-4 sm:pr-2">
+                                <CrawlStatusBadge status={cr.status} />
+                              </TableCell>
+                              <TableCell className="hidden pr-4 text-right text-sm text-muted-foreground sm:table-cell">
+                                {formatDateTime(cr.createdAt)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </>
                 </CardContent>
               </Card>
             )}

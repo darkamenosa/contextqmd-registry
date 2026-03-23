@@ -140,7 +140,7 @@ function CodePanel({ text }: { text: string }) {
   return (
     <div className="relative overflow-hidden rounded-lg border bg-zinc-950 text-zinc-100">
       <CopyButton text={text} />
-      <pre className="overflow-x-auto whitespace-pre-wrap break-all p-4 text-[13px] leading-relaxed sm:whitespace-pre sm:break-normal sm:text-sm">
+      <pre className="overflow-x-auto p-4 text-[13px] leading-relaxed break-all whitespace-pre-wrap sm:text-sm sm:break-normal sm:whitespace-pre">
         <code>{text}</code>
       </pre>
     </div>
@@ -712,7 +712,9 @@ get_doc({ library: "${slug}", version: "${sampleVersion}", doc_path: "${samplePa
                               )}
                             </div>
                           </div>
-                          <p className="text-sm font-medium">{v.pageCount} pages</p>
+                          <p className="text-sm font-medium">
+                            {v.pageCount} pages
+                          </p>
                         </div>
                         <p className="text-xs text-muted-foreground">
                           Generated{" "}

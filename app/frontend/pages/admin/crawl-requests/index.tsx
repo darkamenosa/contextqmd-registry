@@ -274,6 +274,65 @@ export default function AdminCrawlRequestsIndex({
                 {formatDateTime(cr.createdAt)}
               </span>,
             ]}
+            renderMobileCard={(cr) => (
+              <article className="space-y-3 px-4 py-4 text-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <Link
+                      href={`/admin/crawl_requests/${cr.id}`}
+                      className="block hover:underline"
+                    >
+                      <span className="inline-flex items-center gap-2 font-medium">
+                        <SourceTypeIcon
+                          sourceType={cr.sourceType}
+                          size="size-3.5"
+                        />
+                        <span className="truncate">
+                          {truncateUrl(cr.url, 42)}
+                        </span>
+                      </span>
+                    </Link>
+                    {cr.status === "failed" && cr.errorMessage && (
+                      <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                        {cr.errorMessage}
+                      </p>
+                    )}
+                  </div>
+                  <span className="inline-flex items-center gap-1.5">
+                    {cr.status === "processing" && (
+                      <Loader2 className="size-3 animate-spin text-amber-500" />
+                    )}
+                    <StatusBadge status={cr.status} />
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-xs text-muted-foreground">
+                  <div>
+                    <p className="uppercase">Library</p>
+                    <p className="mt-1 text-sm text-foreground">
+                      {cr.libraryDisplayName || cr.librarySlug || "\u2014"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="uppercase">Duration</p>
+                    <p className="mt-1 font-mono text-sm text-foreground">
+                      {formatDuration(cr.durationSeconds)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="uppercase">Submitter</p>
+                    <p className="mt-1 truncate text-sm text-foreground">
+                      {cr.creatorName}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="uppercase">Created</p>
+                    <p className="mt-1 text-sm text-foreground">
+                      {formatDateTime(cr.createdAt)}
+                    </p>
+                  </div>
+                </div>
+              </article>
+            )}
             sort={sort}
             pagination={paginationProps}
             bulkActions={[

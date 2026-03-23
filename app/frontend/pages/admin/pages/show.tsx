@@ -40,7 +40,7 @@ export default function AdminPageShow({ page, version, library }: Props) {
 
       <div className="flex flex-col gap-4">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2.5">
             <Link
               href={`/admin/libraries/${library.id}/versions/${version.id}/pages`}
@@ -65,6 +65,7 @@ export default function AdminPageShow({ page, version, library }: Props) {
                 href={`/admin/libraries/${library.id}/versions/${version.id}/pages/${page.id}/edit`}
               />
             }
+            className="w-full sm:w-auto"
           >
             <Pencil className="size-4" />
             Edit
@@ -100,12 +101,12 @@ export default function AdminPageShow({ page, version, library }: Props) {
                 <CardTitle className="text-base">Details</CardTitle>
               </CardHeader>
               <CardContent>
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-                  <div className="col-span-2">
+                <dl className="grid grid-cols-1 gap-x-4 gap-y-3 text-sm sm:grid-cols-2">
+                  <div className="sm:col-span-2">
                     <dt className="text-muted-foreground">Page UID</dt>
                     <dd className="mt-0.5 font-mono text-xs">{page.pageUid}</dd>
                   </div>
-                  <div className="col-span-2">
+                  <div className="sm:col-span-2">
                     <dt className="text-muted-foreground">Path</dt>
                     <dd className="mt-0.5 font-mono text-xs">{page.path}</dd>
                   </div>
@@ -126,7 +127,7 @@ export default function AdminPageShow({ page, version, library }: Props) {
                     </div>
                   )}
                   {page.url && (
-                    <div className="col-span-2">
+                    <div className="sm:col-span-2">
                       <dt className="text-muted-foreground">URL</dt>
                       <dd className="mt-0.5">
                         <a
@@ -144,7 +145,7 @@ export default function AdminPageShow({ page, version, library }: Props) {
                     </div>
                   )}
                   {page.checksum && (
-                    <div className="col-span-2">
+                    <div className="sm:col-span-2">
                       <dt className="text-muted-foreground">Checksum</dt>
                       <dd className="mt-0.5 font-mono text-[11px] text-muted-foreground">
                         {page.checksum.slice(0, 12)}...

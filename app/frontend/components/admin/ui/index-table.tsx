@@ -115,6 +115,7 @@ export type IndexTableProps<T> = {
   itemId: (item: T) => string | number
   columns: IndexTableColumn[]
   renderRow: (item: T) => ReactNode[]
+  renderMobileCard?: (item: T) => ReactNode
   selectable?: boolean
   totalCount?: number
   bulkActions?: IndexTableBulkAction[]
@@ -343,6 +344,7 @@ export function IndexTable<T>({
   itemId,
   columns,
   renderRow,
+  renderMobileCard,
   selectable = true,
   totalCount,
   bulkActions = [],
@@ -432,6 +434,11 @@ export function IndexTable<T>({
       : `${selectedCount} selected`
 
   const total = totalCount ?? items.length
+  const visibleItems = items.filter((item) => {
+    if (!showAllSelected) return true
+    const id = itemId(item)
+    return selectionScope === "all" || selectedIds.has(id)
+  })
 
   // Separate "more-actions" from regular bulk actions
   const regularActions = bulkActions.filter(
@@ -443,81 +450,152 @@ export function IndexTable<T>({
 
   return (
     <div className="overflow-hidden">
-      <div className="overflow-x-auto">
-        {items.length === 0 && emptyState ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            {emptyState}
-          </div>
-        ) : (
-          <table className="w-full text-left">
-            <thead className="relative">
-              {/* Bulk action bar — absolute overlay on top of header */}
-              {hasSelection && (
-                <tr
-                  className="pointer-events-none absolute inset-x-0 top-0 z-10 flex border-b border-border bg-muted/30"
-                  aria-hidden="true"
-                >
-                  <th
-                    colSpan={selectable ? columns.length + 1 : columns.length}
-                    className="pointer-events-auto flex-1 px-3 py-2 whitespace-nowrap"
+      {items.length === 0 && emptyState ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          {emptyState}
+        </div>
+      ) : (
+        <>
+          {renderMobileCard && (
+            <div className="divide-y sm:hidden">
+              {visibleItems.map((item) => (
+                <div key={itemId(item)}>{renderMobileCard(item)}</div>
+              ))}
+            </div>
+          )}
+
+          <div
+            className={cn(
+              "overflow-x-auto",
+              renderMobileCard && "hidden sm:block"
+            )}
+          >
+            <table className="w-full text-left">
+              <thead className="relative">
+                {/* Bulk action bar — absolute overlay on top of header */}
+                {hasSelection && (
+                  <tr
+                    className="pointer-events-none absolute inset-x-0 top-0 z-10 flex border-b border-border bg-muted/30"
+                    aria-hidden="true"
                   >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex h-[18px] flex-wrap items-center gap-2">
-                        {selectable && (
-                          <Checkbox
-                            checked={allSelected}
-                            indeterminate={someSelected && !allSelected}
-                            onCheckedChange={toggleSelectAll}
-                            aria-label="Select all"
-                            className="size-3.5"
-                          />
-                        )}
+                    <th
+                      colSpan={selectable ? columns.length + 1 : columns.length}
+                      className="pointer-events-auto flex-1 px-3 py-2 whitespace-nowrap"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex h-[18px] flex-wrap items-center gap-2">
+                          {selectable && (
+                            <Checkbox
+                              checked={allSelected}
+                              indeterminate={someSelected && !allSelected}
+                              onCheckedChange={toggleSelectAll}
+                              aria-label="Select all"
+                              className="size-3.5"
+                            />
+                          )}
 
-                        {/* Selection count dropdown */}
-                        <DropdownMenu>
-                          <DropdownMenuTrigger
-                            render={
+                          {/* Selection count dropdown */}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              render={
+                                <button
+                                  type="button"
+                                  className="flex h-[18px] items-center gap-1 rounded-sm bg-muted/60 px-2 text-xs leading-none font-medium text-foreground hover:bg-muted"
+                                />
+                              }
+                            >
+                              {selectionLabel}
+                              <ChevronDown className="size-3 text-muted-foreground" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                              <DropdownMenuItem onClick={selectAll}>
+                                Select all {total}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={deselectAll}>
+                                Deselect all
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+
+                          {/* Bulk action buttons */}
+                          {regularActions.map((action) =>
+                            action.menu && action.menu.length > 0 ? (
+                              <DropdownMenu key={action.key}>
+                                <DropdownMenuTrigger
+                                  render={
+                                    <button
+                                      type="button"
+                                      className={cn(
+                                        "flex h-[18px] items-center gap-1 rounded-sm bg-muted/60 px-2 text-xs leading-none font-medium hover:bg-muted",
+                                        action.destructive
+                                          ? "text-destructive"
+                                          : "text-foreground"
+                                      )}
+                                    />
+                                  }
+                                >
+                                  {action.label}
+                                  <ChevronDown className="size-3" />
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start">
+                                  {action.menu.map((item) => (
+                                    <DropdownMenuItem
+                                      key={item.key}
+                                      className={
+                                        item.destructive
+                                          ? "text-destructive"
+                                          : undefined
+                                      }
+                                      onClick={() =>
+                                        item.onAction?.(
+                                          Array.from(selectedIds),
+                                          selectionScope
+                                        )
+                                      }
+                                    >
+                                      {item.label}
+                                    </DropdownMenuItem>
+                                  ))}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            ) : (
                               <button
+                                key={action.key}
                                 type="button"
-                                className="flex h-[18px] items-center gap-1 rounded-sm bg-muted/60 px-2 text-xs leading-none font-medium text-foreground hover:bg-muted"
-                              />
-                            }
-                          >
-                            {selectionLabel}
-                            <ChevronDown className="size-3 text-muted-foreground" />
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start">
-                            <DropdownMenuItem onClick={selectAll}>
-                              Select all {total}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={deselectAll}>
-                              Deselect all
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                                onClick={() =>
+                                  action.onAction?.(
+                                    Array.from(selectedIds),
+                                    selectionScope
+                                  )
+                                }
+                                className={cn(
+                                  "h-[18px] rounded-sm bg-muted/60 px-2 text-xs leading-none font-medium hover:bg-muted",
+                                  action.destructive
+                                    ? "text-destructive"
+                                    : "text-foreground"
+                                )}
+                              >
+                                {action.label}
+                              </button>
+                            )
+                          )}
 
-                        {/* Bulk action buttons */}
-                        {regularActions.map((action) =>
-                          action.menu && action.menu.length > 0 ? (
+                          {/* More actions */}
+                          {moreActions.map((action) => (
                             <DropdownMenu key={action.key}>
                               <DropdownMenuTrigger
                                 render={
                                   <button
                                     type="button"
-                                    className={cn(
-                                      "flex h-[18px] items-center gap-1 rounded-sm bg-muted/60 px-2 text-xs leading-none font-medium hover:bg-muted",
-                                      action.destructive
-                                        ? "text-destructive"
-                                        : "text-foreground"
-                                    )}
+                                    className="flex h-[18px] items-center rounded-sm bg-muted/60 px-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                                    aria-label="More actions"
                                   />
                                 }
                               >
-                                {action.label}
-                                <ChevronDown className="size-3" />
+                                <MoreHorizontal className="size-3.5" />
                               </DropdownMenuTrigger>
-                              <DropdownMenuContent align="start">
-                                {action.menu.map((item) => (
+                              <DropdownMenuContent align="end">
+                                {action.menu?.map((item) => (
                                   <DropdownMenuItem
                                     key={item.key}
                                     className={
@@ -537,172 +615,109 @@ export function IndexTable<T>({
                                 ))}
                               </DropdownMenuContent>
                             </DropdownMenu>
-                          ) : (
-                            <button
-                              key={action.key}
-                              type="button"
-                              onClick={() =>
-                                action.onAction?.(
-                                  Array.from(selectedIds),
-                                  selectionScope
-                                )
-                              }
-                              className={cn(
-                                "h-[18px] rounded-sm bg-muted/60 px-2 text-xs leading-none font-medium hover:bg-muted",
-                                action.destructive
-                                  ? "text-destructive"
-                                  : "text-foreground"
-                              )}
-                            >
-                              {action.label}
-                            </button>
-                          )
-                        )}
+                          ))}
+                        </div>
 
-                        {/* More actions */}
-                        {moreActions.map((action) => (
-                          <DropdownMenu key={action.key}>
-                            <DropdownMenuTrigger
-                              render={
-                                <button
-                                  type="button"
-                                  className="flex h-[18px] items-center rounded-sm bg-muted/60 px-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                                  aria-label="More actions"
-                                />
-                              }
-                            >
-                              <MoreHorizontal className="size-3.5" />
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              {action.menu?.map((item) => (
-                                <DropdownMenuItem
-                                  key={item.key}
-                                  className={
-                                    item.destructive
-                                      ? "text-destructive"
-                                      : undefined
-                                  }
-                                  onClick={() =>
-                                    item.onAction?.(
-                                      Array.from(selectedIds),
-                                      selectionScope
-                                    )
-                                  }
-                                >
-                                  {item.label}
-                                </DropdownMenuItem>
-                              ))}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        ))}
-                      </div>
-
-                      {/* Show all selected toggle */}
-                      {showAllSelectedToggle && (
-                        <button
-                          type="button"
-                          onClick={() => setShowAllSelected((prev) => !prev)}
-                          className="flex h-[18px] items-center gap-2 text-xs leading-none text-muted-foreground hover:text-foreground"
-                        >
-                          <span
-                            className={cn(
-                              "relative inline-flex h-4 w-8 items-center rounded-full transition-colors",
-                              showAllSelected ? "bg-foreground" : "bg-muted"
-                            )}
+                        {/* Show all selected toggle */}
+                        {showAllSelectedToggle && (
+                          <button
+                            type="button"
+                            onClick={() => setShowAllSelected((prev) => !prev)}
+                            className="flex h-[18px] items-center gap-2 text-xs leading-none text-muted-foreground hover:text-foreground"
                           >
                             <span
                               className={cn(
-                                "absolute left-0.5 size-3 rounded-full bg-background shadow-xs transition-transform",
-                                showAllSelected
-                                  ? "translate-x-4"
-                                  : "translate-x-0"
+                                "relative inline-flex h-4 w-8 items-center rounded-full transition-colors",
+                                showAllSelected ? "bg-foreground" : "bg-muted"
                               )}
-                            />
-                          </span>
-                          Show all selected
-                        </button>
-                      )}
-                    </div>
-                  </th>
-                </tr>
-              )}
-
-              {/* Normal header row — always rendered for column widths */}
-              <tr className="border-b border-border bg-muted/30">
-                {selectable && (
-                  <th className="w-10 px-3 py-2 whitespace-nowrap">
-                    <div
-                      className={cn(
-                        "flex h-[18px] items-center",
-                        hasSelection && "invisible"
-                      )}
-                    >
-                      <Checkbox
-                        checked={allSelected}
-                        indeterminate={someSelected && !allSelected}
-                        onCheckedChange={toggleSelectAll}
-                        aria-label="Select all"
-                        className="size-3.5"
-                      />
-                    </div>
-                  </th>
+                            >
+                              <span
+                                className={cn(
+                                  "absolute left-0.5 size-3 rounded-full bg-background shadow-xs transition-transform",
+                                  showAllSelected
+                                    ? "translate-x-4"
+                                    : "translate-x-0"
+                                )}
+                              />
+                            </span>
+                            Show all selected
+                          </button>
+                        )}
+                      </div>
+                    </th>
+                  </tr>
                 )}
-                {columns.map((column) => (
-                  <th
-                    key={column.id}
-                    className={cn(
-                      "px-3 py-2 text-xs font-medium whitespace-nowrap text-muted-foreground",
-                      column.align === "center"
-                        ? "text-center"
-                        : column.align === "end"
-                          ? "text-right"
-                          : "text-left",
-                      column.headerClassName,
-                      column.widthClassName
-                    )}
-                  >
-                    <div
+
+                {/* Normal header row — always rendered for column widths */}
+                <tr className="border-b border-border bg-muted/30">
+                  {selectable && (
+                    <th className="w-10 px-3 py-2 whitespace-nowrap">
+                      <div
+                        className={cn(
+                          "flex h-[18px] items-center",
+                          hasSelection && "invisible"
+                        )}
+                      >
+                        <Checkbox
+                          checked={allSelected}
+                          indeterminate={someSelected && !allSelected}
+                          onCheckedChange={toggleSelectAll}
+                          aria-label="Select all"
+                          className="size-3.5"
+                        />
+                      </div>
+                    </th>
+                  )}
+                  {columns.map((column) => (
+                    <th
+                      key={column.id}
                       className={cn(
-                        "flex h-[18px] items-center",
+                        "px-3 py-2 text-xs font-medium whitespace-nowrap text-muted-foreground",
                         column.align === "center"
-                          ? "justify-center"
+                          ? "text-center"
                           : column.align === "end"
-                            ? "justify-end"
-                            : "justify-start",
-                        hasSelection && "invisible"
+                            ? "text-right"
+                            : "text-left",
+                        column.headerClassName,
+                        column.widthClassName
                       )}
                     >
-                      {column.sortable ? (
-                        <button
-                          type="button"
-                          onClick={() => handleSortClick(column.id)}
-                          className={cn(
-                            "group inline-flex items-center gap-0.5 text-xs leading-none font-medium hover:text-foreground",
-                            sort?.columnId === column.id
-                              ? "text-foreground"
-                              : "text-muted-foreground"
-                          )}
-                        >
-                          {column.label}
-                          {renderSortIcon(column.id)}
-                        </button>
-                      ) : (
-                        <span className="leading-none">{column.label}</span>
-                      )}
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
+                      <div
+                        className={cn(
+                          "flex h-[18px] items-center",
+                          column.align === "center"
+                            ? "justify-center"
+                            : column.align === "end"
+                              ? "justify-end"
+                              : "justify-start",
+                          hasSelection && "invisible"
+                        )}
+                      >
+                        {column.sortable ? (
+                          <button
+                            type="button"
+                            onClick={() => handleSortClick(column.id)}
+                            className={cn(
+                              "group inline-flex items-center gap-0.5 text-xs leading-none font-medium hover:text-foreground",
+                              sort?.columnId === column.id
+                                ? "text-foreground"
+                                : "text-muted-foreground"
+                            )}
+                          >
+                            {column.label}
+                            {renderSortIcon(column.id)}
+                          </button>
+                        ) : (
+                          <span className="leading-none">{column.label}</span>
+                        )}
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
 
-            <tbody className="divide-y divide-border">
-              {items
-                .filter((item) => {
-                  if (!showAllSelected) return true
-                  const id = itemId(item)
-                  return selectionScope === "all" || selectedIds.has(id)
-                })
-                .map((item) => {
+              <tbody className="divide-y divide-border">
+                {visibleItems.map((item) => {
                   const id = itemId(item)
                   const isSelected =
                     selectionScope === "all" || selectedIds.has(id)
@@ -748,10 +763,11 @@ export function IndexTable<T>({
                     </tr>
                   )
                 })}
-            </tbody>
-          </table>
-        )}
-      </div>
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       {/* Pagination */}
       {pagination && (

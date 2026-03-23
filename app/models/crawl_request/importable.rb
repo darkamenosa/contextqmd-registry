@@ -330,9 +330,18 @@ module CrawlRequest::Importable
       # Clean slate: delete all existing pages before importing fresh content.
       version.pages.delete_all
       total = pages.size
+      imported = 0
 
       pages.each_with_index do |page_data, index|
         content = sanitize_content(page_data[:content].to_s)
+        if content.length > Page::MAX_DESCRIPTION_LENGTH
+          Rails.logger.warn(
+            "Skipping oversized page #{page_data[:path].inspect} for #{url} " \
+            "(#{content.length} chars > #{Page::MAX_DESCRIPTION_LENGTH})"
+          )
+          next
+        end
+
         checksum = Digest::SHA256.hexdigest(content)
 
         version.pages.create!(
@@ -346,11 +355,16 @@ module CrawlRequest::Importable
           source_ref: source_type,
           headings: sanitize_headings(page_data[:headings] || [])
         )
+        imported += 1
 
         if (index + 1) % 10 == 0 || index + 1 == total
           update_progress("Importing #{index + 1}/#{total} pages", current: index + 1, total: total)
         end
       end
+
+      return if imported.positive?
+
+      raise DocsFetcher::PermanentFetchError, "No importable pages remained for #{url}"
     end
 
     STRIP_TAGS = %w[SYSTEM system-reminder system_reminder IMPORTANT].freeze

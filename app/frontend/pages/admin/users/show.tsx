@@ -40,8 +40,8 @@ function OverviewCard({ user }: { user: AdminUserDetail }) {
         <CardTitle>User details</CardTitle>
       </CardHeader>
       <CardContent>
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
-          <div className="col-span-2">
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
+          <div className="sm:col-span-2">
             <dt className="text-muted-foreground">Email</dt>
             <dd className="mt-0.5 font-medium">{user.email}</dd>
           </div>
@@ -142,51 +142,100 @@ function MembershipsCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-t">
-                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
-                  Account
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
-                  Name
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
-                  Role
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
-                  Status
-                </th>
-                <th className="hidden px-4 py-3 text-left text-sm font-medium text-muted-foreground sm:table-cell">
-                  Joined
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {count > 0 ? (
-                user.memberships.map((m) => (
-                  <MembershipRow
-                    key={m.id}
-                    membership={m}
-                    onReactivate={() =>
-                      onReactivateAccount(m.id, m.accountName)
-                    }
-                  />
-                ))
-              ) : (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="h-24 text-center text-sm text-muted-foreground"
-                  >
-                    This identity has no account memberships yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        {count > 0 ? (
+          <>
+            <div className="divide-y sm:hidden">
+              {user.memberships.map((m) => (
+                <article key={m.id} className="space-y-3 px-4 py-4 text-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium">{m.accountName}</p>
+                      <p className="text-muted-foreground">{m.name}</p>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className="text-muted-foreground capitalize"
+                    >
+                      {m.role}
+                    </Badge>
+                  </div>
+                  <div>
+                    {m.accountCancelled ? (
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                          <StatusBadge status="cancelled" />
+                          {m.daysUntilDeletion !== null && (
+                            <span className="text-xs text-muted-foreground">
+                              {m.daysUntilDeletion}d left
+                            </span>
+                          )}
+                        </div>
+                        {m.canReactivate && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="w-full"
+                            onClick={() =>
+                              onReactivateAccount(m.id, m.accountName)
+                            }
+                          >
+                            Reactivate account
+                          </Button>
+                        )}
+                      </div>
+                    ) : (
+                      <StatusBadge status={m.active ? "active" : "inactive"} />
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Joined {formatDateTime(m.createdAt)}
+                  </p>
+                </article>
+              ))}
+            </div>
+
+            <div className="hidden overflow-x-auto sm:block">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-t">
+                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                      Account
+                    </th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                      Name
+                    </th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                      Role
+                    </th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                      Status
+                    </th>
+                    <th className="hidden px-4 py-3 text-left text-sm font-medium text-muted-foreground sm:table-cell">
+                      Joined
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {user.memberships.map((m) => (
+                    <MembershipRow
+                      key={m.id}
+                      membership={m}
+                      onReactivate={() =>
+                        onReactivateAccount(m.id, m.accountName)
+                      }
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : (
+          <div className="h-24 px-4 text-center text-sm text-muted-foreground">
+            <div className="flex h-full items-center justify-center">
+              This identity has no account memberships yet.
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

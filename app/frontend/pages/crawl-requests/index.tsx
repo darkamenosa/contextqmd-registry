@@ -214,21 +214,25 @@ function TaskTable({
                   {cr.librarySlug ? (
                     <Link
                       href={`/libraries/${cr.librarySlug}`}
-                      className="font-medium text-foreground hover:underline"
+                      className="block font-medium text-foreground hover:underline"
                     >
                       {cr.libraryName}
                     </Link>
                   ) : (
-                    <span className="text-sm text-muted-foreground">Unlinked library</span>
+                    <span className="text-sm text-muted-foreground">
+                      Unlinked library
+                    </span>
                   )}
                   <a
                     href={cr.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-1 inline-flex max-w-full items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+                    className="mt-1 flex max-w-full items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
                   >
-                    <span>{source.icon}</span>
-                    <span className="truncate">{shortenUrl(cr.url)}</span>
+                    <span className="shrink-0">{source.icon}</span>
+                    <span className="min-w-0 truncate">
+                      {shortenUrl(cr.url)}
+                    </span>
                     <ExternalLink className="size-3 shrink-0" />
                   </a>
                 </div>

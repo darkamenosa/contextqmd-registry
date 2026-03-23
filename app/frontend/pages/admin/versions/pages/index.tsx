@@ -183,8 +183,8 @@ export default function AdminVersionPagesIndex({
 
       <div className="flex flex-col gap-4">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-2.5">
             <Link
               href={`/admin/libraries/${library.id}`}
               aria-label="Back to library"
@@ -192,9 +192,15 @@ export default function AdminVersionPagesIndex({
             >
               <ChevronLeft className="size-4" />
             </Link>
-            <h1 className="text-lg font-semibold">{library.displayName}</h1>
-            <Badge variant="outline">{version.version}</Badge>
-            <Badge variant="secondary">{version.channel}</Badge>
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-semibold">
+                {library.displayName}
+              </h1>
+              <div className="mt-1 flex flex-wrap gap-2">
+                <Badge variant="outline">{version.version}</Badge>
+                <Badge variant="secondary">{version.channel}</Badge>
+              </div>
+            </div>
           </div>
           <span className="text-sm text-muted-foreground">
             {pagination.total} page{pagination.total !== 1 ? "s" : ""}
@@ -202,7 +208,10 @@ export default function AdminVersionPagesIndex({
         </div>
 
         {/* Search */}
-        <form onSubmit={handleSearch} className="flex max-w-md gap-2">
+        <form
+          onSubmit={handleSearch}
+          className="flex w-full max-w-md flex-col gap-2 sm:flex-row"
+        >
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -218,6 +227,7 @@ export default function AdminVersionPagesIndex({
               type="button"
               variant="ghost"
               size="sm"
+              className="w-full sm:w-auto"
               onClick={() => {
                 setQuery("")
                 navigate({ query: "", page: 1 })
@@ -237,44 +247,96 @@ export default function AdminVersionPagesIndex({
               : "No pages in this version."}
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="pl-4">Title</TableHead>
-                  <TableHead className="hidden sm:table-cell">Path</TableHead>
-                  <TableHead className="hidden text-right sm:table-cell">
-                    Size
-                  </TableHead>
-                  <TableHead className="w-28 pr-4 text-right">
-                    Actions
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pages.map((page) => (
-                  <PageRow
-                    key={page.id}
-                    page={page}
-                    libraryId={library.id}
-                    versionId={version.id}
-                  />
-                ))}
-              </TableBody>
-            </Table>
+          <div className="rounded-lg border">
+            <div className="divide-y sm:hidden">
+              {pages.map((page) => (
+                <article key={page.id} className="space-y-3 px-4 py-4">
+                  <div>
+                    <Link
+                      href={`/admin/libraries/${library.id}/versions/${version.id}/pages/${page.id}`}
+                      className="font-medium hover:underline"
+                    >
+                      {page.title}
+                    </Link>
+                    <p className="mt-1 font-mono text-xs text-muted-foreground">
+                      {page.path}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                    <span>{formatBytes(page.bytes)}</span>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        nativeButton={false}
+                        render={
+                          <Link
+                            href={`/admin/libraries/${library.id}/versions/${version.id}/pages/${page.id}`}
+                          />
+                        }
+                      >
+                        <Eye className="size-3.5" />
+                        View
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        nativeButton={false}
+                        render={
+                          <Link
+                            href={`/admin/libraries/${library.id}/versions/${version.id}/pages/${page.id}/edit`}
+                          />
+                        }
+                      >
+                        <Pencil className="size-3.5" />
+                        Edit
+                      </Button>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            <div className="hidden overflow-x-auto sm:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-4">Title</TableHead>
+                    <TableHead className="hidden sm:table-cell">Path</TableHead>
+                    <TableHead className="hidden text-right sm:table-cell">
+                      Size
+                    </TableHead>
+                    <TableHead className="w-28 pr-4 text-right">
+                      Actions
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pages.map((page) => (
+                    <PageRow
+                      key={page.id}
+                      page={page}
+                      libraryId={library.id}
+                      versionId={version.id}
+                    />
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </div>
         )}
 
         {/* Pagination */}
         {pagination.pages > 1 && (
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <span className="text-sm text-muted-foreground">
               {pagination.from}–{pagination.to} of {pagination.total}
             </span>
-            <div className="flex gap-1">
+            <div className="flex w-full gap-2 sm:w-auto sm:gap-1">
               <Button
                 variant="outline"
                 size="sm"
+                className="flex-1 sm:flex-none"
                 disabled={!pagination.hasPrevious}
                 onClick={() =>
                   navigate({ query: initialQuery, page: pagination.page - 1 })
@@ -285,6 +347,7 @@ export default function AdminVersionPagesIndex({
               <Button
                 variant="outline"
                 size="sm"
+                className="flex-1 sm:flex-none"
                 disabled={!pagination.hasNext}
                 onClick={() =>
                   navigate({ query: initialQuery, page: pagination.page + 1 })

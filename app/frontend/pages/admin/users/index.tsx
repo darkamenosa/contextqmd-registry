@@ -229,6 +229,48 @@ export default function AdminUsersIndex({
               user.accountsCount,
               formatDateTime(user.createdAt),
             ]}
+            renderMobileCard={(user) => (
+              <article className="space-y-3 px-4 py-4 text-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <Link
+                      href={`/admin/users/${user.id}`}
+                      className="block font-medium hover:underline"
+                    >
+                      {user.name || "\u2014"}
+                    </Link>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {user.email}
+                    </p>
+                  </div>
+                  <StatusBadge status={user.status} />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="outline" className="text-xs">
+                    {user.authMethod}
+                  </Badge>
+                  {user.staff && (
+                    <Badge variant="secondary" className="text-xs">
+                      Staff
+                    </Badge>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-xs text-muted-foreground">
+                  <div>
+                    <p className="uppercase">Accounts</p>
+                    <p className="mt-1 text-sm text-foreground">
+                      {user.accountsCount}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="uppercase">Joined</p>
+                    <p className="mt-1 text-sm text-foreground">
+                      {formatDateTime(user.createdAt)}
+                    </p>
+                  </div>
+                </div>
+              </article>
+            )}
             sort={sort}
             pagination={paginationProps}
             bulkActions={[

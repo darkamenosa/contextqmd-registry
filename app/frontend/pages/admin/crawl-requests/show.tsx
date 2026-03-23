@@ -363,7 +363,7 @@ export default function AdminCrawlRequestShow({ crawlRequest: cr }: Props) {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+                  <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
                     <div>
                       <dt className="text-muted-foreground">Library</dt>
                       <dd className="mt-0.5">
@@ -403,15 +403,15 @@ export default function AdminCrawlRequestShow({ crawlRequest: cr }: Props) {
                 <CardTitle>Request Details</CardTitle>
               </CardHeader>
               <CardContent>
-                <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
-                  <div className="col-span-2">
+                <dl className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
+                  <div className="sm:col-span-2">
                     <dt className="text-muted-foreground">URL</dt>
                     <dd className="mt-0.5">
                       <a
                         href={cr.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 font-mono text-xs hover:underline"
+                        className="inline-flex items-center gap-1.5 font-mono text-xs break-all hover:underline"
                       >
                         {cr.url}
                         <ExternalLink className="size-3 shrink-0" />
@@ -447,7 +447,7 @@ export default function AdminCrawlRequestShow({ crawlRequest: cr }: Props) {
                     </dd>
                   </div>
                   {cr.statusMessage && (
-                    <div className="col-span-2">
+                    <div className="sm:col-span-2">
                       <dt className="text-muted-foreground">Status Message</dt>
                       <dd className="mt-0.5 text-sm">{cr.statusMessage}</dd>
                     </div>

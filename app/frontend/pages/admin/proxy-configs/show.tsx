@@ -282,7 +282,7 @@ export default function AdminProxyConfigShow({
                 <CardTitle>Connection Details</CardTitle>
               </CardHeader>
               <CardContent>
-                <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
+                <dl className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
                   <div>
                     <dt className="text-muted-foreground">Name</dt>
                     <dd className="mt-0.5 font-medium">{config.name}</dd>
@@ -334,7 +334,7 @@ export default function AdminProxyConfigShow({
                     </dd>
                   </div>
                   {config.notes && (
-                    <div className="col-span-2">
+                    <div className="sm:col-span-2">
                       <dt className="text-muted-foreground">Notes</dt>
                       <dd className="mt-0.5 text-sm">{config.notes}</dd>
                     </div>
@@ -358,7 +358,7 @@ export default function AdminProxyConfigShow({
                       <HealthStatus config={config} />
                     </dd>
                   </div>
-                  <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
+                  <dl className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
                     <div>
                       <dt className="text-muted-foreground">
                         Consecutive Failures
@@ -428,66 +428,120 @@ export default function AdminProxyConfigShow({
                     No leases recorded yet.
                   </p>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="pl-4">Session</TableHead>
-                          <TableHead className="hidden sm:table-cell">
-                            Scope
-                          </TableHead>
-                          <TableHead className="hidden sm:table-cell">
-                            Target
-                          </TableHead>
-                          <TableHead className="pr-4 sm:pr-2">Status</TableHead>
-                          <TableHead className="hidden pr-4 text-right sm:table-cell">
-                            Last Seen
-                          </TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {leases.map((lease) => (
-                          <TableRow key={lease.id}>
-                            <TableCell className="pl-4 font-mono text-xs">
-                              {lease.sessionKey.length > 24
-                                ? `${lease.sessionKey.slice(0, 24)}...`
-                                : lease.sessionKey}
-                              {lease.stickySession && (
-                                <Badge
-                                  variant="outline"
-                                  className="ml-2 text-[10px]"
-                                >
-                                  sticky
+                  <>
+                    <div className="divide-y sm:hidden">
+                      {leases.map((lease) => (
+                        <article key={lease.id} className="space-y-3 px-4 py-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="font-mono text-xs break-all">
+                                {lease.sessionKey}
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <Badge variant="secondary" className="text-xs">
+                                  {lease.usageScope}
                                 </Badge>
-                              )}
-                            </TableCell>
-                            <TableCell className="hidden sm:table-cell">
-                              <Badge variant="secondary" className="text-xs">
-                                {lease.usageScope}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="hidden font-mono text-xs text-muted-foreground sm:table-cell">
-                              {lease.targetHost || "—"}
-                            </TableCell>
-                            <TableCell className="pr-4 sm:pr-2">
-                              {lease.active ? (
-                                <StatusBadge status="active" />
-                              ) : lease.releasedAt ? (
-                                <StatusBadge status="completed">
-                                  Released
-                                </StatusBadge>
-                              ) : (
-                                <StatusBadge status="expired" />
-                              )}
-                            </TableCell>
-                            <TableCell className="hidden pr-4 text-right text-xs text-muted-foreground sm:table-cell">
-                              {formatDateTime(lease.lastSeenAt)}
-                            </TableCell>
+                                {lease.stickySession && (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[10px]"
+                                  >
+                                    sticky
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                            {lease.active ? (
+                              <StatusBadge status="active" />
+                            ) : lease.releasedAt ? (
+                              <StatusBadge status="completed">
+                                Released
+                              </StatusBadge>
+                            ) : (
+                              <StatusBadge status="expired" />
+                            )}
+                          </div>
+                          <div className="grid grid-cols-2 gap-3 text-xs text-muted-foreground">
+                            <div>
+                              <p className="uppercase">Target</p>
+                              <p className="mt-1 break-all text-foreground">
+                                {lease.targetHost || "—"}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="uppercase">Last seen</p>
+                              <p className="mt-1 text-foreground">
+                                {formatDateTime(lease.lastSeenAt)}
+                              </p>
+                            </div>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+
+                    <div className="hidden overflow-x-auto sm:block">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="pl-4">Session</TableHead>
+                            <TableHead className="hidden sm:table-cell">
+                              Scope
+                            </TableHead>
+                            <TableHead className="hidden sm:table-cell">
+                              Target
+                            </TableHead>
+                            <TableHead className="pr-4 sm:pr-2">
+                              Status
+                            </TableHead>
+                            <TableHead className="hidden pr-4 text-right sm:table-cell">
+                              Last Seen
+                            </TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
+                        </TableHeader>
+                        <TableBody>
+                          {leases.map((lease) => (
+                            <TableRow key={lease.id}>
+                              <TableCell className="pl-4 font-mono text-xs">
+                                {lease.sessionKey.length > 24
+                                  ? `${lease.sessionKey.slice(0, 24)}...`
+                                  : lease.sessionKey}
+                                {lease.stickySession && (
+                                  <Badge
+                                    variant="outline"
+                                    className="ml-2 text-[10px]"
+                                  >
+                                    sticky
+                                  </Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="hidden sm:table-cell">
+                                <Badge variant="secondary" className="text-xs">
+                                  {lease.usageScope}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="hidden font-mono text-xs text-muted-foreground sm:table-cell">
+                                {lease.targetHost || "—"}
+                              </TableCell>
+                              <TableCell className="pr-4 sm:pr-2">
+                                {lease.active ? (
+                                  <StatusBadge status="active" />
+                                ) : lease.releasedAt ? (
+                                  <StatusBadge status="completed">
+                                    Released
+                                  </StatusBadge>
+                                ) : (
+                                  <StatusBadge status="expired" />
+                                )}
+                              </TableCell>
+                              <TableCell className="hidden pr-4 text-right text-xs text-muted-foreground sm:table-cell">
+                                {formatDateTime(lease.lastSeenAt)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </>
                 )}
               </CardContent>
             </Card>

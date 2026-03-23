@@ -211,12 +211,13 @@ export default function AdminProxyConfigsIndex({
     <AdminLayout>
       <Head title="Proxy Pool" />
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-lg font-semibold">Proxy Pool</h1>
           <Button
             size="sm"
             nativeButton={false}
             render={<Link href="/admin/proxy_configs/new" />}
+            className="w-full sm:w-auto"
           >
             <Plus className="size-4" />
             Add Proxy
@@ -296,6 +297,64 @@ export default function AdminProxyConfigsIndex({
                 {c.lastSuccessAt ? formatDateTime(c.lastSuccessAt) : "Never"}
               </span>,
             ]}
+            renderMobileCard={(c) => (
+              <article className="space-y-3 px-4 py-4 text-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <Link
+                      href={`/admin/proxy_configs/${c.id}`}
+                      className="block font-medium hover:underline"
+                    >
+                      {c.name}
+                    </Link>
+                    <p className="mt-1 font-mono text-xs text-muted-foreground">
+                      {c.scheme}://{c.host}:{c.port}
+                    </p>
+                    {c.provider && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {c.provider}
+                      </p>
+                    )}
+                  </div>
+                  <ProxyHealthIndicator config={c} />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {c.kind ? (
+                    <Badge variant="outline" className="text-xs capitalize">
+                      {c.kind}
+                    </Badge>
+                  ) : null}
+                  <Badge variant="secondary" className="text-xs">
+                    {c.usageScope}
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-xs text-muted-foreground">
+                  <div>
+                    <p className="uppercase">Priority</p>
+                    <p className="mt-1 font-mono text-sm text-foreground">
+                      {c.priority}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="uppercase">Capacity</p>
+                    <div className="mt-1">
+                      <CapacityBar
+                        active={c.activeLeaseCount}
+                        max={c.maxConcurrency}
+                      />
+                    </div>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="uppercase">Last Activity</p>
+                    <p className="mt-1 text-sm text-foreground">
+                      {c.lastSuccessAt
+                        ? formatDateTime(c.lastSuccessAt)
+                        : "Never"}
+                    </p>
+                  </div>
+                </div>
+              </article>
+            )}
             sort={sort}
             pagination={paginationProps}
             bulkActions={[

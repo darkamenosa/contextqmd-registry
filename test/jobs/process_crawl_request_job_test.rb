@@ -256,6 +256,93 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     assert_equal 0, Page.joins(version: :library).where(libraries: { slug: "example" }).count
   end
 
+  test "skips oversized pages and imports the remaining content" do
+    crawl_request = CrawlRequest.create!(
+      creator: @user,
+      url: "https://github.com/example/docs-repo",
+      source_type: "github",
+      status: "pending"
+    )
+
+    result = CrawlResult.new(
+      slug: "example-docs",
+      namespace: "example",
+      name: "docs-repo",
+      display_name: "Example Docs",
+      homepage_url: "https://github.com/example/docs-repo",
+      aliases: [ "example/docs-repo" ],
+      version: "latest",
+      pages: [
+        {
+          page_uid: "intro",
+          path: "intro.md",
+          title: "Intro",
+          url: "https://github.com/example/docs-repo/blob/main/intro.md",
+          content: "Intro content",
+          headings: []
+        },
+        {
+          page_uid: "huge-reference",
+          path: "docs/reference.md",
+          title: "Reference",
+          url: "https://github.com/example/docs-repo/blob/main/docs/reference.md",
+          content: "x" * (Page::MAX_DESCRIPTION_LENGTH + 1),
+          headings: []
+        }
+      ]
+    )
+
+    with_stub_fetcher(result) do
+      assert_difference -> { Page.count }, 1 do
+        ProcessCrawlRequestJob.perform_now(crawl_request)
+      end
+    end
+
+    crawl_request.reload
+    assert_equal "completed", crawl_request.status
+    assert_equal 1, crawl_request.library.versions.first.pages.count
+    assert_nil crawl_request.library.versions.first.pages.find_by(page_uid: "huge-reference")
+  end
+
+  test "fails when every fetched page exceeds the max page size" do
+    crawl_request = CrawlRequest.create!(
+      creator: @user,
+      url: "https://github.com/example/huge-docs",
+      source_type: "github",
+      status: "pending"
+    )
+
+    result = CrawlResult.new(
+      slug: "huge-docs",
+      namespace: "example",
+      name: "huge-docs",
+      display_name: "Huge Docs",
+      homepage_url: "https://github.com/example/huge-docs",
+      aliases: [ "example/huge-docs" ],
+      version: "latest",
+      pages: [
+        {
+          page_uid: "huge",
+          path: "huge.md",
+          title: "Huge",
+          url: "https://github.com/example/huge-docs/blob/main/huge.md",
+          content: "x" * (Page::MAX_DESCRIPTION_LENGTH + 1),
+          headings: []
+        }
+      ]
+    )
+
+    with_stub_fetcher(result) do
+      assert_raises(DocsFetcher::PermanentFetchError) do
+        ProcessCrawlRequestJob.perform_now(crawl_request)
+      end
+    end
+
+    crawl_request.reload
+    assert_equal "failed", crawl_request.status
+    assert_equal "No importable pages remained for https://github.com/example/huge-docs", crawl_request.error_message
+  end
+
   test "skips processing when crawl request is not pending" do
     @crawl_request.update!(status: "completed")
 

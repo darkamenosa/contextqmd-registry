@@ -156,12 +156,13 @@ export default function AdminLibrariesIndex({
     <AdminLayout>
       <Head title="Libraries" />
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-lg font-semibold">Libraries</h1>
           <Button
             size="sm"
             nativeButton={false}
             render={<Link href="/crawl/new" />}
+            className="w-full sm:w-auto"
           >
             <Plus className="size-4" />
             Submit Docs
@@ -212,6 +213,50 @@ export default function AdminLibrariesIndex({
               lib.pageCount,
               formatDateTime(lib.updatedAt),
             ]}
+            renderMobileCard={(lib) => (
+              <article className="space-y-3 px-4 py-4 text-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <Link
+                      href={`/admin/libraries/${lib.id}`}
+                      className="block font-medium hover:underline"
+                    >
+                      {lib.displayName}
+                    </Link>
+                    <p className="mt-1 font-mono text-xs text-muted-foreground">
+                      {lib.slug}
+                    </p>
+                  </div>
+                  {lib.licenseStatus && (
+                    <Badge variant="outline" className="text-xs">
+                      {lib.licenseStatus}
+                    </Badge>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-xs text-muted-foreground">
+                  <div>
+                    <p className="uppercase">Account</p>
+                    <p className="mt-1 text-sm text-foreground">
+                      {lib.accountName}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="uppercase">Updated</p>
+                    <p className="mt-1 text-sm text-foreground">
+                      {formatDateTime(lib.updatedAt)}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="secondary" className="text-xs">
+                    {lib.versionCount} versions
+                  </Badge>
+                  <Badge variant="secondary" className="text-xs">
+                    {lib.pageCount} pages
+                  </Badge>
+                </div>
+              </article>
+            )}
             sort={sort}
             pagination={paginationProps}
             bulkActions={[

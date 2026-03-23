@@ -68,16 +68,16 @@ class PageTest < ActiveSupport::TestCase
     assert_not_includes sql, "search_tsvector"
   end
 
-  test "rejects descriptions exceeding 500_000 characters" do
+  test "rejects descriptions exceeding the max page size" do
     page = Page.new(
       version: versions(:nextjs_stable),
       page_uid: "pg_huge_description",
       path: "examples/huge.ipynb",
       title: "Huge Notebook",
-      description: "x" * 500_001
+      description: "x" * (Page::MAX_DESCRIPTION_LENGTH + 1)
     )
 
     assert_not page.valid?
-    assert_includes page.errors[:description], "is too long (maximum is 500000 characters)"
+    assert_includes page.errors[:description], "is too long (maximum is #{Page::MAX_DESCRIPTION_LENGTH} characters)"
   end
 end

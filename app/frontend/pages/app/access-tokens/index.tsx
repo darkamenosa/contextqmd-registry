@@ -82,11 +82,16 @@ function NewTokenAlert({ token }: { token: string }) {
         <span className="text-sm font-medium text-foreground">
           Your new access token
         </span>
-        <div className="flex items-center gap-2">
-          <code className="flex-1 rounded-md border bg-background px-3 py-2 font-mono text-sm select-all">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <code className="flex-1 rounded-md border bg-background px-3 py-2 font-mono text-sm break-all select-all">
             {token}
           </code>
-          <CopyButton value={token} variant="outline" size="sm" />
+          <CopyButton
+            value={token}
+            variant="outline"
+            size="sm"
+            className="w-full sm:w-auto"
+          />
         </div>
         <span className="text-xs text-muted-foreground">
           Copy this token now. You won&apos;t be able to see it again.
@@ -96,7 +101,7 @@ function NewTokenAlert({ token }: { token: string }) {
   )
 }
 
-function CreateTokenDialog() {
+function CreateTokenDialog({ className = "" }: { className?: string }) {
   const { url } = usePage()
   const [open, setOpen] = useState(false)
   const { data, setData, post, processing, errors, reset, transform } = useForm(
@@ -119,7 +124,7 @@ function CreateTokenDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button size="sm" />}>
+      <DialogTrigger render={<Button size="sm" className={className} />}>
         <Plus className="size-4" />
         Generate token
       </DialogTrigger>
@@ -250,87 +255,132 @@ function TokensTable({ tokens }: { tokens: AccessToken[] }) {
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-t">
-                  <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
-                    Description
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
-                    Token
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
-                    Permission
-                  </th>
-                  <th className="hidden px-4 py-3 text-left text-sm font-medium text-muted-foreground sm:table-cell">
-                    Created
-                  </th>
-                  <th className="hidden px-4 py-3 text-left text-sm font-medium text-muted-foreground sm:table-cell">
-                    Last used
-                  </th>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {tokens.length > 0 ? (
-                  tokens.map((token) => (
-                    <tr
-                      key={token.id}
-                      className="border-t transition-colors hover:bg-muted/50"
+          {tokens.length > 0 ? (
+            <>
+              <div className="divide-y sm:hidden">
+                {tokens.map((token) => (
+                  <article key={token.id} className="space-y-3 px-4 py-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">{token.name}</p>
+                        <div className="mt-1">
+                          <TokenPrefix prefix={token.tokenPrefix} />
+                        </div>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className="shrink-0 text-muted-foreground capitalize"
+                      >
+                        {token.permission === "write" ? "Read + Write" : "Read"}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-xs text-muted-foreground">
+                      <div>
+                        <p className="uppercase">Created</p>
+                        <p className="mt-1 text-foreground">
+                          {formatDateShort(token.createdAt)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="uppercase">Last used</p>
+                        <p className="mt-1 text-foreground">
+                          {token.lastUsedAt
+                            ? formatDateShort(token.lastUsedAt)
+                            : "Never"}
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-destructive hover:text-destructive"
+                      onClick={() => setRevokeToken(token)}
                     >
-                      <td className="px-4 py-3 text-sm font-medium">
-                        {token.name}
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        <TokenPrefix prefix={token.tokenPrefix} />
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        <Badge
-                          variant="outline"
-                          className="text-muted-foreground capitalize"
-                        >
-                          {token.permission === "write"
-                            ? "Read + Write"
-                            : "Read"}
-                        </Badge>
-                      </td>
-                      <td className="hidden px-4 py-3 text-sm sm:table-cell">
-                        {formatDateShort(token.createdAt)}
-                      </td>
-                      <td className="hidden px-4 py-3 text-sm text-muted-foreground sm:table-cell">
-                        {token.lastUsedAt
-                          ? formatDateShort(token.lastUsedAt)
-                          : "Never"}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => setRevokeToken(token)}
-                        >
-                          <Trash2 className="size-4" />
-                          <span className="sr-only">Revoke</span>
-                        </Button>
-                      </td>
+                      <Trash2 className="size-4" />
+                      Revoke token
+                    </Button>
+                  </article>
+                ))}
+              </div>
+
+              <div className="hidden overflow-x-auto sm:block">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-t">
+                      <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                        Description
+                      </th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                        Token
+                      </th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                        Permission
+                      </th>
+                      <th className="hidden px-4 py-3 text-left text-sm font-medium text-muted-foreground sm:table-cell">
+                        Created
+                      </th>
+                      <th className="hidden px-4 py-3 text-left text-sm font-medium text-muted-foreground sm:table-cell">
+                        Last used
+                      </th>
+                      <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">
+                        <span className="sr-only">Actions</span>
+                      </th>
                     </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="h-24 text-center text-sm text-muted-foreground"
-                    >
-                      No access tokens yet. Generate one to get started.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody>
+                    {tokens.map((token) => (
+                      <tr
+                        key={token.id}
+                        className="border-t transition-colors hover:bg-muted/50"
+                      >
+                        <td className="px-4 py-3 text-sm font-medium">
+                          {token.name}
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <TokenPrefix prefix={token.tokenPrefix} />
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <Badge
+                            variant="outline"
+                            className="text-muted-foreground capitalize"
+                          >
+                            {token.permission === "write"
+                              ? "Read + Write"
+                              : "Read"}
+                          </Badge>
+                        </td>
+                        <td className="hidden px-4 py-3 text-sm sm:table-cell">
+                          {formatDateShort(token.createdAt)}
+                        </td>
+                        <td className="hidden px-4 py-3 text-sm text-muted-foreground sm:table-cell">
+                          {token.lastUsedAt
+                            ? formatDateShort(token.lastUsedAt)
+                            : "Never"}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => setRevokeToken(token)}
+                          >
+                            <Trash2 className="size-4" />
+                            <span className="sr-only">Revoke</span>
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <div className="h-24 px-4 text-center text-sm text-muted-foreground">
+              <div className="flex h-full items-center justify-center">
+                No access tokens yet. Generate one to get started.
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -356,7 +406,7 @@ export default function AppAccessTokensIndex({
     <AppLayout>
       <Head title="Access Tokens" />
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">
               Access Tokens
@@ -365,7 +415,7 @@ export default function AppAccessTokensIndex({
               Personal access tokens for API authentication.
             </p>
           </div>
-          <CreateTokenDialog />
+          <CreateTokenDialog className="w-full sm:w-auto" />
         </div>
 
         {newToken && <NewTokenAlert token={newToken} />}
