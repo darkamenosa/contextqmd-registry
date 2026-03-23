@@ -4,6 +4,8 @@ class Libraries::PagesController < InertiaController
   allow_unauthenticated_access
   disallow_account_scope
 
+  CACHE_TTL = 1.hour
+
   def show
     library = Library.find_by!(slug: params[:slug])
     version = library.versions.find_by(version: params[:version])
@@ -14,14 +16,33 @@ class Libraries::PagesController < InertiaController
     end
 
     page = version.pages.find_by!(page_uid: params[:page_uid])
+    cached = Rails.cache.fetch(
+      [
+        "public",
+        "library-page",
+        library.id,
+        library.display_name,
+        params[:version],
+        page.id,
+        page.checksum
+      ],
+      expires_in: CACHE_TTL
+    ) do
+      {
+        library: library_summary(library),
+        version: params[:version],
+        page: full_page_props(page),
+        meta_description: page_meta_description(page, library)
+      }
+    end
 
     render inertia: "libraries/page-show", props: {
-      library: library_summary(library),
-      version: params[:version],
-      page: full_page_props(page),
+      library: cached[:library],
+      version: cached[:version],
+      page: cached[:page],
       seo: seo_props(
         title: "#{page.title} - #{library.display_name}",
-        description: page_meta_description(page, library),
+        description: cached[:meta_description],
         url: canonical_url
       ),
       json_ld: breadcrumb_json_ld([

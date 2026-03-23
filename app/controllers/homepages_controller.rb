@@ -4,15 +4,23 @@ class HomepagesController < InertiaController
   allow_unauthenticated_access
   disallow_account_scope
 
+  CACHE_TTL = 5.minutes
   TABS = %w[popular recent trending].freeze
 
   def show
     tab = TABS.include?(params[:tab]) ? params[:tab] : "popular"
+    cached = Rails.cache.fetch([ "public", "homepage", tab ], expires_in: CACHE_TTL) do
+      {
+        library_count: Library.count,
+        libraries: Library.public_send(tab).limit(10).map { |lib| home_library_props(lib) },
+        active_tab: tab
+      }
+    end
 
     render inertia: "pages/home", props: {
-      library_count: Library.count,
-      libraries: Library.public_send(tab).limit(10).map { |lib| home_library_props(lib) },
-      active_tab: tab,
+      library_count: cached[:library_count],
+      libraries: cached[:libraries],
+      active_tab: cached[:active_tab],
       seo: seo_props(
         title: "ContextQMD — Local-First Docs for AI",
         description: "Local-first documentation package system for CLI and MCP. Install, search, and retrieve version-aware docs for any library.",

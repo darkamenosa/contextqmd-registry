@@ -3,28 +3,41 @@
 class LibrariesController < InertiaController
   include Pagy::Method
 
+  LIST_CACHE_TTL = 5.minutes
+  DETAIL_CACHE_TTL = 1.hour
+
   allow_unauthenticated_access
   disallow_account_scope
   before_action :authenticate_identity!, only: [ :new, :create ]
 
   def index
-    libraries = if params[:query].present?
-      search_libraries(params[:query]).includes(:source_policy, :versions)
-    else
-      Library.all.includes(:source_policy, :versions).order(:slug)
+    query = params[:query].to_s.strip
+    page = params[:page].presence || "1"
+    cached = Rails.cache.fetch([ "public", "libraries", "index", query, page ], expires_in: LIST_CACHE_TTL) do
+      libraries = if query.present?
+        search_libraries(query).includes(:source_policy, :library_sources)
+      else
+        Library.includes(:source_policy, :library_sources).order(:slug)
+      end
+
+      pagy, paginated = pagy(:offset, libraries, limit: 10)
+
+      {
+        libraries: paginated.map { |lib| library_props(lib) },
+        pagination: pagination_props(pagy),
+        query: query
+      }
     end
 
-    pagy, paginated = pagy(:offset, libraries, limit: 10)
-
     render inertia: "libraries/index", props: {
-      libraries: paginated.map { |lib| library_props(lib) },
-      pagination: pagination_props(pagy),
-      query: params[:query] || "",
+      libraries: cached[:libraries],
+      pagination: cached[:pagination],
+      query: cached[:query],
       seo: seo_props(
         title: "Libraries",
         description: "Browse version-aware documentation packages for libraries. Search, install, and use with CLI or MCP.",
         url: canonical_url(allowed_params: [ :page ]),
-        noindex: params[:query].present? ? true : nil
+        noindex: query.present? ? true : nil
       )
     }
   end
@@ -50,15 +63,36 @@ class LibrariesController < InertiaController
     else
       pagy(:offset, pages_scope, limit: 30)
     end
+    cached = Rails.cache.fetch(
+      library_show_cache_key(
+        library: library,
+        versions: versions,
+        selected_version: selected_version,
+        pages: pages,
+        pagination: pagination_props(pagy),
+        search_query: search_query
+      ),
+      expires_in: DETAIL_CACHE_TTL
+    ) do
+      {
+        library: library_props(library),
+        versions: versions.map { |v| version_props(v) },
+        pages: pages.map { |p| page_props(p) },
+        selected_version: selected_version&.version,
+        pagination: pagination_props(pagy),
+        search: search_query,
+        search_active: search_active
+      }
+    end
 
     render inertia: "libraries/show", props: {
-      library: library_props(library),
-      versions: versions.map { |v| version_props(v) },
-      pages: pages.map { |p| page_props(p) },
-      selected_version: selected_version&.version,
-      pagination: pagination_props(pagy),
-      search: search_query,
-      search_active: search_active,
+      library: cached[:library],
+      versions: cached[:versions],
+      pages: cached[:pages],
+      selected_version: cached[:selected_version],
+      pagination: cached[:pagination],
+      search: cached[:search],
+      search_active: cached[:search_active],
       seo: seo_props(
         title: "#{library.display_name} Documentation",
         description: library_meta_description(library),
@@ -110,8 +144,8 @@ class LibrariesController < InertiaController
         homepage_url: library.homepage_url,
         default_version: library.default_version,
         license_status: library.source_policy&.license_status,
-        version_count: library.versions.size,
-        page_count: library.versions.sum(&:pages_count),
+        version_count: library.versions_count,
+        page_count: library.total_pages_count,
         source_type: library.source_type,
         source_count: library.library_sources.size
       }
@@ -145,10 +179,47 @@ class LibrariesController < InertiaController
 
     def library_meta_description(library)
       parts = [ library.display_name, "documentation" ]
-      parts << "— #{library.versions.size} versions" if library.versions.size > 0
+      parts << "— #{library.versions_count} versions" if library.versions_count > 0
       parts << "and #{library.total_pages_count} pages" if library.total_pages_count > 0
       parts << "on ContextQMD. Install, search, and retrieve version-aware docs."
       parts.join(" ")
+    end
+
+    def library_show_cache_key(library:, versions:, selected_version:, pages:, pagination:, search_query:)
+      versions_signature = versions.map do |version|
+        [
+          version.id,
+          version.version,
+          version.channel,
+          version.pages_count,
+          version.generated_at&.utc&.to_i,
+          version.updated_at&.utc&.to_i
+        ]
+      end
+      pages_signature = pages.map { |page| [ page.id, page.checksum ] }
+      sources_signature = library.library_sources.map { |source| [ source.id, source.updated_at&.utc&.to_i ] }
+
+      [
+        "public",
+        "libraries",
+        "show",
+        library.id,
+        library.slug,
+        library.display_name,
+        library.homepage_url,
+        library.default_version,
+        library.source_type,
+        library.total_pages_count,
+        library.versions_count,
+        library.aliases,
+        library.source_policy&.cache_key_with_version,
+        selected_version&.id,
+        search_query,
+        pagination,
+        Digest::SHA256.hexdigest(versions_signature.to_json),
+        Digest::SHA256.hexdigest(pages_signature.to_json),
+        Digest::SHA256.hexdigest(sources_signature.to_json)
+      ]
     end
 
     def manual_library_params

@@ -3,16 +3,27 @@
 class RankingsController < InertiaController
   include Pagy::Method
 
+  CACHE_TTL = 5.minutes
+
   allow_unauthenticated_access
   disallow_account_scope
 
   def index
-    pagy, paginated = pagy(:offset, Library.ranked, limit: 10)
+    page = params[:page].presence || "1"
+    cached = Rails.cache.fetch([ "public", "rankings", page ], expires_in: CACHE_TTL) do
+      pagy, paginated = pagy(:offset, Library.ranked, limit: 10)
+
+      {
+        libraries: paginated.map.with_index { |lib, i| ranking_props(lib, rank: pagy.offset + i + 1) },
+        pagination: pagination_props(pagy),
+        total_libraries: Library.count
+      }
+    end
 
     render inertia: "rankings/index", props: {
-      libraries: paginated.map.with_index { |lib, i| ranking_props(lib, rank: pagy.offset + i + 1) },
-      pagination: pagination_props(pagy),
-      total_libraries: Library.count,
+      libraries: cached[:libraries],
+      pagination: cached[:pagination],
+      total_libraries: cached[:total_libraries],
       seo: seo_props(
         title: "Rankings",
         description: "Documentation coverage rankings for libraries on ContextQMD. Sorted by page count, versions, and freshness.",
