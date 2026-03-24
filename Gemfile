@@ -74,7 +74,7 @@ gem "js-routes", "~> 2.3"
 
 gem "mission_control-jobs", "~> 1.1"
 
-gem "pagy", "~> 43.3"
+gem "pagy", "~> 43.4"
 
 gem "devise", "~> 5.0"
 
