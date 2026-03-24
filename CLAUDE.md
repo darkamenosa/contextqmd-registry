@@ -12,6 +12,7 @@ Guidance for Claude Code when working with this Rails + InertiaJS React/TypeScri
 - Consult context7 skill for related topics before coding. If unavailable, do web research. Don't add anything you don't know
 - Read `docs/tailwind.md` before writing frontend code. Read `docs/STYLE.md` before writing Ruby
 - Read `docs/auth-tenant-guide.md` before adding models, controllers, or features that involve tenant data, authentication, or authorization. It covers the Identity/User/Account pattern, scoping rules, and has a safety checklist
+- Read `docs/analytics.md` before modifying analytics tracking, the dashboard, visit/event models, or the Ahoy store. It covers the dedicated database, query pipeline, client-side tracker, live view, and how to extend safely
 - Self-critique your work when finishing a task
 - **DO NOT GUESS** — If you can't test or verify something after 2 attempts, ask for help with specific instructions
 

@@ -21,8 +21,10 @@ interface AnalyticsConfig {
   // Storage + transport
   useCookies: boolean // true = cookies (ahoy.js style); false = cookieless (localStorage). Default: false
   visitDurationMinutes: number // new visit after X minutes of inactivity. Default: 240 (4h)
-  useBeaconForEvents: boolean // prefer sendBeacon for events. Default: true
+  useBeaconForEvents: boolean // legacy flag; events use fetch keepalive by default
   trackVisits: boolean // create visit on frontend. Default: true
+  initialPageviewTracked?: boolean // true when the server already tracked the current full-page load
+  initialPageKey?: string // server-tracked dedupe key for the current page
   // Routing behavior
   hashBasedRouting?: boolean // when true, treat hash changes as navigation (off by default)
   // Dev
@@ -37,6 +39,7 @@ declare global {
 }
 
 class StandaloneAnalytics {
+  private readonly memoryStorage = new Map<string, string>()
   private visitToken: string | null = null
   private visitExpiresAt: number | null = null
   private visitorToken: string | null = null
@@ -103,7 +106,7 @@ class StandaloneAnalytics {
       ],
       useCookies: false,
       visitDurationMinutes: 240, // keep visit duration aligned with server-side analytics config (4h)
-      useBeaconForEvents: true,
+      useBeaconForEvents: false,
       trackVisits: true,
       hashBasedRouting: false,
       debug: false,
@@ -135,6 +138,7 @@ class StandaloneAnalytics {
     // Load tokens (meta or storage). Visit creation stays lazy so excluded pages
     // do not create records just by loading the shared application layout.
     this.bootstrapIdentity()
+    this.bootstrapServerTrackedPageview()
 
     // Track initial page load only when the document is visible.
     // This prevents background prerenders/prefetches from counting and avoids
@@ -176,20 +180,30 @@ class StandaloneAnalytics {
     const visitorMeta = document.querySelector<HTMLMetaElement>(
       'meta[name="ahoy-visitor"]'
     )
-    if (visitMeta?.content) this.visitToken = visitMeta.content
-    if (visitorMeta?.content) this.visitorToken = visitorMeta.content
+    if (visitMeta?.content) {
+      this.visitToken = visitMeta.content
+      this.ensuredVisitToken = visitMeta.content
+      this.refreshVisitExpiry()
+    }
+    if (visitorMeta?.content) {
+      this.visitorToken = visitorMeta.content
+      this.storeVisitorToken(visitorMeta.content)
+    }
 
-    // Load from storage if missing (supports cookies or localStorage)
-    if (!this.visitorToken) this.visitorToken = this.getOrCreateVisitorToken()
-    // visit may expire; refresh if needed
-    const vt = this.getStoredVisit()
-    if (vt) {
-      this.visitToken = vt.token
-      this.visitExpiresAt = vt.expiresAt
-    }
-    if (!this.visitToken || this.isVisitExpired()) {
-      this.createNewVisitToken()
-    }
+    // Load from storage only for any missing identity pieces. When the server
+    // already issued tokens for this document, those tokens are authoritative.
+    this.ensureLocalIdentity()
+  }
+
+  private bootstrapServerTrackedPageview(): void {
+    if (!this.config.initialPageviewTracked) return
+
+    const href = window.location.href
+    const pageKey = this.config.initialPageKey ?? this.currentPageKey()
+
+    this.lastTrackedHref = href
+    this.lastTrackedPageKey = pageKey
+    this.postPageview({ url: href, page: pageKey })
   }
 
   private setupNavigationListener(): void {
@@ -234,6 +248,14 @@ class StandaloneAnalytics {
         void this.trackPageview()
       })
     }
+
+    window.addEventListener("pageshow", (event) => {
+      if (!event.persisted) return
+      this.prePageview()
+      this.lastTrackedPageKey = null
+      this.debug("pageshow persisted")
+      void this.trackPageview()
+    })
   }
 
   private async trackPageview(): Promise<void> {
@@ -249,9 +271,7 @@ class StandaloneAnalytics {
     const href = window.location.href
     const pathname = window.location.pathname
     const pathQuery = pathname + window.location.search
-    const pageKey = this.config.hashBasedRouting
-      ? pathQuery + window.location.hash
-      : pathQuery
+    const pageKey = this.currentPageKey()
 
     // Skip if same path+query as last tracked (ignore hash-only changes)
     if (this.lastTrackedPageKey === pageKey) return
@@ -267,9 +287,8 @@ class StandaloneAnalytics {
       return
     }
 
-    // Ensure the visit is created before the first pageview to avoid
-    // the server implicitly creating a visit for /ahoy/events
-    await this.ensureVisit()
+    this.ensureLocalIdentity()
+    void this.ensureVisit()
 
     const referrer = this.lastTrackedHref || document.referrer || ""
 
@@ -285,6 +304,13 @@ class StandaloneAnalytics {
 
     this.lastTrackedHref = href
     this.postPageview({ url: href, page: pathQuery })
+  }
+
+  private currentPageKey(): string {
+    const pathQuery = window.location.pathname + window.location.search
+    return this.config.hashBasedRouting
+      ? pathQuery + window.location.hash
+      : pathQuery
   }
 
   private shouldExclude(pathname: string): boolean {
@@ -348,83 +374,57 @@ class StandaloneAnalytics {
   ): void {
     if (typeof window === "undefined") return
     if (this.shouldExcludeEventPage(properties.page)) return
-
+    this.ensureLocalIdentity()
     void this.ensureVisit()
-      .then(() => {
-        const event = {
-          name: properties.name,
-          properties: {
-            page: properties.page,
-            url: properties.url,
-            title: properties.title,
-            referrer: properties.referrer,
-            screen_size: properties.screenSize,
-            ...(extra || {}),
-          },
-          time: Date.now() / 1000,
-        }
 
-        if (this.config.debug) {
-          try {
-            this.debug("sendEvent", {
-              name: event.name,
-              page: event.properties.page,
-              url: event.properties.url,
-            })
-          } catch {
-            // Ignore debug logging failures.
-          }
-        }
+    const event = {
+      name: properties.name,
+      properties: {
+        page: properties.page,
+        url: properties.url,
+        title: properties.title,
+        referrer: properties.referrer,
+        screen_size: properties.screenSize,
+        ...(extra || {}),
+      },
+      time: Date.now() / 1000,
+    }
 
-        // Prefer sendBeacon with FormData + authenticity_token (like ahoy.js)
-        const canBeacon =
-          this.config.useBeaconForEvents &&
-          typeof navigator.sendBeacon === "function"
-        if (canBeacon) {
-          const data: Record<string, string> = {}
-          // Ahoy expects events_json to be a JSON string of the events array (not wrapped)
-          data["events_json"] = JSON.stringify([event])
-          // Include tokens explicitly so we can be cookieless
-          if (this.visitToken) data["visit_token"] = this.visitToken
-          if (this.visitorToken) data["visitor_token"] = this.visitorToken
-
-          // Rails CSRF param/name
-          const csrfParam = this.getCSRFParam()
-          const csrfToken = this.getCSRFToken()
-          if (csrfParam && csrfToken) data[csrfParam] = csrfToken
-
-          const form = new FormData()
-          Object.entries(data).forEach(([k, v]) => form.append(k, v))
-          navigator.sendBeacon(this.config.eventsEndpoint, form)
-          return
-        }
-
-        // Fallback: JSON + CSRF header via fetch
-        const headers: Record<string, string> = {
-          "Content-Type": "application/json",
-        }
-        const csrfToken = this.getCSRFToken()
-        if (csrfToken) headers["X-CSRF-Token"] = csrfToken
-
-        const jsonPayload = {
-          visit_token: this.visitToken,
-          visitor_token: this.visitorToken,
-          events: [event],
-        }
-
-        fetch(this.config.eventsEndpoint, {
-          method: "POST",
-          headers,
-          body: JSON.stringify(jsonPayload),
-          credentials: "same-origin",
-          keepalive: true,
-        }).catch(() => {
-          /* never block app */
+    if (this.config.debug) {
+      try {
+        this.debug("sendEvent", {
+          name: event.name,
+          page: event.properties.page,
+          url: event.properties.url,
         })
-      })
-      .catch(() => {
-        /* ignore analytics errors */
-      })
+      } catch {
+        // Ignore debug logging failures.
+      }
+    }
+
+    // Prefer JSON + CSRF header via fetch keepalive for predictable browser
+    // behavior across Safari/WebKit and easier end-to-end testing.
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    }
+    const csrfToken = this.getCSRFToken()
+    if (csrfToken) headers["X-CSRF-Token"] = csrfToken
+
+    const jsonPayload = {
+      visit_token: this.visitToken,
+      visitor_token: this.visitorToken,
+      events: [event],
+    }
+
+    fetch(this.config.eventsEndpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(jsonPayload),
+      credentials: "same-origin",
+      keepalive: true,
+    }).catch(() => {
+      /* never block app */
+    })
   }
 
   private generateToken(): string {
@@ -444,19 +444,12 @@ class StandaloneAnalytics {
   }
 
   private getOrCreateVisitorToken(): string {
-    if (this.config.useCookies) {
-      const cookie = this.getCookie("ahoy_visitor")
-      if (cookie) return cookie
-      const token = this.generateToken()
-      this.setCookie("ahoy_visitor", token, 60 * 24 * 365 * 2) // 2 years
-      return token
-    } else {
-      const stored = localStorage.getItem("ahoy_visitor")
-      if (stored) return stored
-      const token = this.generateToken()
-      localStorage.setItem("ahoy_visitor", token)
-      return token
-    }
+    const stored = this.getStoredVisitorToken()
+    if (stored) return stored
+
+    const token = this.generateToken()
+    this.storeVisitorToken(token)
+    return token
   }
 
   private getCSRFToken(): string | null {
@@ -466,14 +459,27 @@ class StandaloneAnalytics {
     return meta?.content || null
   }
 
-  private getCSRFParam(): string | null {
-    const meta = document.querySelector<HTMLMetaElement>(
-      'meta[name="csrf-param"]'
-    )
-    return meta?.content || null
+  // ----- Visit lifecycle -----
+  private ensureLocalIdentity(): void {
+    if (!this.visitorToken) {
+      this.visitorToken = this.getOrCreateVisitorToken()
+    } else {
+      this.storeVisitorToken(this.visitorToken)
+    }
+
+    const storedVisit = this.getStoredVisit()
+    if (!this.visitToken && storedVisit) {
+      this.visitToken = storedVisit.token
+      this.visitExpiresAt = storedVisit.expiresAt
+    }
+
+    if (!this.visitToken || this.isVisitExpired()) {
+      this.createNewVisitToken()
+    } else {
+      this.refreshVisitExpiry()
+    }
   }
 
-  // ----- Visit lifecycle -----
   private isVisitExpired(): boolean {
     if (!this.visitExpiresAt) return true
     return Date.now() > this.visitExpiresAt
@@ -548,8 +554,7 @@ class StandaloneAnalytics {
 
   private ensureVisit(): Promise<void> {
     if (!this.config.trackVisits) return Promise.resolve()
-    if (!this.visitToken || this.isVisitExpired()) this.createNewVisitToken()
-    this.refreshVisitExpiry()
+    this.ensureLocalIdentity()
 
     const token = this.visitToken
     if (!token) return Promise.resolve()
@@ -586,10 +591,24 @@ class StandaloneAnalytics {
       if (token && exp) return { token, expiresAt: parseInt(exp, 10) }
       return null
     } else {
-      const token = localStorage.getItem("ahoy_visit")
-      const exp = localStorage.getItem("ahoy_visit_expires")
+      const token = this.getStorageItem("ahoy_visit")
+      const exp = this.getStorageItem("ahoy_visit_expires")
       if (token && exp) return { token, expiresAt: parseInt(exp, 10) }
       return null
+    }
+  }
+
+  private getStoredVisitorToken(): string | null {
+    return this.config.useCookies
+      ? this.getCookie("ahoy_visitor")
+      : this.getStorageItem("ahoy_visitor")
+  }
+
+  private storeVisitorToken(token: string): void {
+    if (this.config.useCookies) {
+      this.setCookie("ahoy_visitor", token, 60 * 24 * 365 * 2)
+    } else {
+      this.setStorageItem("ahoy_visitor", token)
     }
   }
 
@@ -603,8 +622,26 @@ class StandaloneAnalytics {
         this.config.visitDurationMinutes
       )
     } else {
-      localStorage.setItem("ahoy_visit", token)
-      localStorage.setItem("ahoy_visit_expires", String(expiresAt))
+      this.setStorageItem("ahoy_visit", token)
+      this.setStorageItem("ahoy_visit_expires", String(expiresAt))
+    }
+  }
+
+  private getStorageItem(key: string): string | null {
+    try {
+      const stored = localStorage.getItem(key)
+      return stored ?? this.memoryStorage.get(key) ?? null
+    } catch {
+      return this.memoryStorage.get(key) ?? null
+    }
+  }
+
+  private setStorageItem(key: string, value: string): void {
+    try {
+      localStorage.setItem(key, value)
+      this.memoryStorage.delete(key)
+    } catch {
+      this.memoryStorage.set(key, value)
     }
   }
 

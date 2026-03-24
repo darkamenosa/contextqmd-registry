@@ -6,6 +6,7 @@ class ApplicationController < ActionController::Base
   include ErrorHandling
   include CurrentRequest
   include CurrentTimezone
+  include ServerSidePageviewTracking
   include SetPlatform
   include RoutingHeaders
   include RequestForgeryProtection
