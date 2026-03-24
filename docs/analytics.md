@@ -111,7 +111,7 @@ Events and visit creation use `fetch` with `keepalive: true`, a JSON body, and `
 
 ## Server-Side Initial Pageviews
 
-`app/controllers/concerns/server_side_pageview_tracking.rb` owns the first pageview for public HTML renders when `ANALYTICS_SERVER_VISITS=true`.
+`app/controllers/concerns/server_side_pageview_tracking.rb` owns the first pageview for eligible public HTML renders by default.
 
 ### Eligibility rules
 
