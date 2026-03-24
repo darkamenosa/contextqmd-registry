@@ -17,7 +17,6 @@
     <%# Enable PWA manifest for installable apps (make sure to enable in config/routes.rb too!) %>
     <%#= tag.link rel: "manifest", href: pwa_manifest_path(format: :json) %>
 
-    <link rel="icon" href="/icon.png" type="image/png">
     <link rel="icon" href="/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/icon.png">
 
@@ -25,6 +24,15 @@
     <%= vite_react_refresh_tag %>
     <%= vite_client_tag %>
     <%= vite_typescript_tag "inertia.tsx" %>
+    <script>
+      window.analyticsConfig = <%= raw({
+        useCookies: Rails.configuration.x.analytics.use_cookies,
+        visitDurationMinutes: Rails.configuration.x.analytics.visit_duration_minutes,
+        useBeaconForEvents: Rails.configuration.x.analytics.use_beacon_for_events,
+        trackVisits: !Rails.configuration.x.analytics.server_visits
+      }.to_json) %>;
+    </script>
+    <%= vite_typescript_tag "analytics.ts" %>
     <%= inertia_ssr_head %>
 
   </head>

@@ -2,9 +2,9 @@
 
 module Admin
   module Analytics
-    class ReportsController < Admin::BaseController
+    class ReportsController < Admin::Analytics::BaseController
       def index
-        render inertia: "admin/analytics/reports/index"
+        render inertia: "admin/analytics/reports/index", props: shell_props(@query)
       end
     end
   end

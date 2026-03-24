@@ -85,3 +85,8 @@ gem "omniauth-rails_csrf_protection", "~> 2.0"
 gem "pg_search", "~> 2.3"
 
 gem "reverse_markdown", "~> 3.0"
+
+gem "ahoy_matey"
+gem "maxminddb"
+
+gem "countries", "~> 8.1"

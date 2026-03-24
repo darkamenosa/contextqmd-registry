@@ -60,9 +60,25 @@ Rails.application.routes.draw do
       resources :proxy_configs
       resources :webhooks, only: [ :index ]
 
+      # Analytics pages (Inertia) + API (JSON)
       namespace :analytics do
-        resource :live, only: :show
+        get "_/*dialog", to: redirect("/admin/analytics/reports/_/%{dialog}")
         resources :reports, only: [ :index ]
+        get "reports/_/*dialog", to: "reports#index"
+        resource :live, only: :show, controller: "live"
+
+        # JSON API endpoints for analytics dashboard
+        resource :top_stats, only: [ :show ], controller: "top_stats"
+        resource :main_graph, only: [ :show ], controller: "main_graph"
+        resource :settings, only: [ :show, :update ], controller: "settings"
+        resources :funnels, only: [ :create, :update, :destroy ], controller: "funnels"
+        resources :sources, only: [ :index ]
+        resources :search_terms, only: [ :index ]
+        resources :referrers, only: [ :index ]
+        resources :pages, only: [ :index ], as: :analytics_pages
+        resources :locations, only: [ :index ]
+        resources :devices, only: [ :index ]
+        resources :behaviors, only: [ :index ]
       end
 
       resource :settings, only: :show

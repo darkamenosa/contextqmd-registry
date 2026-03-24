@@ -3,6 +3,7 @@
 class Current < ActiveSupport::CurrentAttributes
   attribute :identity, :user, :account
   attribute :http_method, :request_id, :user_agent, :ip_address, :referrer
+  attribute :request
 
   def identity=(identity)
     super

@@ -9,7 +9,18 @@
 #     priority: 2
 #     schedule: at 5am every day
 
+development:
+  analytics_live_update:
+    class: AnalyticsUpdateJob
+    queue: default
+    schedule: every 30 seconds
+
 production:
+  analytics_live_update:
+    class: AnalyticsUpdateJob
+    queue: default
+    schedule: every 30 seconds
+
   check_due_library_sources:
     class: CheckDueLibrarySourcesJob
     queue: default

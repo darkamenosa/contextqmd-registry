@@ -1,0 +1,49 @@
+sources:
+  # Search ads shorthands
+  adwords: Google
+  googleads: Google
+  ga-ads: Google
+  bing-ads: Bing
+  msads: Bing
+  search-ads: Google
+
+  # Social ads shorthands
+  fb_ad: Facebook
+  facebook_ads: Facebook
+  meta-ads: Facebook
+  instagram_ad: Instagram
+  ig-ads: Instagram
+  tiktok_ads: TikTok
+  tt-ads: TikTok
+  linkedin-ads: LinkedIn
+  twitter-ads: Twitter
+  x-ads: Twitter
+
+  # Misc referrer shorthands/domains (extend as your data shows)
+  search.brave.com: Brave
+  discord.com: Discord
+  discordapp.com: Discord
+  linktr.ee: Linktree
+  perplexity.ai: Perplexity
+  chatgpt.com: ChatGPT
+
+# Optional explicit paid aliases list. If omitted, any key ending in "ad"/"ads"
+# (or containing "adwords") is treated as a paid alias automatically.
+paid_aliases:
+  - adwords
+  - googleads
+  - ga-ads
+  - bing-ads
+  - msads
+  - search-ads
+  - fb_ad
+  - facebook_ads
+  - meta-ads
+  - instagram_ad
+  - ig-ads
+  - tiktok_ads
+  - tt-ads
+  - linkedin-ads
+  - twitter-ads
+  - x-ads
+

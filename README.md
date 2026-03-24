@@ -37,7 +37,7 @@ bin/dev                # Start Rails + Vite dev server + Solid Queue
 
 Requires PostgreSQL running locally. Default config connects to `localhost:5432`.
 
-Rails uses 4 databases per environment: primary, cache (Solid Cache), queue (Solid Queue), and cable (Solid Cable).
+Rails uses 5 databases per environment: primary, cache (Solid Cache), queue (Solid Queue), cable (Solid Cable), and analytics.
 
 ### Development Data
 

@@ -23,6 +23,10 @@ development:
     <<: *primary_development
     database: contextqmd_registry_development_cable
     migrations_paths: db/cable_migrate
+  analytics:
+    <<: *primary_development
+    database: contextqmd_registry_development_analytics
+    migrations_paths: db/analytics_migrate
 
 test:
   primary: &primary_test
@@ -43,6 +47,10 @@ test:
     <<: *primary_test
     database: contextqmd_registry_test_cable
     migrations_paths: db/cable_migrate
+  analytics:
+    <<: *primary_test
+    database: contextqmd_registry_test_analytics
+    migrations_paths: db/analytics_migrate
 
 production:
   primary: &primary_production
@@ -63,3 +71,7 @@ production:
     <<: *primary_production
     database: contextqmd_registry_production_cable
     migrations_paths: db/cable_migrate
+  analytics:
+    <<: *primary_production
+    database: contextqmd_registry_production_analytics
+    migrations_paths: db/analytics_migrate

@@ -29,6 +29,7 @@
 !/tmp/storage/.keep
 
 /public/assets
+/output/playwright/
 
 # Ignore key files for decrypting credentials and more.
 /config/*.key
