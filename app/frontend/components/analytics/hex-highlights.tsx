@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef } from "react"
 import { useThree } from "@react-three/fiber"
-import { cellToBoundary, cellToLatLng, latLngToCell } from "h3-js"
+import { latLngToCell } from "h3-js"
 import * as THREE from "three"
-import ConicPolygonGeometry from "three-conic-polygon-geometry"
-// three's BufferGeometryUtils helper for merging many hex geometries into one
-import * as BufferGeometryUtils from "three/examples/jsm/utils/BufferGeometryUtils.js"
+
+import { buildMergedHexGeometry } from "@/lib/h3-hex-geometry"
 
 type Dot = {
   lat: number
@@ -62,50 +61,8 @@ export default function HexHighlights({
       options?: { outline?: boolean }
     ) => {
       if (cells.length === 0) return
-      const geoms: THREE.BufferGeometry[] = []
-      for (const idx of cells) {
-        // Get hex boundary and center
-        const center = cellToLatLng(idx) // [lat,lng]
-        const centerLat = center[0]
-        const centerLng = center[1]
-        let boundary = cellToBoundary(idx, true) // [[lng,lat], ...]
-        // Ensure winding similar to three-globe (reverse)
-        boundary = boundary.slice().reverse()
-
-        // Apply same margin logic as three-globe to keep inner hex size consistent
-        const shrink = (elng: number, elat: number) => {
-          const lerp = (a: number, b: number, t: number) => a * (1 - t) + b * t
-          return [
-            lerp(elng, centerLng, margin),
-            lerp(elat, centerLat, margin),
-          ] as [number, number]
-        }
-        const shrunk =
-          margin === 0
-            ? boundary
-            : boundary.map(([lng, lat]) => shrink(lng, lat))
-
-        // Build a single ConicPolygonGeometry for this hex from radius 1 to 1+altitude
-        try {
-          const geo = new ConicPolygonGeometry(
-            [shrunk],
-            1,
-            1 + altitude,
-            false,
-            true,
-            false,
-            4
-          )
-          geoms.push(geo)
-        } catch {
-          // Ignore malformed cells so a single bad geometry does not break the layer.
-        }
-      }
-      if (geoms.length > 0) {
-        const merged = BufferGeometryUtils.mergeGeometries(
-          geoms,
-          false
-        ) as THREE.BufferGeometry
+      const merged = buildMergedHexGeometry(cells, { margin, altitude })
+      if (merged) {
         const mat = new THREE.MeshLambertMaterial({
           color,
           transparent: false,

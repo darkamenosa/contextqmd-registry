@@ -20,9 +20,9 @@ import { MetricCard } from "@/components/analytics/metric-card"
 import { SessionsByLocation } from "@/components/analytics/sessions-by-location"
 import AdminLayout from "@/layouts/admin-layout"
 
-// Avoid importing the VisitorGlobe module at SSR time. It pulls in browser‑only
-// three.js/three-globe dependencies. Use React.lazy so SSR renders a fallback
-// and the heavy code loads only on the client.
+// Avoid importing the VisitorGlobe module at SSR time. It pulls in browser-only
+// three.js/H3 dependencies. Use React.lazy so SSR renders a fallback and the
+// heavy code loads only on the client.
 const VisitorGlobe = lazy(() =>
   import("@/components/analytics/visitor-globe").then((m) => ({
     default: m.VisitorGlobe,

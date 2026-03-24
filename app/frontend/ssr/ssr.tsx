@@ -9,6 +9,8 @@ createServer((page) =>
     page,
     render: ReactDOMServer.renderToString,
     title: titleTemplate,
+    // Keep SSR and CSR on the same page-resolution strategy:
+    // public pages eager, admin/app pages lazy.
     resolve: resolvePage,
     setup: ({ App, props }) => <App {...props} />,
     defaults: inertiaDefaults,

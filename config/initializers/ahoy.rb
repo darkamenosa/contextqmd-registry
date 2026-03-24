@@ -1,3 +1,5 @@
+require Rails.root.join("lib/client_ip")
+
 class Ahoy::Store < Ahoy::DatabaseStore
   def visit_columns
     super + %i[hostname screen_size browser_version]
@@ -48,11 +50,8 @@ class Ahoy::Store < Ahoy::DatabaseStore
       end
 
       # Cloudflare country fallback
-      begin
-        cc = req.get_header("HTTP_CF_IPCOUNTRY").to_s.upcase.presence
-        attrs[:country] ||= cc if cc
-      rescue StandardError
-      end
+      cc = ClientIp.country_hint(req)
+      attrs[:country] ||= cc if cc
     else
       begin
         lp = (attrs[:landing_page] || data[:landing_page]).to_s
@@ -176,28 +175,7 @@ class Ahoy::Store < Ahoy::DatabaseStore
     end
 
     def lookup_maxmind_record(req, data)
-      xff = req.get_header("HTTP_X_FORWARDED_FOR").to_s
-      candidates = []
-      %w[HTTP_CF_CONNECTING_IP HTTP_TRUE_CLIENT_IP HTTP_X_REAL_IP].each do |header|
-        value = req.get_header(header).to_s.presence
-        candidates << value if value
-      end
-      candidates.concat(xff.split(",").map(&:strip)) if xff.present?
-      candidates << req.get_header("REMOTE_ADDR").to_s.presence
-      candidates << (req.ip rescue nil)
-      candidates << (req.remote_ip rescue nil)
-      candidates << data[:ip].to_s.presence
-      client_ip = candidates.compact.uniq.find { |ip| MaxmindGeo.valid_ip?(ip) }
-
-      if client_ip.nil? && xff.present?
-        xff.split(",").map(&:strip).reverse_each do |ip|
-          next unless MaxmindGeo.valid_ip?(ip)
-
-          client_ip = ip
-          break
-        end
-      end
-
+      client_ip = ClientIp.public(req, fallback_ip: data[:ip])
       client_ip ? MaxmindGeo.lookup(client_ip) : nil
     end
 end

@@ -5,7 +5,7 @@ import PersistentLayout from "@/layouts/persistent-layout"
 
 type PageModule = { default: ResolvedComponent }
 
-// Eager-load public pages, lazy-load admin and app pages
+// Eager-load public pages, lazy-load admin and app pages.
 const publicPages = import.meta.glob<PageModule>(
   ["../pages/**/*.tsx", "!../pages/admin/**/*.tsx", "!../pages/app/**/*.tsx"],
   { eager: true }
