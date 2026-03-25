@@ -18,13 +18,16 @@ export function buildMergedHexGeometry(
 
   for (const cell of cells) {
     const [centerLat, centerLng] = cellToLatLng(cell)
-    const boundary = cellToBoundary(cell, true).slice().reverse()
+    const boundary = unwrapBoundaryLongitudes(
+      cellToBoundary(cell, true).slice().reverse(),
+      centerLng
+    )
 
     const shrunk =
       margin === 0
         ? boundary
         : boundary.map(([lng, lat]: [number, number]) => [
-            lerp(lng, centerLng, margin),
+            lerpLongitude(lng, centerLng, margin),
             lerp(lat, centerLat, margin),
           ])
 
@@ -59,4 +62,27 @@ export function buildMergedHexGeometry(
 
 function lerp(a: number, b: number, t: number) {
   return a * (1 - t) + b * t
+}
+
+function lerpLongitude(a: number, b: number, t: number) {
+  return lerp(a, unwrapLongitudeNear(b, a), t)
+}
+
+function unwrapBoundaryLongitudes(
+  boundary: [number, number][],
+  referenceLng: number
+) {
+  return boundary.map(([lng, lat]) => [
+    unwrapLongitudeNear(lng, referenceLng),
+    lat,
+  ]) as [number, number][]
+}
+
+function unwrapLongitudeNear(lng: number, referenceLng: number) {
+  let normalizedLng = lng
+
+  while (normalizedLng - referenceLng > 180) normalizedLng -= 360
+  while (normalizedLng - referenceLng < -180) normalizedLng += 360
+
+  return normalizedLng
 }
