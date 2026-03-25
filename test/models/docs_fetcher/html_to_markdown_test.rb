@@ -312,4 +312,80 @@ class DocsFetcher::HtmlToMarkdownTest < ActiveSupport::TestCase
     assert_not_includes result[:content], "&nbsp;"
     assert_not_includes result[:content], "\u00A0"
   end
+
+  test "unwraps nested pre blocks into a single fenced code block" do
+    html = <<~HTML
+      <html>
+        <body>
+          <main>
+            <h1>Example</h1>
+            <pre>
+              <pre>
+                <code class="language-yaml">lowdefy: 4.7.2
+
+auth:
+  authPages:
+    signIn: /login</code>
+              </pre>
+            </pre>
+          </main>
+        </body>
+      </html>
+    HTML
+
+    result = DocsFetcher::HtmlToMarkdown.convert(html)
+
+    assert_includes result[:content], "```yaml"
+    assert_includes result[:content], "lowdefy: 4.7.2"
+    assert_includes result[:content], "authPages:"
+    assert_equal 1, result[:content].scan(/^```yaml$/).size
+    assert_equal 1, result[:content].scan(/^```$/).size
+    assert_not_includes result[:content], "```\n```"
+  end
+
+  test "flattens syntax highlighted code spans inside pre code blocks" do
+    html = <<~HTML
+      <html>
+        <body>
+          <main>
+            <h1>Example</h1>
+            <pre>
+              <code class="language-yaml" style="color: red">
+                <span>lowdefy:</span><span> </span><span>4.7.2</span>
+                <span>
+</span><span>auth:</span>
+              </code>
+            </pre>
+          </main>
+        </body>
+      </html>
+    HTML
+
+    result = DocsFetcher::HtmlToMarkdown.convert(html)
+
+    assert_includes result[:content], "```yaml"
+    assert_includes result[:content], "lowdefy: 4.7.2"
+    assert_includes result[:content], "auth:"
+    assert_equal 1, result[:content].scan(/^```yaml$/).size
+    assert_equal 1, result[:content].scan(/^```$/).size
+    assert_not_includes result[:content], "<span>"
+  end
+
+  test "preserves language from lang class aliases on code blocks" do
+    html = <<~HTML
+      <html>
+        <body>
+          <main>
+            <h1>Example</h1>
+            <pre><code class="lang-bash">echo hi</code></pre>
+          </main>
+        </body>
+      </html>
+    HTML
+
+    result = DocsFetcher::HtmlToMarkdown.convert(html)
+
+    assert_includes result[:content], "```bash"
+    assert_includes result[:content], "echo hi"
+  end
 end

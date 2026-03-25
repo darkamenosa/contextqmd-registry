@@ -5,6 +5,32 @@ require "nokogiri"
 require "reverse_markdown"
 require "uri"
 
+module ReverseMarkdown
+  module Converters
+    class PreWithCodeLanguage < Pre
+      private
+
+        def language(node)
+          super || language_from_code_class(node)
+        end
+
+        def language_from_code_class(node)
+          code = node.at_css("code")
+          return unless code
+
+          code["class"].to_s.split.each do |class_name|
+            match = class_name.match(/\A(?:language|lang)-([a-z0-9_+-]+)\z/i)
+            return match[1].downcase if match
+          end
+
+          nil
+        end
+    end
+
+    register :pre, PreWithCodeLanguage.new
+  end
+end
+
 module DocsFetcher
   # Converts an HTML page to clean Markdown.
   # Extracts the main content area, strips boilerplate (nav, footer, sidebar),
@@ -70,6 +96,7 @@ module DocsFetcher
           @doc.css(sel).each(&:remove)
         end
 
+        normalize_code_blocks
         normalize_text_nodes
         normalize_links
         strip_decorative_images
@@ -125,6 +152,28 @@ module DocsFetcher
       def normalize_text_nodes
         @doc.xpath("//text()").each do |node|
           node.content = node.text.tr("\u00A0", " ")
+        end
+      end
+
+      def normalize_code_blocks
+        unwrap_nested_pre_blocks
+
+        @doc.css("pre code").each do |code|
+          text = code.text.to_s.tr("\u00A0", " ")
+          code.children.remove
+          code.content = text
+          code.remove_attribute("style")
+          code.parent&.remove_attribute("style")
+        end
+      end
+
+      def unwrap_nested_pre_blocks
+        @doc.css("pre").each do |outer_pre|
+          inner_pre = outer_pre.element_children.first
+          next unless inner_pre&.name == "pre"
+          next unless outer_pre.children.all? { |child| child == inner_pre || child.text? && child.text.strip.empty? }
+
+          outer_pre.replace(inner_pre)
         end
       end
 
