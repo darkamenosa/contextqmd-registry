@@ -331,8 +331,14 @@ module CrawlRequest::Importable
       version.pages.delete_all
       total = pages.size
       imported = 0
+      seen_page_urls = {}
+      used_page_uids = {}
 
       pages.each_with_index do |page_data, index|
+        page_url = normalized_import_page_url(page_data[:url])
+        next if page_url.present? && seen_page_urls[page_url]
+
+        seen_page_urls[page_url] = true if page_url.present?
         content = sanitize_content(page_data[:content].to_s)
         if content.length > Page::MAX_DESCRIPTION_LENGTH
           Rails.logger.warn(
@@ -342,11 +348,13 @@ module CrawlRequest::Importable
           next
         end
 
+        page_uid = unique_import_page_uid(page_data[:page_uid], page_url, used_page_uids)
+        path = import_page_path(page_data[:path], original_page_uid: page_data[:page_uid], page_uid: page_uid)
         checksum = Digest::SHA256.hexdigest(content)
 
         version.pages.create!(
-          page_uid: page_data[:page_uid],
-          path: page_data[:path],
+          page_uid: page_uid,
+          path: path,
           title: page_data[:title],
           url: page_data[:url],
           description: content,
@@ -365,6 +373,46 @@ module CrawlRequest::Importable
       return if imported.positive?
 
       raise DocsFetcher::PermanentFetchError, "No importable pages remained for #{url}"
+    end
+
+    def normalized_import_page_url(url)
+      raw = url.to_s.strip
+      return if raw.blank?
+
+      uri = URI.parse(raw)
+      path = uri.path.to_s.chomp("/")
+      path = "/" if path.empty?
+      query = uri.query.present? ? "?#{uri.query}" : ""
+
+      "#{uri.scheme}://#{uri.host&.downcase}#{path}#{query}"
+    rescue URI::InvalidURIError
+      raw
+    end
+
+    def unique_import_page_uid(page_uid, page_url, used_page_uids)
+      base = page_uid.to_s.strip.presence || "page"
+      candidate = base
+
+      if used_page_uids[candidate]
+        hash = Digest::SHA256.hexdigest(page_url.to_s.presence || base)[0, 8]
+        candidate = "#{base}-#{hash}"
+        suffix = 2
+
+        while used_page_uids[candidate]
+          candidate = "#{base}-#{hash}-#{suffix}"
+          suffix += 1
+        end
+      end
+
+      used_page_uids[candidate] = true
+      candidate
+    end
+
+    def import_page_path(path, original_page_uid:, page_uid:)
+      raw = path.to_s.strip
+      return "#{page_uid}.md" if raw.blank? || raw == "#{original_page_uid}.md"
+
+      raw
     end
 
     STRIP_TAGS = %w[SYSTEM system-reminder system_reminder IMPORTANT].freeze

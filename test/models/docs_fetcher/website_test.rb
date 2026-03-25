@@ -471,7 +471,13 @@ class DocsFetcher::WebsiteTest < ActiveSupport::TestCase
 
   test "url_to_page_uid handles special characters" do
     uid = @fetcher.send(:url_to_page_uid, URI.parse("https://example.com/docs/C++_Guide"))
-    assert_equal "docs-c-guide", uid
+    assert_equal "docs-c-plus-plus-underscore-guide", uid
+  end
+
+  test "url_to_page_uid preserves symbolic path variants as distinct ids" do
+    assert_equal "switch", @fetcher.send(:url_to_page_uid, URI.parse("https://example.com/Switch"))
+    assert_equal "underscore-switch", @fetcher.send(:url_to_page_uid, URI.parse("https://example.com/_switch"))
+    assert_equal "colon-switch", @fetcher.send(:url_to_page_uid, URI.parse("https://example.com/:switch"))
   end
 
   # --- Resolve URL ---

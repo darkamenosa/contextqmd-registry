@@ -14,6 +14,54 @@ module DocsFetcher
       /\Aloading(?:\.\.\.)?\z/i
     ].freeze
 
+    module PageUidEncoding
+      private
+
+        def url_to_page_uid(uri)
+          segments = uri.path.to_s
+            .delete_prefix("/")
+            .delete_suffix("/")
+            .split("/")
+            .reject(&:blank?)
+
+          return "index" if segments.empty?
+
+          encoded = segments.map.with_index do |segment, index|
+            normalized = index == segments.length - 1 ? segment.sub(/\.[a-z]+\z/i, "") : segment
+            encode_page_uid_segment(normalized)
+          end.reject(&:blank?)
+
+          encoded.join("-").presence || "index"
+        end
+
+        def encode_page_uid_segment(segment)
+          chars = segment.to_s.each_char.filter_map do |char|
+            case char
+            when /[A-Za-z0-9]/
+              char.downcase
+            when "-"
+              "-"
+            when "_"
+              "-underscore-"
+            when ":"
+              "-colon-"
+            when "."
+              "-dot-"
+            when "+"
+              "-plus-"
+            else
+              bytes = char.encode("UTF-8").bytes.map { |byte| format("x%02x", byte) }
+              "-#{bytes.join('-')}-"
+            end
+          end
+
+          chars.join
+            .gsub(/-+/, "-")
+            .delete_prefix("-")
+            .delete_suffix("-")
+        end
+    end
+
     def probe_version(url)
       ruby_runner.probe_version(url)
     end

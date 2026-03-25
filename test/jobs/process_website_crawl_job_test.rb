@@ -273,6 +273,103 @@ class ProcessWebsiteCrawlJobTest < ActiveSupport::TestCase
     assert_equal [ [ seed_url ], [ next_url ], [ next_url ] ], ruby_runner.calls.map { |_, urls, _| urls }
   end
 
+  test "deduplicates redirected pages and deconflicts colliding page_uids during publish" do
+    website_crawl = WebsiteCrawl.create!(crawl_request: @crawl_request, runner: "node")
+    seed_url = "https://example.com/docs"
+    intro_url = "https://example.com/docs/introduction"
+    switch_url = "https://example.com/docs/Switch"
+    underscore_switch_url = "https://example.com/docs/_switch"
+    colon_switch_url = "https://example.com/docs/:switch"
+
+    node_runner = RunnerStub.new(
+      snapshots: [
+        {
+          requested_url: seed_url,
+          url: intro_url,
+          page: {
+            page_uid: "introduction",
+            path: "introduction.md",
+            title: "Introduction",
+            url: intro_url,
+            content: "Intro content",
+            headings: [ "Introduction" ]
+          },
+          links: [ intro_url, switch_url, underscore_switch_url, colon_switch_url ]
+        },
+        {
+          requested_url: intro_url,
+          url: intro_url,
+          page: {
+            page_uid: "introduction",
+            path: "introduction.md",
+            title: "Introduction",
+            url: intro_url,
+            content: "Intro content",
+            headings: [ "Introduction" ]
+          },
+          links: []
+        },
+        {
+          requested_url: switch_url,
+          url: switch_url,
+          page: {
+            page_uid: "switch",
+            path: "switch.md",
+            title: "Switch",
+            url: switch_url,
+            content: "Switch content",
+            headings: [ "Switch" ]
+          },
+          links: []
+        },
+        {
+          requested_url: underscore_switch_url,
+          url: underscore_switch_url,
+          page: {
+            page_uid: "switch",
+            path: "switch.md",
+            title: "_switch",
+            url: underscore_switch_url,
+            content: "Underscore switch content",
+            headings: [ "_switch" ]
+          },
+          links: []
+        },
+        {
+          requested_url: colon_switch_url,
+          url: colon_switch_url,
+          page: {
+            page_uid: "switch",
+            path: "switch.md",
+            title: ":switch",
+            url: colon_switch_url,
+            content: "Colon switch content",
+            headings: [ ":switch" ]
+          },
+          links: []
+        }
+      ]
+    )
+
+    with_runner_stubs(ruby_runner: RunnerStub.new, node_runner: node_runner) do
+      ProcessWebsiteCrawlJob.perform_now(website_crawl)
+    end
+
+    @crawl_request.reload
+    website_crawl.reload
+
+    assert_equal "completed", @crawl_request.status
+    assert_equal "completed", website_crawl.status
+
+    pages = @crawl_request.library.versions.find_by!(version: "latest").pages.order(:page_uid).to_a
+    page_uids = pages.map(&:page_uid)
+
+    assert_equal 4, pages.size
+    assert_equal page_uids.uniq.size, page_uids.size
+    assert_includes page_uids, "introduction"
+    assert_equal 3, page_uids.grep(/\Aswitch(?:-|$)/).size
+  end
+
   private
 
     def with_runner_stubs(ruby_runner:, node_runner: RunnerStub.new)

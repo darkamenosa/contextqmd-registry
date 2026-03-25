@@ -12,6 +12,8 @@ module DocsFetcher
     # Spawns `node script/crawlers/website/index.mjs` with JSON input on stdin,
     # reads NDJSON progress events from stdout, and collects the result artifact.
     class NodeRunner
+      include PageUidEncoding
+
       def fetch(crawl_request, on_progress: nil)
         uri = URI.parse(crawl_request.url)
         proxy_lease = ProxyPool.checkout(
@@ -199,21 +201,6 @@ module DocsFetcher
           }
         rescue KeyError
           nil
-        end
-
-        def url_to_page_uid(uri)
-          path = uri.path.to_s
-            .delete_prefix("/")
-            .delete_suffix("/")
-            .gsub(/\.[a-z]+\z/i, "")
-            .tr("/", "-")
-            .downcase
-            .gsub(/[^a-z0-9-]/, "-")
-            .gsub(/-+/, "-")
-            .delete_prefix("-")
-            .delete_suffix("-")
-
-          path.empty? ? "index" : path
         end
 
         def load_crawl_rules(crawl_request)

@@ -11,6 +11,7 @@ module DocsFetcher
     # Converts HTML to clean Markdown via HtmlToMarkdown (reverse_markdown).
     class RubyRunner
       include HttpFetching
+      include PageUidEncoding
 
       MAX_REDIRECTS = 3
       CRAWL_DELAY = 0.25 # 250ms between requests
@@ -24,6 +25,10 @@ module DocsFetcher
         .pdf .zip .tar .gz .tgz
         .woff .woff2 .ttf .eot
         .mp3 .mp4 .avi .mov
+        .db .sqlite .sqlite3 .sql .dump
+        .csv .tsv .parquet .duckdb
+        .doc .docx .xls .xlsx .ppt .pptx
+        .7z .rar .dmg .exe .bin .wasm
       ].freeze
 
       # Query parameters that indicate tracking/non-content URLs
@@ -294,21 +299,6 @@ module DocsFetcher
 
           parent = File.dirname(clean)
           parent == "." ? "/" : parent
-        end
-
-        def url_to_page_uid(uri)
-          path = uri.path.to_s
-            .delete_prefix("/")
-            .delete_suffix("/")
-            .gsub(/\.[a-z]+\z/i, "")
-            .tr("/", "-")
-            .downcase
-            .gsub(/[^a-z0-9-]/, "-")
-            .gsub(/-+/, "-")
-            .delete_prefix("-")
-            .delete_suffix("-")
-
-          path.empty? ? "index" : path
         end
 
         # --- HTTP ---

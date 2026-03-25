@@ -226,6 +226,14 @@ class DocsFetcher::Website::NodeRunnerTest < ActiveSupport::TestCase
     assert_operator page[:content].bytesize, :>, 1_000_000
   end
 
+  test "url_to_page_uid preserves symbolic path variants as distinct ids" do
+    runner = DocsFetcher::Website::NodeRunner.new
+
+    assert_equal "switch", runner.send(:url_to_page_uid, URI.parse("https://docs.example.com/Switch"))
+    assert_equal "underscore-switch", runner.send(:url_to_page_uid, URI.parse("https://docs.example.com/_switch"))
+    assert_equal "colon-switch", runner.send(:url_to_page_uid, URI.parse("https://docs.example.com/:switch"))
+  end
+
   private
 
     def write_node_script(source)
