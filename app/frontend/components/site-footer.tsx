@@ -48,7 +48,7 @@ export function SiteFooter() {
               </li>
               <li>
                 <a
-                  href="https://github.com/contextqmd/contextqmd"
+                  href="https://github.com/darkamenosa/contextqmd-registry"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="transition-colors hover:text-foreground"
