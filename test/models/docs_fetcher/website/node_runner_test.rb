@@ -2,6 +2,7 @@
 
 require "test_helper"
 require "tmpdir"
+require "webrick"
 
 class DocsFetcher::Website::NodeRunnerTest < ActiveSupport::TestCase
   setup do
@@ -234,7 +235,113 @@ class DocsFetcher::Website::NodeRunnerTest < ActiveSupport::TestCase
     assert_equal "colon-switch", runner.send(:url_to_page_uid, URI.parse("https://docs.example.com/:switch"))
   end
 
+  test "build_result surfaces seed redirect errors" do
+    runner = DocsFetcher::Website::NodeRunner.new
+
+    error = assert_raises(DocsFetcher::PermanentFetchError) do
+      runner.send(
+        :build_result,
+        "https://docs.example.com/legacy/page",
+        {
+          "pages" => [],
+          "seed_error" => "Submitted URL redirected outside crawl scope to https://docs.example.com/index.html"
+        }
+      )
+    end
+
+    assert_equal "Submitted URL redirected outside crawl scope to https://docs.example.com/index.html", error.message
+  end
+
+  test "fetch deduplicates redirected canonical urls during crawl" do
+    runner = DocsFetcher::Website::NodeRunner.new
+    proxy_lease = build_proxy_lease
+    hits = Hash.new(0)
+
+    with_test_server do |base_url|
+      canonical_url = "#{base_url}/docs/canonical"
+
+      mount_test_route("/docs/alias") do |_req, res|
+        hits["/docs/alias"] += 1
+        res.status = 302
+        res["Location"] = canonical_url
+      end
+
+      mount_test_route("/docs/canonical") do |_req, res|
+        hits["/docs/canonical"] += 1
+        res.status = 200
+        res["Content-Type"] = "text/html"
+        res.body = <<~HTML
+          <html>
+            <body>
+              <main>
+                <h1>Canonical</h1>
+                <p>Hello from the browser.</p>
+                <a href="#{canonical_url}">Again</a>
+              </main>
+            </body>
+          </html>
+        HTML
+      end
+
+      crawl_request = Struct.new(:url, :library_id, :library, :metadata).new(
+        "#{base_url}/docs/alias",
+        nil,
+        nil,
+        { "website_max_pages" => "5" }
+      )
+
+      ProxyPool.define_singleton_method(:checkout) { |**_options| proxy_lease }
+
+      result = runner.fetch(crawl_request)
+
+      assert_equal 1, result.pages.size
+      assert_equal canonical_url, result.pages.first[:url]
+      assert_equal 1, hits["/docs/alias"]
+      assert_equal 1, hits["/docs/canonical"]
+    end
+  ensure
+    reset_proxy_pool
+  end
+
   private
+
+    def with_test_server
+      @route_handlers = {}
+      server = WEBrick::HTTPServer.new(
+        Port: 0,
+        BindAddress: "127.0.0.1",
+        Logger: WEBrick::Log.new(File::NULL),
+        AccessLog: []
+      )
+      server.mount_proc("/") do |req, res|
+        handler = @route_handlers[req.path]
+        if handler
+          handler.call(req, res)
+        else
+          res.status = 404
+          res.body = "Not found"
+        end
+      end
+
+      thread = Thread.new { server.start }
+      wait_for_server(server)
+      port = server.listeners.first.addr[1]
+      yield "http://127.0.0.1:#{port}"
+    ensure
+      server&.shutdown
+      thread&.join
+      @route_handlers = nil
+    end
+
+    def mount_test_route(path, &block)
+      @route_handlers[path] = block
+    end
+
+    def wait_for_server(server)
+      Timeout.timeout(5) do
+        sleep 0.01 until server.status == :Running
+      end
+    end
 
     def write_node_script(source)
       dir = Dir.mktmpdir("contextqmd-node-runner-test-")

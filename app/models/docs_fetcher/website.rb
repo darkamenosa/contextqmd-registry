@@ -14,6 +14,40 @@ module DocsFetcher
       /\Aloading(?:\.\.\.)?\z/i
     ].freeze
 
+    module ScopePolicy
+      private
+
+        def compute_base_path(path)
+          clean = path.to_s.chomp("/")
+          return "/" if clean.empty? || clean == "/"
+
+          segments = clean.delete_prefix("/").split("/")
+          return clean if segments.length == 1
+
+          parent = File.dirname(clean)
+          parent == "." ? "/" : parent
+        end
+
+        def crawlable_page_uri?(uri, domain:, base_path:)
+          same_domain_for_website?(uri, domain) &&
+            within_base_path_for_website?(uri, base_path)
+        end
+
+        def same_domain_for_website?(uri, domain)
+          uri.host&.downcase == domain.to_s.downcase
+        end
+
+        def within_base_path_for_website?(uri, base_path)
+          return true if base_path == "/"
+
+          uri.path.to_s.downcase.start_with?(base_path.to_s.downcase)
+        end
+
+        def submitted_url_redirected_outside_scope_message(uri)
+          "Submitted URL redirected outside crawl scope to #{uri}"
+        end
+    end
+
     module PageUidEncoding
       private
 

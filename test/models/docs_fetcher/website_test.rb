@@ -214,6 +214,44 @@ class DocsFetcher::WebsiteTest < ActiveSupport::TestCase
     assert_equal "docs-page-1000.md", pages.last[:path]
   end
 
+  test "crawl marks redirected canonical urls as visited" do
+    seed_uri = URI.parse("https://example.com/docs/alias")
+    canonical_url = "https://example.com/docs/canonical"
+    html = <<~HTML
+      <html>
+        <body>
+          <main>
+            <h1>Canonical</h1>
+            <p>Canonical content</p>
+            <a href="#{canonical_url}">Again</a>
+          </main>
+        </body>
+      </html>
+    HTML
+    calls = Hash.new(0)
+
+    @fetcher.instance_variable_set(:@domain, "example.com")
+    @fetcher.instance_variable_set(:@scheme, "https")
+    @fetcher.instance_variable_set(:@base_path, "/docs")
+    @fetcher.define_singleton_method(:sleep) { |_duration| }
+    @fetcher.define_singleton_method(:http_get_with_redirects) do |uri|
+      calls[uri.to_s] += 1
+
+      {
+        status: :ok,
+        body: html,
+        final_uri: URI.parse(canonical_url)
+      }
+    end
+
+    pages = @fetcher.send(:crawl, seed_uri)
+
+    assert_equal 1, pages.size
+    assert_equal canonical_url, pages.first[:url]
+    assert_equal 1, calls[seed_uri.to_s]
+    assert_equal 0, calls[canonical_url]
+  end
+
   test "crawl stops after configured max_pages" do
     seed_uri = URI.parse("https://example.com/docs/page-0")
     html_by_url = {
@@ -294,6 +332,82 @@ class DocsFetcher::WebsiteTest < ActiveSupport::TestCase
     assert_equal "https://example.com/docs", snapshots.first[:requested_url]
     assert_equal "docs", snapshots.first.dig(:page, :page_uid)
     assert_includes snapshots.first[:links], "https://example.com/docs/next"
+  end
+
+  test "http_get_with_redirects preserves final HTTP redirect URL for scope checks" do
+    requested_uri = URI.parse("https://docs.spring.io/spring-boot/docs/current/reference/html/reference/web/reference/packaging/container-images/maven-plugin/using.html")
+    helper_url = "https://docs.spring.io/spring-boot/redirect.html?page=reference/web/reference/packaging/container-images/maven-plugin/using"
+    redirect_response = Net::HTTPMovedPermanently.new("1.1", "301", "Moved Permanently")
+    redirect_response.define_singleton_method(:[]) { |key| key.to_s.downcase == "location" ? helper_url : nil }
+    success_response = Net::HTTPOK.new("1.1", "200", "OK")
+    success_response.define_singleton_method(:body) { "<html><body>Redirect helper</body></html>" }
+    success_response.define_singleton_method(:[]) { |key| key.to_s.downcase == "content-type" ? "text/html" : nil }
+
+    @fetcher.instance_variable_set(:@domain, "docs.spring.io")
+    @fetcher.instance_variable_set(:@base_path, "/spring-boot/docs/current/reference/html/reference/web/reference/packaging/container-images/maven-plugin")
+    @fetcher.instance_variable_set(:@proxy_lease, nil)
+    @fetcher.define_singleton_method(:perform_http_get) do |uri, *_args, **_kwargs|
+      uri.to_s == requested_uri.to_s ? redirect_response : success_response
+    end
+
+    response = @fetcher.send(:http_get_with_redirects, requested_uri)
+
+    assert_equal :skipped, response[:status]
+    assert_equal helper_url, response[:final_uri].to_s
+    assert_equal "Submitted URL redirected outside crawl scope to #{helper_url}", response[:message]
+  end
+
+  test "crawl raises a clear error when the submitted URL redirects outside scope" do
+    seed_uri = URI.parse("https://docs.example.com/legacy/page")
+    @fetcher.define_singleton_method(:http_get_with_redirects) do |_uri|
+      {
+        status: :skipped,
+        final_uri: URI.parse("https://docs.example.com/index.html"),
+        message: "Submitted URL redirected outside crawl scope to https://docs.example.com/index.html"
+      }
+    end
+
+    error = assert_raises(DocsFetcher::PermanentFetchError) do
+      @fetcher.send(:crawl, seed_uri)
+    end
+
+    assert_equal "Submitted URL redirected outside crawl scope to https://docs.example.com/index.html", error.message
+  end
+
+  test "crawl skips discovered URLs whose final redirect escapes scope" do
+    seed_uri = URI.parse("https://docs.example.com/docs/guide")
+    html = <<~HTML
+      <html>
+        <body>
+          <main>
+            <h1>Guide</h1>
+            <p>Documentation page</p>
+            <a href="https://docs.example.com/docs/legacy">Legacy</a>
+          </main>
+        </body>
+      </html>
+    HTML
+
+    @fetcher.instance_variable_set(:@domain, "docs.example.com")
+    @fetcher.instance_variable_set(:@scheme, "https")
+    @fetcher.instance_variable_set(:@base_path, "/docs")
+    @fetcher.define_singleton_method(:sleep) { |_duration| }
+    @fetcher.define_singleton_method(:http_get_with_redirects) do |uri|
+      if uri.to_s == seed_uri.to_s
+        { status: :ok, body: html, final_uri: uri }
+      else
+        {
+          status: :skipped,
+          final_uri: URI.parse("https://docs.example.com/index.html"),
+          message: "Submitted URL redirected outside crawl scope to https://docs.example.com/index.html"
+        }
+      end
+    end
+
+    pages = @fetcher.send(:crawl, seed_uri)
+
+    assert_equal 1, pages.size
+    assert_equal "https://docs.example.com/docs/guide", pages.first[:url]
   end
 
   # --- URL normalization ---

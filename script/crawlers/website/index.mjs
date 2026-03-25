@@ -50,19 +50,15 @@ try {
 
 async function crawl(context, seedUrl, settings) {
   const queue = [seedUrl];
-  const visited = new Set();
+  const processedUrls = new Set();
   const pages = [];
   let crawledPages = 0;
 
   while (queue.length > 0 && canCrawlMorePages(settings, crawledPages)) {
     const currentUrl = queue.shift();
-    const normalized = normalizeUrl(currentUrl);
-
-    if (visited.has(normalized)) {
+    if (hasProcessedUrl(processedUrls, currentUrl)) {
       continue;
     }
-
-    visited.add(normalized);
     if (pages.length > 0 && settings.crawlDelayMs > 0) {
       await wait(settings.crawlDelayMs);
     }
@@ -70,16 +66,29 @@ async function crawl(context, seedUrl, settings) {
     const page = await context.newPage();
 
     try {
-      const snapshot = await capturePage(page, currentUrl, settings);
+      const snapshot = await capturePage(page, currentUrl, settings, { isSeed: currentUrl === seedUrl });
       if (!snapshot) {
+        markProcessedUrls(processedUrls, currentUrl);
         continue;
       }
+      if (snapshot.type === "skip") {
+        markProcessedUrls(processedUrls, currentUrl, snapshot.url);
+        if (snapshot.seedError) {
+          return { pages, seed_error: snapshot.message };
+        }
+        continue;
+      }
+      if (hasProcessedUrl(processedUrls, snapshot.url)) {
+        markProcessedUrls(processedUrls, currentUrl, snapshot.url);
+        continue;
+      }
+
+      markProcessedUrls(processedUrls, currentUrl, snapshot.url);
       crawledPages += 1;
 
       if (canCrawlMorePages(settings, crawledPages)) {
         for (const link of snapshot.links) {
-          const normalizedLink = normalizeUrl(link);
-          if (!visited.has(normalizedLink)) {
+          if (!hasProcessedUrl(processedUrls, link)) {
             queue.push(link);
           }
         }
@@ -109,6 +118,9 @@ async function renderBatch(context, urls, settings) {
       if (!snapshot) {
         continue;
       }
+      if (snapshot.type === "skip") {
+        continue;
+      }
 
       pages.push({
         requested_url: currentUrl,
@@ -126,7 +138,7 @@ async function renderBatch(context, urls, settings) {
   return { pages };
 }
 
-async function capturePage(page, currentUrl, settings) {
+async function capturePage(page, currentUrl, settings, { isSeed = false } = {}) {
   const response = await page.goto(currentUrl, {
     waitUntil: "domcontentloaded",
     timeout: 20_000,
@@ -145,11 +157,9 @@ async function capturePage(page, currentUrl, settings) {
   }));
 
   const resolvedUrl = new URL(snapshot.url);
-  if (!sameDomain(resolvedUrl, settings)) {
-    return null;
-  }
-  if (!withinBasePath(resolvedUrl, settings)) {
-    return null;
+  const scopeDecision = evaluateResolvedUrl(currentUrl, resolvedUrl, settings, { isSeed });
+  if (scopeDecision) {
+    return scopeDecision;
   }
   if (skipUrl(resolvedUrl, settings)) {
     return null;
@@ -167,6 +177,22 @@ async function capturePage(page, currentUrl, settings) {
     url: resolvedUrl.toString(),
     html: snapshot.html,
     links,
+  };
+}
+
+function evaluateResolvedUrl(requestedUrl, resolvedUrl, settings, { isSeed }) {
+  if (sameDomain(resolvedUrl, settings) && withinBasePath(resolvedUrl, settings)) {
+    return null;
+  }
+
+  const requestedNormalized = normalizeUrl(requestedUrl);
+  const resolvedNormalized = normalizeUrl(resolvedUrl.toString());
+
+  return {
+    type: "skip",
+    url: resolvedUrl.toString(),
+    seedError: isSeed && requestedNormalized !== resolvedNormalized,
+    message: `Submitted URL redirected outside crawl scope to ${resolvedUrl.toString()}`,
   };
 }
 
@@ -213,6 +239,20 @@ function normalizeUrl(url) {
     return `${parsed.protocol}//${parsed.hostname.toLowerCase()}${path}`;
   } catch {
     return url;
+  }
+}
+
+function hasProcessedUrl(processedUrls, url) {
+  return processedUrls.has(normalizeUrl(url));
+}
+
+function markProcessedUrls(processedUrls, ...urls) {
+  for (const url of urls) {
+    if (!url) {
+      continue;
+    }
+
+    processedUrls.add(normalizeUrl(url));
   }
 }
 

@@ -27,7 +27,7 @@ module DocsFetcher
           output_path = File.join(tmpdir, "result.json")
           payload = build_payload(crawl_request, output_path, proxy_lease&.crawl_proxy_config)
           artifact = run_crawler(payload, on_progress: on_progress)
-          result = build_result(crawl_request.url, artifact.fetch("pages", []))
+          result = build_result(crawl_request.url, artifact)
 
           record_proxy_success(proxy_lease, uri)
           result
@@ -145,7 +145,12 @@ module DocsFetcher
           end
         end
 
-        def build_result(source_url, pages)
+        def build_result(source_url, artifact)
+          if artifact["seed_error"].present?
+            raise DocsFetcher::PermanentFetchError, artifact["seed_error"]
+          end
+
+          pages = artifact.fetch("pages", [])
           converted_pages = pages.filter_map { |page| build_page(page) }
           raise DocsFetcher::PermanentFetchError, "No content found at #{source_url}" if converted_pages.empty?
 

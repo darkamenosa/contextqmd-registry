@@ -11,6 +11,7 @@ module DocsFetcher
     # Converts HTML to clean Markdown via HtmlToMarkdown (reverse_markdown).
     class RubyRunner
       include HttpFetching
+      include ScopePolicy
       include PageUidEncoding
 
       MAX_REDIRECTS = 3
@@ -97,25 +98,30 @@ module DocsFetcher
 
         urls.filter_map do |current_url|
           uri = URI.parse(current_url)
-          html = http_get_with_redirects(uri)
-          next unless html
+          page_response = normalize_page_response(http_get_with_redirects(uri), requested_uri: uri)
+          next unless page_response
+          next if page_response[:status] == :skipped
+
+          html = page_response.fetch(:body)
+          final_uri = page_response.fetch(:final_uri)
 
           doc = Nokogiri::HTML(html)
           result = HtmlToMarkdown.convert(html)
           content = result[:content].to_s.strip
+          page_uid = url_to_page_uid(final_uri)
 
           {
             requested_url: current_url,
-            url: current_url,
+            url: final_uri.to_s,
             page: content.present? ? {
-              page_uid: url_to_page_uid(uri),
-              path: "#{url_to_page_uid(uri)}.md",
+              page_uid: page_uid,
+              path: "#{page_uid}.md",
               title: result[:title] || @domain,
-              url: current_url,
+              url: final_uri.to_s,
               content: content,
               headings: result[:headings]
             } : nil,
-            links: discover_links(doc, uri)
+            links: discover_links(doc, final_uri)
           }
         rescue URI::InvalidURIError
           nil
@@ -151,24 +157,31 @@ module DocsFetcher
 
           while queue.any? && crawl_more_pages?(crawled_count)
             current_url = queue.shift
-            normalized = normalize_url(current_url)
-            next if visited.include?(normalized)
+            next if visited_url?(visited, current_url)
 
-            visited.add(normalized)
+            mark_visited_urls(visited, current_url)
             sleep(CRAWL_DELAY) if pages.any? # polite delay (skip for first request)
 
             uri = URI.parse(current_url)
-            html = http_get_with_redirects(uri)
-            next unless html
+            page_response = normalize_page_response(http_get_with_redirects(uri), requested_uri: uri)
+            next unless page_response
+
+            if page_response[:status] == :skipped
+              raise_if_seed_redirected_outside_scope!(current_url, seed_uri, page_response)
+              next
+            end
+
+            html = page_response.fetch(:body)
+            final_uri = page_response.fetch(:final_uri)
+            mark_visited_urls(visited, final_uri)
             crawled_count += 1
 
             doc = Nokogiri::HTML(html)
 
             # Discover new links before content extraction
             if crawl_more_pages?(crawled_count)
-              discover_links(doc, uri).each do |link|
-                norm_link = normalize_url(link)
-                queue.push(link) unless visited.include?(norm_link)
+              discover_links(doc, final_uri).each do |link|
+                queue.push(link) unless visited_url?(visited, link)
               end
             end
 
@@ -176,13 +189,13 @@ module DocsFetcher
             result = HtmlToMarkdown.convert(html)
             content = result[:content]
             next if content.nil? || content.strip.empty?
-            page_uid = url_to_page_uid(uri)
+            page_uid = url_to_page_uid(final_uri)
 
             pages << {
               page_uid: page_uid,
               path: page_uid + ".md",
               title: result[:title] || @domain,
-              url: current_url,
+              url: final_uri.to_s,
               content: content,
               headings: result[:headings]
             }
@@ -232,15 +245,11 @@ module DocsFetcher
         end
 
         def same_domain?(uri)
-          uri.host&.downcase == @domain&.downcase
+          same_domain_for_website?(uri, @domain)
         end
 
         def within_path_prefix?(uri)
-          return true if @base_path == "/"
-
-          path = uri.path.to_s.downcase
-          base = @base_path.downcase
-          path.start_with?(base)
+          within_base_path_for_website?(uri, @base_path)
         end
 
         def skip_url?(uri)
@@ -290,30 +299,101 @@ module DocsFetcher
           url_string
         end
 
-        def compute_base_path(path)
-          clean = path.to_s.chomp("/")
-          return "/" if clean.empty? || clean == "/"
-
-          segments = clean.delete_prefix("/").split("/")
-          return clean if segments.length == 1
-
-          parent = File.dirname(clean)
-          parent == "." ? "/" : parent
-        end
-
         # --- HTTP ---
 
         def http_get_with_redirects(uri, redirects_remaining = MAX_REDIRECTS)
-          http_get(
+          return if redirects_remaining <= 0
+
+          if @proxy_lease.nil? && !SsrfGuard.safe_uri?(uri)
+            raise DocsFetcher::PermanentFetchError, "SSRF blocked: #{uri.host} resolves to private address"
+          end
+
+          response = perform_http_get(
             uri,
-            redirect_limit: redirects_remaining,
-            raise_on_error: false,
-            proxy_lease: @proxy_lease,
-            user_agent: USER_AGENT,
+            @proxy_lease&.crawl_proxy_config,
             accept: "text/html",
-            read_timeout: 15,
-            allowed_content_types: [ "text/html" ]
+            user_agent: USER_AGENT,
+            open_timeout: 10,
+            read_timeout: 15
           )
+          record_proxy_success(@proxy_lease, uri)
+
+          if response.is_a?(Net::HTTPRedirection) && response["location"]
+            redirect_uri = URI.join(uri, response["location"])
+            unless SsrfGuard.safe_uri?(redirect_uri)
+              raise DocsFetcher::PermanentFetchError, "Redirect to private address: #{redirect_uri.host}"
+            end
+
+            return http_get_with_redirects(redirect_uri, redirects_remaining - 1)
+          end
+
+          return unless response.is_a?(Net::HTTPSuccess)
+
+          content_type = response["content-type"].to_s
+          return unless content_type.empty? || content_type.include?("text/html")
+
+          body = response.body.to_s.dup.force_encoding("UTF-8")
+          finalize_page_response(uri, body)
+        rescue DocsFetcher::PermanentFetchError
+          raise
+        rescue Net::OpenTimeout, Net::ReadTimeout, Errno::ECONNREFUSED,
+               Errno::ECONNRESET, SocketError, OpenSSL::SSL::SSLError => error
+          record_proxy_failure(@proxy_lease, uri, error)
+          nil
+        end
+
+        def finalize_page_response(final_uri, body)
+          return skipped_page_response(final_uri) unless crawlable_redirect_target?(final_uri)
+
+          {
+            status: :ok,
+            body: body,
+            final_uri: final_uri
+          }
+        end
+
+        def crawlable_redirect_target?(uri)
+          uri.present? &&
+            crawlable_page_uri?(uri, domain: @domain, base_path: @base_path) &&
+            !skip_url?(uri)
+        end
+
+        def normalize_page_response(page_response, requested_uri:)
+          return if page_response.blank?
+          return page_response if page_response.is_a?(Hash)
+
+          {
+            status: :ok,
+            body: page_response,
+            final_uri: requested_uri
+          }
+        end
+
+        def visited_url?(visited, url)
+          visited.include?(normalize_url(url.to_s))
+        end
+
+        def mark_visited_urls(visited, *urls)
+          urls.each do |url|
+            next if url.blank?
+
+            visited.add(normalize_url(url.to_s))
+          end
+        end
+
+        def skipped_page_response(uri)
+          {
+            status: :skipped,
+            final_uri: uri,
+            message: uri.present? ? submitted_url_redirected_outside_scope_message(uri) : nil
+          }
+        end
+
+        def raise_if_seed_redirected_outside_scope!(current_url, seed_uri, page_response)
+          return unless current_url == seed_uri.to_s
+          return if page_response[:message].blank?
+
+          raise DocsFetcher::PermanentFetchError, page_response[:message]
         end
 
         def proxy_scope
