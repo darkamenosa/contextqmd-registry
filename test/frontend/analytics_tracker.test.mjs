@@ -32,48 +32,61 @@ async function loadTrackerModule() {
 }
 
 function installBrowserStubs() {
-  const storage = new Map()
-  globalThis.localStorage = {
-    getItem(key) {
-      return storage.has(key) ? storage.get(key) : null
-    },
-    setItem(key, value) {
-      storage.set(key, String(value))
-    },
-    removeItem(key) {
-      storage.delete(key)
-    },
-  }
   globalThis.document = {
     referrer: "",
     title: "Test",
-    cookie: "",
     readyState: "complete",
     visibilityState: "visible",
+    body: {
+      scrollHeight: 1200,
+      offsetHeight: 1200,
+      clientHeight: 900,
+      scrollTop: 0,
+    },
+    documentElement: {
+      scrollHeight: 1200,
+      offsetHeight: 1200,
+      clientHeight: 900,
+      scrollTop: 0,
+    },
     querySelector() {
       return null
     },
+    getElementsByTagName() {
+      return []
+    },
     addEventListener() {},
     removeEventListener() {},
+    hasFocus() {
+      return true
+    },
   }
+
   globalThis.window = {
     __analyticsInitialized: true,
+    analyticsConfig: undefined,
     location: {
       href: "http://localhost/about",
       pathname: "/about",
       search: "",
       hash: "",
       host: "localhost",
+      origin: "http://localhost",
     },
     innerWidth: 1440,
     innerHeight: 900,
+    scrollY: 0,
     addEventListener() {},
     removeEventListener() {},
   }
+  globalThis.window.top = globalThis.window
+  globalThis.window.self = globalThis.window
+
   globalThis.history = {
     pushState() {},
     replaceState() {},
   }
+
   Object.defineProperty(globalThis, "navigator", {
     configurable: true,
     value: {
@@ -82,8 +95,8 @@ function installBrowserStubs() {
       },
     },
   })
+
   globalThis.fetch = async () => ({ ok: true })
-  return { storage }
 }
 
 function cleanupBrowserStubs() {
@@ -92,104 +105,42 @@ function cleanupBrowserStubs() {
   delete globalThis.history
   delete globalThis.window
   delete globalThis.document
-  delete globalThis.localStorage
 }
 
-test("analytics tracker refreshes visit expiry on repeated activity", async () => {
+test("analytics tracker posts pageviews only through the events endpoint", async () => {
   installBrowserStubs()
   const { StandaloneAnalytics } = await loadTrackerModule()
   const analytics = new StandaloneAnalytics()
 
-  analytics["visitorToken"] = "visitor-1"
-
-  const originalNow = Date.now
-  try {
-    Date.now = () => 1_000
-    analytics["createNewVisitToken"]()
-    const firstExpiry = analytics["visitExpiresAt"]
-
-    Date.now = () => 61_000
-    await analytics["ensureVisit"]()
-
-    assert.ok(analytics["visitExpiresAt"] > firstExpiry)
-  } finally {
-    Date.now = originalNow
-    cleanupBrowserStubs()
-  }
-})
-
-test("analytics tracker does not repost an ensured visit for the same token", async () => {
-  installBrowserStubs()
-  const { StandaloneAnalytics } = await loadTrackerModule()
-  const analytics = new StandaloneAnalytics()
-  analytics["visitorToken"] = "visitor-1"
-
-  let posts = 0
-  globalThis.fetch = async () => {
-    posts += 1
-    return { ok: true }
-  }
-
-  const originalNow = Date.now
-  try {
-    Date.now = () => 1_000
-    await analytics["ensureVisit"]()
-    await analytics["ensureVisit"]()
-
-    assert.equal(posts, 1)
-
-    const expiresAt = analytics["visitExpiresAt"]
-    Date.now = () => expiresAt + 1
-    await analytics["ensureVisit"]()
-
-    assert.equal(posts, 2)
-  } finally {
-    Date.now = originalNow
-    cleanupBrowserStubs()
-  }
-})
-
-test("analytics tracker falls back to in-memory storage when localStorage is unavailable", async () => {
-  installBrowserStubs()
-  globalThis.localStorage = {
-    getItem() {
-      throw new Error("storage blocked")
-    },
-    setItem() {
-      throw new Error("storage blocked")
-    },
-    removeItem() {
-      throw new Error("storage blocked")
-    },
-  }
-
-  const { StandaloneAnalytics } = await loadTrackerModule()
-  const analytics = new StandaloneAnalytics()
-  analytics["visitorToken"] = "visitor-1"
-
-  let posts = 0
-  globalThis.fetch = async () => {
-    posts += 1
+  const requests = []
+  globalThis.fetch = async (url, options = {}) => {
+    requests.push({ url, options })
     return { ok: true }
   }
 
   try {
-    await analytics["ensureVisit"]()
+    await analytics["trackPageview"]()
+    await Promise.resolve()
 
-    assert.equal(posts, 1)
-    assert.ok(analytics["visitToken"])
-    assert.ok(analytics["visitExpiresAt"])
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0].url, "/ahoy/events")
+    assert.equal(requests[0].options.keepalive, true)
+
+    const body = JSON.parse(requests[0].options.body)
+    assert.deepEqual(Object.keys(body), ["events"])
+    assert.equal(body.events.length, 1)
+    assert.equal(body.events[0].name, "pageview")
+    assert.ok(!("visit_token" in body))
+    assert.ok(!("visitor_token" in body))
   } finally {
     cleanupBrowserStubs()
   }
 })
 
-test("analytics tracker posts events with fetch keepalive even when sendBeacon exists", async () => {
+test("analytics tracker posts engagement events with fetch keepalive even when sendBeacon exists", async () => {
   installBrowserStubs()
   const { StandaloneAnalytics } = await loadTrackerModule()
   const analytics = new StandaloneAnalytics()
-  analytics["visitorToken"] = "visitor-1"
-  analytics["createNewVisitToken"]()
 
   let beaconCalls = 0
   Object.defineProperty(globalThis, "navigator", {
@@ -210,44 +161,42 @@ test("analytics tracker posts events with fetch keepalive even when sendBeacon e
 
   try {
     analytics["sendEvent"]({
-      name: "pageview",
-      page: "/",
-      url: "https://contextqmd.com/",
-      title: "Home",
+      name: "engagement",
+      page: "/about",
+      url: "http://localhost/about",
+      title: "About",
       referrer: "",
-      screenSize: "390x844",
+      screenSize: "1440x900",
     })
 
     await Promise.resolve()
 
     assert.equal(beaconCalls, 0)
-    const eventRequest = requests.find((request) => request.url === "/ahoy/events")
-    assert.ok(eventRequest)
-    assert.equal(eventRequest.options.keepalive, true)
+    const request = requests.find((entry) => entry.url === "/ahoy/events")
+    assert.ok(request)
+    assert.equal(request.options.keepalive, true)
   } finally {
     cleanupBrowserStubs()
   }
 })
 
-test("analytics tracker still posts the pageview when visit creation fails", async () => {
+test("analytics tracker still posts the pageview when the server has not pre-tracked the document", async () => {
   installBrowserStubs()
   const { StandaloneAnalytics } = await loadTrackerModule()
   const analytics = new StandaloneAnalytics()
-  analytics["config"].useBeaconForEvents = false
 
   const requests = []
   globalThis.fetch = async (url, options = {}) => {
     requests.push({ url, options })
-    if (url === "/ahoy/visits") throw new Error("visit create failed")
     return { ok: true }
   }
 
   try {
-    await analytics["trackPageview"]()
+    analytics.init()
     await Promise.resolve()
 
-    assert.ok(requests.some((request) => request.url === "/ahoy/visits"))
-    assert.ok(requests.some((request) => request.url === "/ahoy/events"))
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0].url, "/ahoy/events")
   } finally {
     cleanupBrowserStubs()
   }
@@ -258,6 +207,7 @@ test("analytics tracker skips the server-tracked initial pageview and seeds foll
   globalThis.window.analyticsConfig = {
     initialPageviewTracked: true,
     initialPageKey: "/about",
+    trackVisits: false,
     useBeaconForEvents: false,
   }
 
@@ -278,60 +228,6 @@ test("analytics tracker skips the server-tracked initial pageview and seeds foll
     assert.equal(analytics["lastTrackedPageKey"], "/about")
     assert.equal(analytics["lastTrackedHref"], "http://localhost/about")
     assert.ok(analytics["runningEngagementStart"] > 0)
-  } finally {
-    cleanupBrowserStubs()
-  }
-})
-
-test("analytics tracker keeps server-issued tokens over stale local storage", async () => {
-  const { storage } = installBrowserStubs()
-  storage.set("ahoy_visit", "stale-visit")
-  storage.set("ahoy_visit_expires", String(Date.now() + 60_000))
-  storage.set("ahoy_visitor", "stale-visitor")
-
-  globalThis.window.analyticsConfig = {
-    initialPageviewTracked: true,
-    initialPageKey: "/about",
-    useBeaconForEvents: false,
-  }
-
-  globalThis.document.querySelector = (selector) => {
-    if (selector === 'meta[name="ahoy-visit"]') {
-      return { content: "server-visit" }
-    }
-    if (selector === 'meta[name="ahoy-visitor"]') {
-      return { content: "server-visitor" }
-    }
-    return null
-  }
-
-  const requests = []
-  globalThis.fetch = async (url, options = {}) => {
-    requests.push({ url, options })
-    return { ok: true }
-  }
-
-  const { StandaloneAnalytics } = await loadTrackerModule()
-  const analytics = new StandaloneAnalytics()
-
-  try {
-    analytics.init()
-    analytics["sendEvent"]({
-      name: "engagement",
-      page: "/about",
-      url: "http://localhost/about",
-      title: "About",
-      referrer: "",
-      screenSize: "1440x900",
-    })
-    await Promise.resolve()
-
-    assert.equal(analytics["visitToken"], "server-visit")
-    assert.equal(analytics["visitorToken"], "server-visitor")
-    assert.equal(storage.get("ahoy_visit"), "server-visit")
-    assert.equal(storage.get("ahoy_visitor"), "server-visitor")
-    assert.ok(!requests.some((request) => request.url === "/ahoy/visits"))
-    assert.ok(requests.some((request) => request.url === "/ahoy/events"))
   } finally {
     cleanupBrowserStubs()
   }

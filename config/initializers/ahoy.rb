@@ -1,8 +1,54 @@
 require Rails.root.join("lib/client_ip")
+require Rails.root.join("lib/analytics_anonymous_identity")
+
+module AhoyServerOwnedIdentity
+  private
+    def existing_visit_token
+      return super if Ahoy.cookies?
+
+      nil
+    end
+
+    def existing_visitor_token
+      return super if Ahoy.cookies?
+
+      nil
+    end
+
+    def visitor_token_helper
+      return super if Ahoy.cookies?
+
+      @visitor_token_helper ||= begin
+        token = AnalyticsAnonymousIdentity.current(request)
+        token ||= generate_id unless Ahoy.api_only
+        token
+      end
+    end
+end
+
+Ahoy::Tracker.prepend(AhoyServerOwnedIdentity)
 
 class Ahoy::Store < Ahoy::DatabaseStore
   def visit_columns
     super + %i[hostname screen_size browser_version]
+  end
+
+  def visit
+    unless defined?(@visit)
+      if ahoy.send(:existing_visit_token) || ahoy.instance_variable_get(:@visit_token)
+        @visit = visit_model.where(visit_token: ahoy.visit_token).take if ahoy.visit_token
+      elsif !Ahoy.cookies?
+        @visit = visit_model
+          .where(visitor_token: anonymous_visitor_tokens)
+          .where(started_at: Ahoy.visit_duration.ago..)
+          .order(started_at: :desc)
+          .first
+      else
+        @visit = nil
+      end
+    end
+
+    @visit
   end
 
   def track_visit(data)
@@ -11,6 +57,7 @@ class Ahoy::Store < Ahoy::DatabaseStore
 
     req = Current.request
     if req
+      attrs[:visitor_token] = AnalyticsAnonymousIdentity.current(req) || attrs[:visitor_token]
       attrs[:hostname] ||= req.host
 
       # Prefer the real landing page, not the Ahoy API endpoint
@@ -177,6 +224,11 @@ class Ahoy::Store < Ahoy::DatabaseStore
     def lookup_maxmind_record(req, data)
       client_ip = ClientIp.public(req, fallback_ip: data[:ip])
       client_ip ? MaxmindGeo.lookup(client_ip) : nil
+    end
+
+    def anonymous_visitor_tokens
+      tokens = AnalyticsAnonymousIdentity.tokens(request)
+      tokens.presence || [ ahoy.visitor_token ].compact
     end
 end
 

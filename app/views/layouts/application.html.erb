@@ -11,10 +11,6 @@
     <meta name="mobile-web-app-capable" content="yes">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
-    <% if analytics_initial_pageview_tracked? %>
-      <meta name="ahoy-visit" content="<%= analytics_visit_token %>">
-      <meta name="ahoy-visitor" content="<%= analytics_visitor_token %>">
-    <% end %>
 
     <%= yield :head %>
 
@@ -33,7 +29,7 @@
         useCookies: Rails.configuration.x.analytics.use_cookies,
         visitDurationMinutes: Rails.configuration.x.analytics.visit_duration_minutes,
         useBeaconForEvents: Rails.configuration.x.analytics.use_beacon_for_events,
-        trackVisits: true,
+        trackVisits: false,
         initialPageviewTracked: analytics_initial_pageview_tracked?,
         initialPageKey: analytics_initial_page_key
       }.to_json) %>;

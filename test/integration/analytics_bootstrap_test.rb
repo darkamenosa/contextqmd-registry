@@ -17,13 +17,13 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
 
       assert_response :success
       assert_includes response.body, "\"visitDurationMinutes\":240"
-      assert_includes response.body, "\"trackVisits\":true"
+      assert_includes response.body, "\"trackVisits\":false"
       assert_includes response.body, "\"useBeaconForEvents\":false"
       assert_includes response.body, "\"useCookies\":false"
       assert_includes response.body, "\"initialPageviewTracked\":true"
       assert_includes response.body, "\"initialPageKey\":\"/\""
-      assert_includes response.body, "meta name=\"ahoy-visit\""
-      assert_includes response.body, "meta name=\"ahoy-visitor\""
+      refute_includes response.body, "meta name=\"ahoy-visit\""
+      refute_includes response.body, "meta name=\"ahoy-visitor\""
     end
   end
 
@@ -36,7 +36,7 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
       end
 
       assert_response :success
-      assert_includes response.body, "\"trackVisits\":true"
+      assert_includes response.body, "\"trackVisits\":false"
       assert_includes response.body, "\"initialPageviewTracked\":false"
       refute_includes response.body, "meta name=\"ahoy-visit\""
       refute_includes response.body, "meta name=\"ahoy-visitor\""

@@ -30,9 +30,7 @@ module ServerSidePageviewTracking
 
   included do
     helper_method :analytics_initial_pageview_tracked?,
-      :analytics_initial_page_key,
-      :analytics_visit_token,
-      :analytics_visitor_token
+      :analytics_initial_page_key
 
     before_action :prepare_server_side_pageview_tracking
     after_action :track_server_side_pageview
@@ -44,8 +42,6 @@ module ServerSidePageviewTracking
 
       @analytics_initial_pageview_tracked = true
       @analytics_initial_page_key = analytics_page_key
-      @analytics_visit_token = ahoy.visit_token
-      @analytics_visitor_token = ahoy.visitor_token
     end
 
     def track_server_side_pageview
@@ -109,13 +105,5 @@ module ServerSidePageviewTracking
 
     def analytics_initial_page_key
       @analytics_initial_page_key
-    end
-
-    def analytics_visit_token
-      @analytics_visit_token
-    end
-
-    def analytics_visitor_token
-      @analytics_visitor_token
     end
 end

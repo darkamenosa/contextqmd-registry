@@ -13,16 +13,12 @@
 interface AnalyticsConfig {
   // Ahoy endpoints
   eventsEndpoint: string
-  visitsEndpoint: string
   // Filters
   excludePaths: string[]
   includePaths?: string[] // if provided, only paths matching any will be tracked (plausible-style)
   excludeAssets: string[]
-  // Storage + transport
-  useCookies: boolean // true = cookies (ahoy.js style); false = cookieless (localStorage). Default: false
-  visitDurationMinutes: number // new visit after X minutes of inactivity. Default: 240 (4h)
+  // Transport
   useBeaconForEvents: boolean // legacy flag; events use fetch keepalive by default
-  trackVisits: boolean // create visit on frontend. Default: true
   initialPageviewTracked?: boolean // true when the server already tracked the current full-page load
   initialPageKey?: string // server-tracked dedupe key for the current page
   // Routing behavior
@@ -39,17 +35,10 @@ declare global {
 }
 
 class StandaloneAnalytics {
-  private readonly memoryStorage = new Map<string, string>()
-  private visitToken: string | null = null
-  private visitExpiresAt: number | null = null
-  private visitorToken: string | null = null
   private lastTrackedHref: string | null = null
   // Dedup key for pageviews: pathname + search (or + hash if hashBasedRouting)
   private lastTrackedPageKey: string | null = null
   private config: AnalyticsConfig
-  private ensureVisitPromise: Promise<boolean> | null = null
-  private ensuredVisitToken: string | null = null
-  private ensureVisitPromiseToken: string | null = null
 
   // Engagement tracking state (plausible-like)
   private listeningOnEngagement = false
@@ -64,7 +53,6 @@ class StandaloneAnalytics {
   constructor() {
     this.config = {
       eventsEndpoint: "/ahoy/events",
-      visitsEndpoint: "/ahoy/visits",
       // Defaults similar to our app; can be overridden by data-* attributes or window.analyticsConfig
       // Exclude internal/system endpoints to avoid accidental tracking
       excludePaths: [
@@ -104,10 +92,7 @@ class StandaloneAnalytics {
         ".map",
         ".json",
       ],
-      useCookies: false,
-      visitDurationMinutes: 240, // keep visit duration aligned with server-side analytics config (4h)
       useBeaconForEvents: false,
-      trackVisits: true,
       hashBasedRouting: false,
       debug: false,
     }
@@ -135,9 +120,6 @@ class StandaloneAnalytics {
     // Read plausible-style include/exclude from script tag if present
     this.readScriptAttributes()
 
-    // Load tokens (meta or storage). Visit creation stays lazy so excluded pages
-    // do not create records just by loading the shared application layout.
-    this.bootstrapIdentity()
     this.bootstrapServerTrackedPageview()
 
     // Track initial page load only when the document is visible.
@@ -170,29 +152,6 @@ class StandaloneAnalytics {
     // Engagement and auto-capture listeners
     this.initEngagement()
     this.initAutoCapture()
-  }
-
-  private bootstrapIdentity(): void {
-    // First try meta tokens (if server provided)
-    const visitMeta = document.querySelector<HTMLMetaElement>(
-      'meta[name="ahoy-visit"]'
-    )
-    const visitorMeta = document.querySelector<HTMLMetaElement>(
-      'meta[name="ahoy-visitor"]'
-    )
-    if (visitMeta?.content) {
-      this.visitToken = visitMeta.content
-      this.ensuredVisitToken = visitMeta.content
-      this.refreshVisitExpiry()
-    }
-    if (visitorMeta?.content) {
-      this.visitorToken = visitorMeta.content
-      this.storeVisitorToken(visitorMeta.content)
-    }
-
-    // Load from storage only for any missing identity pieces. When the server
-    // already issued tokens for this document, those tokens are authoritative.
-    this.ensureLocalIdentity()
   }
 
   private bootstrapServerTrackedPageview(): void {
@@ -287,9 +246,6 @@ class StandaloneAnalytics {
       return
     }
 
-    this.ensureLocalIdentity()
-    void this.ensureVisit()
-
     const referrer = this.lastTrackedHref || document.referrer || ""
 
     // Plausible-style event name and props
@@ -374,8 +330,6 @@ class StandaloneAnalytics {
   ): void {
     if (typeof window === "undefined") return
     if (this.shouldExcludeEventPage(properties.page)) return
-    this.ensureLocalIdentity()
-    void this.ensureVisit()
 
     const event = {
       name: properties.name,
@@ -410,16 +364,12 @@ class StandaloneAnalytics {
     const csrfToken = this.getCSRFToken()
     if (csrfToken) headers["X-CSRF-Token"] = csrfToken
 
-    const jsonPayload = {
-      visit_token: this.visitToken,
-      visitor_token: this.visitorToken,
-      events: [event],
-    }
-
     fetch(this.config.eventsEndpoint, {
       method: "POST",
       headers,
-      body: JSON.stringify(jsonPayload),
+      // Privacy-first mode: the browser does not own analytics identity.
+      // Ahoy resolves cookieless visitor identity server-side from the request.
+      body: JSON.stringify({ events: [event] }),
       credentials: "same-origin",
       keepalive: true,
     }).catch(() => {
@@ -427,236 +377,11 @@ class StandaloneAnalytics {
     })
   }
 
-  private generateToken(): string {
-    // Generate random token (UUIDv4-like hex)
-    const cryptoObj =
-      typeof globalThis !== "undefined" ? globalThis.crypto : undefined
-    if (cryptoObj?.randomUUID) return cryptoObj.randomUUID().replace(/-/g, "")
-    const array = new Uint8Array(16)
-    if (cryptoObj?.getRandomValues) {
-      cryptoObj.getRandomValues(array)
-    } else {
-      // Fallback to Math.random when Web Crypto is unavailable (very rare)
-      for (let i = 0; i < array.length; i++)
-        array[i] = Math.floor(Math.random() * 256)
-    }
-    return Array.from(array, (b) => b.toString(16).padStart(2, "0")).join("")
-  }
-
-  private getOrCreateVisitorToken(): string {
-    const stored = this.getStoredVisitorToken()
-    if (stored) return stored
-
-    const token = this.generateToken()
-    this.storeVisitorToken(token)
-    return token
-  }
-
   private getCSRFToken(): string | null {
     const meta = document.querySelector<HTMLMetaElement>(
       'meta[name="csrf-token"]'
     )
     return meta?.content || null
-  }
-
-  // ----- Visit lifecycle -----
-  private ensureLocalIdentity(): void {
-    if (!this.visitorToken) {
-      this.visitorToken = this.getOrCreateVisitorToken()
-    } else {
-      this.storeVisitorToken(this.visitorToken)
-    }
-
-    const storedVisit = this.getStoredVisit()
-    if (!this.visitToken && storedVisit) {
-      this.visitToken = storedVisit.token
-      this.visitExpiresAt = storedVisit.expiresAt
-    }
-
-    if (!this.visitToken || this.isVisitExpired()) {
-      this.createNewVisitToken()
-    } else {
-      this.refreshVisitExpiry()
-    }
-  }
-
-  private isVisitExpired(): boolean {
-    if (!this.visitExpiresAt) return true
-    return Date.now() > this.visitExpiresAt
-  }
-
-  private createNewVisitToken(): void {
-    this.visitToken = this.generateToken()
-    this.ensuredVisitToken = null
-    this.ensureVisitPromise = null
-    this.ensureVisitPromiseToken = null
-    this.refreshVisitExpiry()
-  }
-
-  private refreshVisitExpiry(): void {
-    if (!this.visitToken) return
-    const ttlMs = this.config.visitDurationMinutes * 60 * 1000
-    this.visitExpiresAt = Date.now() + ttlMs
-    this.storeVisit(this.visitToken, this.visitExpiresAt)
-  }
-
-  private ensureActiveVisit(): Promise<boolean> {
-    if (!this.visitToken) return Promise.resolve(false)
-    // Send visit to server (JSON + CSRF header); mirrors ahoy.js createVisit
-    const payload: Record<string, unknown> = {
-      visit_token: this.visitToken,
-      visitor_token: this.visitorToken,
-      platform: "Web",
-      landing_page: window.location.href,
-      screen_width: window.innerWidth,
-      screen_height: window.innerHeight,
-      screen_size: `${window.innerWidth}x${window.innerHeight}`,
-      js: true,
-    }
-    if (document.referrer) payload.referrer = document.referrer
-
-    // Include UTM parameters from the landing URL (Plausible-compatible behavior)
-    try {
-      const params = new URLSearchParams(window.location.search)
-      const utm_source =
-        params.get("utm_source") || params.get("source") || params.get("ref")
-      const utm_medium = params.get("utm_medium")
-      const utm_campaign = params.get("utm_campaign")
-      const utm_content = params.get("utm_content")
-      const utm_term = params.get("utm_term")
-      if (utm_source) payload.utm_source = utm_source
-      if (utm_medium) payload.utm_medium = utm_medium
-      if (utm_campaign) payload.utm_campaign = utm_campaign
-      if (utm_content) payload.utm_content = utm_content
-      if (utm_term) payload.utm_term = utm_term
-    } catch {
-      // Ignore malformed UTM params on the landing URL.
-    }
-
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    }
-    const csrf = this.getCSRFToken()
-    if (csrf) headers["X-CSRF-Token"] = csrf
-
-    return fetch(this.config.visitsEndpoint, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload),
-      credentials: "same-origin",
-      keepalive: true,
-    })
-      .then((response) => response.ok)
-      .catch(() => {
-        return false
-      })
-  }
-
-  private ensureVisit(): Promise<void> {
-    if (!this.config.trackVisits) return Promise.resolve()
-    this.ensureLocalIdentity()
-
-    const token = this.visitToken
-    if (!token) return Promise.resolve()
-
-    if (this.ensuredVisitToken === token) return Promise.resolve()
-
-    if (this.ensureVisitPromise && this.ensureVisitPromiseToken === token) {
-      return this.ensureVisitPromise.then(() => undefined)
-    }
-
-    const promise = this.ensureActiveVisit()
-      .then((created) => {
-        if (created && this.visitToken === token) {
-          this.ensuredVisitToken = token
-        }
-        return created
-      })
-      .finally(() => {
-        if (this.ensureVisitPromise === promise) {
-          this.ensureVisitPromise = null
-          this.ensureVisitPromiseToken = null
-        }
-      })
-
-    this.ensureVisitPromise = promise
-    this.ensureVisitPromiseToken = token
-    return promise.then(() => undefined)
-  }
-
-  private getStoredVisit(): { token: string; expiresAt: number } | null {
-    if (this.config.useCookies) {
-      const token = this.getCookie("ahoy_visit")
-      const exp = this.getCookie("ahoy_visit_expires")
-      if (token && exp) return { token, expiresAt: parseInt(exp, 10) }
-      return null
-    } else {
-      const token = this.getStorageItem("ahoy_visit")
-      const exp = this.getStorageItem("ahoy_visit_expires")
-      if (token && exp) return { token, expiresAt: parseInt(exp, 10) }
-      return null
-    }
-  }
-
-  private getStoredVisitorToken(): string | null {
-    return this.config.useCookies
-      ? this.getCookie("ahoy_visitor")
-      : this.getStorageItem("ahoy_visitor")
-  }
-
-  private storeVisitorToken(token: string): void {
-    if (this.config.useCookies) {
-      this.setCookie("ahoy_visitor", token, 60 * 24 * 365 * 2)
-    } else {
-      this.setStorageItem("ahoy_visitor", token)
-    }
-  }
-
-  private storeVisit(token: string, expiresAt: number): void {
-    if (this.config.useCookies) {
-      this.setCookie("ahoy_visit", token, this.config.visitDurationMinutes)
-      // store absolute expiry (ms since epoch)
-      this.setCookie(
-        "ahoy_visit_expires",
-        String(expiresAt),
-        this.config.visitDurationMinutes
-      )
-    } else {
-      this.setStorageItem("ahoy_visit", token)
-      this.setStorageItem("ahoy_visit_expires", String(expiresAt))
-    }
-  }
-
-  private getStorageItem(key: string): string | null {
-    try {
-      const stored = localStorage.getItem(key)
-      return stored ?? this.memoryStorage.get(key) ?? null
-    } catch {
-      return this.memoryStorage.get(key) ?? null
-    }
-  }
-
-  private setStorageItem(key: string, value: string): void {
-    try {
-      localStorage.setItem(key, value)
-      this.memoryStorage.delete(key)
-    } catch {
-      this.memoryStorage.set(key, value)
-    }
-  }
-
-  // ----- Cookie helpers -----
-  private setCookie(name: string, value: string, ttlMinutes: number) {
-    const d = new Date()
-    d.setTime(d.getTime() + ttlMinutes * 60 * 1000)
-    document.cookie = `${name}=${encodeURIComponent(value)}; expires=${d.toUTCString()}; path=/; samesite=lax`
-  }
-  private getCookie(name: string): string | null {
-    const escapedName = name.replace(/[|\\{}()[\]^$+*?.]/g, "\\$&")
-    const match = document.cookie.match(
-      new RegExp(`(^|; )${escapedName}=([^;]*)`)
-    )
-    return match ? decodeURIComponent(match[2]) : null
   }
 
   // ----- Engagement (Plausible-like) -----
