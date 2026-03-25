@@ -1,0 +1,636 @@
+version: 1
+
+direct_aliases:
+  - direct
+  - directlink
+  - (direct)
+  - none
+  - (none)
+
+email_tags:
+  - email
+  - e-mail
+  - e_mail
+  - e mail
+  - newsletter
+
+labels:
+  "Direct / None":
+    kind: direct
+  Gmail:
+    kind: email
+    favicon_domain: mail.google.com
+  Outlook.com:
+    kind: email
+    favicon_domain: mail.live.com
+  "Yahoo! Mail":
+    kind: email
+    favicon_domain: mail.yahoo.com
+  "Proton Mail":
+    kind: email
+    favicon_domain: mail.proton.me
+  "iCloud Mail":
+    kind: email
+    favicon_domain: mail.icloud.com
+  Google:
+    kind: search
+    favicon_domain: google.com
+  Bing:
+    kind: search
+    favicon_domain: bing.com
+  DuckDuckGo:
+    kind: search
+    favicon_domain: duckduckgo.com
+  "Yahoo!":
+    kind: search
+    favicon_domain: yahoo.com
+  Baidu:
+    kind: search
+    favicon_domain: baidu.com
+  Yandex:
+    kind: search
+    favicon_domain: yandex.ru
+  Ecosia:
+    kind: search
+    favicon_domain: ecosia.org
+  Qwant:
+    kind: search
+    favicon_domain: qwant.com
+  Brave:
+    kind: search
+    favicon_domain: search.brave.com
+  AOL:
+    kind: search
+    favicon_domain: aol.com
+  Ask:
+    kind: search
+    favicon_domain: ask.com
+  Naver:
+    kind: search
+    favicon_domain: naver.com
+  Seznam:
+    kind: search
+    favicon_domain: seznam.cz
+  Sogou:
+    kind: search
+    favicon_domain: sogou.com
+  Startpage:
+    kind: search
+    favicon_domain: startpage.com
+  Perplexity:
+    kind: search
+    favicon_domain: perplexity.ai
+  ChatGPT:
+    kind: search
+    favicon_domain: chatgpt.com
+  Slack:
+    kind: social
+    favicon_domain: app.slack.com
+  "Product Hunt":
+    kind: social
+    favicon_domain: producthunt.com
+  "Microsoft Teams":
+    kind: social
+    favicon_domain: statics.teams.cdn.office.net
+  Wikipedia:
+    kind: referral
+    favicon_domain: en.wikipedia.org
+  Facebook:
+    kind: social
+    favicon_domain: facebook.com
+  Instagram:
+    kind: social
+    favicon_domain: instagram.com
+  Twitter:
+    kind: social
+    favicon_domain: x.com
+  LinkedIn:
+    kind: social
+    favicon_domain: linkedin.com
+  Pinterest:
+    kind: social
+    favicon_domain: pinterest.com
+  Reddit:
+    kind: social
+    favicon_domain: reddit.com
+  YouTube:
+    kind: video
+    favicon_domain: youtube.com
+  TikTok:
+    kind: social
+    favicon_domain: tiktok.com
+  WhatsApp:
+    kind: social
+    favicon_domain: web.whatsapp.com
+  Telegram:
+    kind: social
+    favicon_domain: web.telegram.org
+  Snapchat:
+    kind: social
+    favicon_domain: snapchat.com
+  Threads:
+    kind: social
+    favicon_domain: threads.net
+  Discord:
+    kind: social
+    favicon_domain: discord.com
+  Quora:
+    kind: social
+    favicon_domain: quora.com
+  VK:
+    kind: social
+    favicon_domain: vk.com
+  Weibo:
+    kind: social
+    favicon_domain: weibo.com
+  GitHub:
+    kind: developer
+    favicon_domain: github.com
+  "Stack Overflow":
+    kind: developer
+    favicon_domain: stackoverflow.com
+  "Hacker News":
+    kind: developer
+    favicon_domain: news.ycombinator.com
+  Linktree:
+    kind: social
+    favicon_domain: linktr.ee
+
+rules:
+  - id: utm-google-adwords
+    target: utm_source
+    type: exact
+    pattern: adwords
+    label: Google
+    paid: true
+  - id: utm-google-ads
+    target: utm_source
+    type: exact
+    pattern: google_ads
+    label: Google
+    paid: true
+  - id: utm-google-ads-dash
+    target: utm_source
+    type: exact
+    pattern: google-ads
+    label: Google
+    paid: true
+  - id: utm-googleads
+    target: utm_source
+    type: exact
+    pattern: googleads
+    label: Google
+    paid: true
+  - id: utm-gads
+    target: utm_source
+    type: exact
+    pattern: gads
+    label: Google
+    paid: true
+  - id: utm-google-ads-space
+    target: utm_source
+    type: exact
+    pattern: google ads
+    label: Google
+    paid: true
+  - id: utm-bing-ads
+    target: utm_source
+    type: exact
+    pattern: bing-ads
+    label: Bing
+    paid: true
+  - id: utm-msads
+    target: utm_source
+    type: exact
+    pattern: msads
+    label: Bing
+    paid: true
+  - id: utm-search-ads
+    target: utm_source
+    type: exact
+    pattern: search-ads
+    label: Google
+    paid: true
+  - id: utm-facebook-fb
+    target: utm_source
+    type: exact
+    pattern: fb
+    label: Facebook
+  - id: utm-facebook-fcb
+    target: utm_source
+    type: exact
+    pattern: fcb
+    label: Facebook
+  - id: utm-facebook-fb-ads
+    target: utm_source
+    type: exact
+    pattern: fb-ads
+    label: Facebook
+    paid: true
+  - id: utm-facebook-fbads
+    target: utm_source
+    type: exact
+    pattern: fbads
+    label: Facebook
+    paid: true
+  - id: utm-facebook-fbad
+    target: utm_source
+    type: exact
+    pattern: fbad
+    label: Facebook
+    paid: true
+  - id: utm-facebook-ads
+    target: utm_source
+    type: exact
+    pattern: facebook-ads
+    label: Facebook
+    paid: true
+  - id: utm-facebook-ads-underscore
+    target: utm_source
+    type: exact
+    pattern: facebook_ads
+    label: Facebook
+    paid: true
+  - id: utm-facebook-ad
+    target: utm_source
+    type: exact
+    pattern: facebook_ad
+    label: Facebook
+    paid: true
+  - id: utm-facebook-feed-ad
+    target: utm_source
+    type: exact
+    pattern: facebook_feed_ad
+    label: Facebook
+    paid: true
+  - id: utm-meta-ads
+    target: utm_source
+    type: exact
+    pattern: meta-ads
+    label: Facebook
+    paid: true
+  - id: utm-instagram-ig
+    target: utm_source
+    type: exact
+    pattern: ig
+    label: Instagram
+  - id: utm-instagram-ads
+    target: utm_source
+    type: exact
+    pattern: ig-ads
+    label: Instagram
+    paid: true
+  - id: utm-instagram-ad
+    target: utm_source
+    type: exact
+    pattern: instagram_ad
+    label: Instagram
+    paid: true
+  - id: utm-youtube-yt
+    target: utm_source
+    type: exact
+    pattern: yt
+    label: YouTube
+  - id: utm-youtube-ads
+    target: utm_source
+    type: exact
+    pattern: yt-ads
+    label: YouTube
+    paid: true
+  - id: utm-twitter-ads
+    target: utm_source
+    type: exact
+    pattern: twitter-ads
+    label: Twitter
+    paid: true
+  - id: utm-x
+    target: utm_source
+    type: exact
+    pattern: x
+    label: Twitter
+  - id: utm-x-ads
+    target: utm_source
+    type: exact
+    pattern: x-ads
+    label: Twitter
+    paid: true
+  - id: utm-linkedin-ads
+    target: utm_source
+    type: exact
+    pattern: linkedin-ads
+    label: LinkedIn
+    paid: true
+  - id: utm-reddit-ads
+    target: utm_source
+    type: exact
+    pattern: reddit-ads
+    label: Reddit
+    paid: true
+  - id: utm-tiktok-ads
+    target: utm_source
+    type: exact
+    pattern: tiktokads
+    label: TikTok
+    paid: true
+  - id: utm-tiktok-ads-alt
+    target: utm_source
+    type: exact
+    pattern: tiktok_ads
+    label: TikTok
+    paid: true
+  - id: utm-tt-ads
+    target: utm_source
+    type: exact
+    pattern: tt-ads
+    label: TikTok
+    paid: true
+  - id: utm-chatgpt
+    target: utm_source
+    type: exact
+    pattern: chatgpt
+    label: ChatGPT
+  - id: utm-perplexity
+    target: utm_source
+    type: exact
+    pattern: perplexity
+    label: Perplexity
+  - id: utm-brave
+    target: utm_source
+    type: exact
+    pattern: brave
+    label: Brave
+  - id: utm-slack
+    target: utm_source
+    type: exact
+    pattern: slack
+    label: Slack
+  - id: utm-producthunt
+    target: utm_source
+    type: exact
+    pattern: producthunt
+    label: Product Hunt
+  - id: utm-product-hunt
+    target: utm_source
+    type: exact
+    pattern: product-hunt
+    label: Product Hunt
+  - id: utm-teams
+    target: utm_source
+    type: exact
+    pattern: teams
+    label: Microsoft Teams
+  - id: utm-microsoft-teams
+    target: utm_source
+    type: exact
+    pattern: microsoft-teams
+    label: Microsoft Teams
+  - id: utm-microsoft-teams-underscore
+    target: utm_source
+    type: exact
+    pattern: microsoft_teams
+    label: Microsoft Teams
+  - id: utm-wikipedia
+    target: utm_source
+    type: exact
+    pattern: wikipedia
+    label: Wikipedia
+  - id: utm-linktree
+    target: utm_source
+    type: exact
+    pattern: linktree
+    label: Linktree
+  - id: domain-gmail
+    target: domain
+    type: regex
+    pattern: "(^|\\.)mail\\.google\\.com$|(^|\\.)gmail\\."
+    label: Gmail
+  - id: domain-outlook
+    target: domain
+    type: regex
+    pattern: "(^|\\.)outlook\\.|(^|\\.)live\\.|(^|\\.)office\\.com"
+    label: Outlook.com
+  - id: domain-yahoo-mail
+    target: domain
+    type: regex
+    pattern: "(^|\\.)mail\\.yahoo\\."
+    label: "Yahoo! Mail"
+  - id: domain-proton-mail
+    target: domain
+    type: regex
+    pattern: "(^|\\.)mail\\.proton\\.me$"
+    label: "Proton Mail"
+  - id: domain-icloud-mail
+    target: domain
+    type: regex
+    pattern: "(^|\\.)mail\\.icloud\\.com$"
+    label: "iCloud Mail"
+  - id: domain-google
+    target: domain
+    type: regex
+    pattern: "(^|\\.)google\\."
+    label: Google
+  - id: domain-bing
+    target: domain
+    type: regex
+    pattern: "(^|\\.)bing\\.|(^|\\.)ntp\\.msn\\.com$"
+    label: Bing
+  - id: domain-duckduckgo
+    target: domain
+    type: regex
+    pattern: "duckduckgo"
+    label: DuckDuckGo
+  - id: domain-yahoo
+    target: domain
+    type: regex
+    pattern: "(^|\\.)yahoo\\."
+    label: "Yahoo!"
+  - id: domain-baidu
+    target: domain
+    type: regex
+    pattern: "(^|\\.)baidu\\."
+    label: Baidu
+  - id: domain-yandex
+    target: domain
+    type: regex
+    pattern: "(^|\\.)yandex\\.|(^|\\.)ya\\.ru$"
+    label: Yandex
+  - id: domain-ecosia
+    target: domain
+    type: regex
+    pattern: "(^|\\.)ecosia\\."
+    label: Ecosia
+  - id: domain-qwant
+    target: domain
+    type: regex
+    pattern: "(^|\\.)qwant\\."
+    label: Qwant
+  - id: domain-brave
+    target: domain
+    type: exact
+    pattern: search.brave.com
+    label: Brave
+  - id: domain-aol
+    target: domain
+    type: regex
+    pattern: "(^|\\.)aol\\."
+    label: AOL
+  - id: domain-ask
+    target: domain
+    type: regex
+    pattern: "(^|\\.)ask\\."
+    label: Ask
+  - id: domain-naver
+    target: domain
+    type: regex
+    pattern: "(^|\\.)naver\\."
+    label: Naver
+  - id: domain-seznam
+    target: domain
+    type: regex
+    pattern: "(^|\\.)seznam\\."
+    label: Seznam
+  - id: domain-sogou
+    target: domain
+    type: regex
+    pattern: "(^|\\.)sogou\\."
+    label: Sogou
+  - id: domain-startpage
+    target: domain
+    type: regex
+    pattern: "(^|\\.)startpage\\."
+    label: Startpage
+  - id: domain-perplexity
+    target: domain
+    type: regex
+    pattern: "(^|\\.)perplexity\\."
+    label: Perplexity
+  - id: domain-chatgpt
+    target: domain
+    type: regex
+    pattern: "(^|\\.)chatgpt\\."
+    label: ChatGPT
+  - id: domain-slack
+    target: domain
+    type: regex
+    pattern: "(^|\\.)slack\\.com$"
+    label: Slack
+  - id: domain-producthunt
+    target: domain
+    type: regex
+    pattern: "(^|\\.)producthunt\\.com$"
+    label: Product Hunt
+  - id: domain-teams-static
+    target: domain
+    type: exact
+    pattern: statics.teams.cdn.office.net
+    label: Microsoft Teams
+  - id: domain-teams-web
+    target: domain
+    type: exact
+    pattern: teams.microsoft.com
+    label: Microsoft Teams
+  - id: domain-wikipedia
+    target: domain
+    type: regex
+    pattern: "(^|\\.)([a-z0-9-]+\\.)?(m\\.)?wikipedia\\.org$"
+    label: Wikipedia
+  - id: domain-facebook
+    target: domain
+    type: regex
+    pattern: "(^|\\.)facebook\\."
+    label: Facebook
+  - id: domain-instagram
+    target: domain
+    type: regex
+    pattern: "(^|\\.)instagram\\."
+    label: Instagram
+  - id: domain-twitter
+    target: domain
+    type: regex
+    pattern: "(^|\\.)twitter\\.|(^|\\.)x\\.com$"
+    label: Twitter
+  - id: domain-linkedin
+    target: domain
+    type: regex
+    pattern: "(^|\\.)linkedin\\."
+    label: LinkedIn
+  - id: domain-pinterest
+    target: domain
+    type: regex
+    pattern: "(^|\\.)pinterest\\."
+    label: Pinterest
+  - id: domain-reddit
+    target: domain
+    type: regex
+    pattern: "(^|\\.)reddit\\.|^android-app://com\\.reddit\\.frontpage$"
+    label: Reddit
+  - id: domain-youtube
+    target: domain
+    type: regex
+    pattern: "(^|\\.)youtube\\.|(^|\\.)youtu\\.be$"
+    label: YouTube
+  - id: domain-tiktok
+    target: domain
+    type: regex
+    pattern: "(^|\\.)tiktok\\."
+    label: TikTok
+  - id: domain-whatsapp
+    target: domain
+    type: regex
+    pattern: "(^|\\.)whatsapp\\."
+    label: WhatsApp
+  - id: domain-telegram
+    target: domain
+    type: regex
+    pattern: "(^|\\.)telegram\\.|(^|\\.)t\\.me$"
+    label: Telegram
+  - id: domain-snapchat
+    target: domain
+    type: regex
+    pattern: "(^|\\.)snapchat\\."
+    label: Snapchat
+  - id: domain-threads
+    target: domain
+    type: regex
+    pattern: "(^|\\.)threads\\.net$"
+    label: Threads
+  - id: domain-discord
+    target: domain
+    type: regex
+    pattern: "(^|\\.)(canary\\.|ptb\\.)?discord\\.com$|(^|\\.)discordapp\\.com$"
+    label: Discord
+  - id: domain-quora
+    target: domain
+    type: regex
+    pattern: "(^|\\.)quora\\."
+    label: Quora
+  - id: domain-vk
+    target: domain
+    type: regex
+    pattern: "(^|\\.)vk\\.com$"
+    label: VK
+  - id: domain-weibo
+    target: domain
+    type: regex
+    pattern: "(^|\\.)weibo\\."
+    label: Weibo
+  - id: domain-github
+    target: domain
+    type: regex
+    pattern: "(^|\\.)github\\."
+    label: GitHub
+  - id: domain-stack-overflow
+    target: domain
+    type: regex
+    pattern: "(^|\\.)stackoverflow\\."
+    label: Stack Overflow
+  - id: domain-hacker-news
+    target: domain
+    type: exact
+    pattern: news.ycombinator.com
+    label: Hacker News
+  - id: domain-linktree
+    target: domain
+    type: exact
+    pattern: linktr.ee
+    label: Linktree

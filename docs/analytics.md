@@ -80,11 +80,12 @@ Key-value store for runtime analytics configuration (e.g., `gsc_configured`).
 
 ### How it works
 
-1. **Server-first initial pageview**: On eligible public HTML `GET` requests, Rails creates the visit and first `pageview` before the response is sent. The layout also bootstraps `visit_token`, `visitor_token`, and the initial `pageKey` into the document.
-2. **Client follow-up tracking**: The standalone tracker reads those bootstrapped tokens, skips re-sending the initial pageview, and continues tracking SPA navigation, engagement, downloads, and outbound clicks.
-3. **Visit creation after the first load**: Subsequent client-side navigations and later sessions still use POST `/ahoy/visits` when the active visit token expires or a new visit starts.
-4. **Engagement tracking**: Tracks time-on-page and scroll depth (Plausible-style). Fires `engagement` events on visibility change / blur / navigation.
-5. **Dedup**: Uses a `pageKey` (pathname + search) to prevent double-counting when frameworks call `pushState` then `replaceState` in the same tick, and seeds that key from the server-rendered page on first load.
+1. **Server-first initial pageview**: On eligible public HTML `GET` requests, Rails creates the visit and first `pageview` before the response is sent. The layout bootstraps only the initial `pageKey` and whether the current render was already counted.
+2. **Client follow-up tracking**: The standalone tracker seeds its dedupe/engagement state from that bootstrap and continues tracking SPA navigation, engagement, downloads, and outbound clicks.
+3. **Event-only follow-up ingestion**: Subsequent tracking uses POST `/ahoy/events` only. Ahoy creates a new visit lazily on the next `pageview` when no recent visit exists.
+4. **Engagement does not open a new visit**: `engagement` events extend an active visit, but are dropped when no recent visit exists. This matches Plausible-style session handling.
+5. **Engagement tracking**: Tracks time-on-page and scroll depth (Plausible-style). Fires `engagement` events on visibility change / blur / navigation.
+6. **Dedup**: Uses a `pageKey` (pathname + search) to prevent double-counting when frameworks call `pushState` then `replaceState` in the same tick, and seeds that key from the server-rendered page on first load.
 
 ### Configuration
 
@@ -93,9 +94,9 @@ Runtime config is injected by the layout into `window.analyticsConfig`:
 ```javascript
 window.analyticsConfig = {
   useCookies: false,             // localStorage mode (cookieless)
-  visitDurationMinutes: 240,     // 4-hour session window
+  visitDurationMinutes: 30,      // 30-minute session window
   useBeaconForEvents: false,     // legacy flag; fetch keepalive is the active transport
-  trackVisits: true,             // client-side visit creation for subsequent visits
+  trackVisits: false,            // legacy flag; follow-up tracking is event-only
   initialPageviewTracked: true,  // set only when the server already counted this render
   initialPageKey: "/"            // server-seeded dedupe key for the current page
 }
@@ -107,7 +108,7 @@ The tracker skips: `/admin`, `/app`, `/login`, `/logout`, `/register`, `/passwor
 
 ### Transport
 
-Events and visit creation use `fetch` with `keepalive: true`, a JSON body, and `X-CSRF-Token` header when available. The tracker is intentionally fetch-first for more predictable Safari/WebKit behavior and simpler end-to-end testing.
+Events use `fetch` with `keepalive: true`, a JSON body, and `X-CSRF-Token` header when available. The tracker is intentionally fetch-first for more predictable Safari/WebKit behavior and simpler end-to-end testing.
 
 ## Server-Side Initial Pageviews
 
@@ -124,7 +125,7 @@ Events and visit creation use `fetch` with `keepalive: true`, a JSON body, and `
 ### Dedupe model
 
 - server tracks the first rendered pageview
-- layout emits `ahoy-visit` / `ahoy-visitor` meta tags and `initialPageviewTracked` / `initialPageKey`
+- layout emits `initialPageviewTracked` / `initialPageKey`
 - client tracker seeds its local state from those values and does not send the same first pageview again
 
 ## Server-Side: Ahoy Store

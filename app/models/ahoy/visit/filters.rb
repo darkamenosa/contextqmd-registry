@@ -14,43 +14,26 @@ module Ahoy::Visit::Filters
       value.strip.downcase.tr(" ", "-")
     end
 
+    def prop_filter_key?(key)
+      key.to_s.start_with?("prop:")
+    end
+
+    def prop_filter_name(key)
+      key.to_s.delete_prefix("prop:").presence
+    end
+
     def filtered_visits(filters, advanced_filters: [])
       scope = Ahoy::Visit.all
 
       if filters.present?
         if (source = filters["source"]).present?
-          s_down = source.to_s.downcase.strip
-          if %w[direct / none (none) direct none directlink].include?(s_down)
-            scope = scope.where(referring_domain: [ nil, "" ])
-          elsif (pattern = domain_pattern_for_source_label(source))
-            aliases = alias_sources_map.select { |_k, v| v.to_s.downcase == s_down }.keys
-            if aliases.any?
-              scope = scope.where(
-                "referring_domain ~* ? OR LOWER(utm_source) IN (?) OR LOWER(utm_source) LIKE ?",
-                pattern, aliases, "#{s_down}%"
-              )
-            else
-              scope = scope.where(
-                "referring_domain ~* ? OR LOWER(utm_source) = ? OR LOWER(utm_source) LIKE ?",
-                pattern, s_down, "#{s_down}%"
-              )
-            end
-          else
-            if source.include?(".")
-              scope = scope.where(referring_domain: source)
-            else
-              like = like_contains(source)
-              scope = scope.where("LOWER(referring_domain) LIKE ? OR LOWER(utm_source) LIKE ?", like, like)
-            end
-          end
+          scope = scope.where(Ahoy::Visit.source_label_sql_node.in(Ahoy::Visit.source_match_values(source)))
         elsif normalized_filter(filters, "source") == "direct"
-          scope = scope.where(referring_domain: [ nil, "" ])
+          scope = scope.where(Ahoy::Visit.source_label_sql_node.eq(Analytics::SourceResolver::DIRECT_LABEL))
         end
 
         if (channel = filters["channel"]).present?
-          val = Ahoy::Visit.connection.quote(channel)
-          cond = "(#{Ahoy::Visit::Sources::CHANNEL_CASE_SQL}) = #{val}"
-          scope = scope.where(Arel.sql(cond))
+          scope = scope.where(Ahoy::Visit.source_channel_sql_node.eq(channel))
         end
         scope = scope.where(referrer: filters["referrer"]) if filters["referrer"].present?
         scope = scope.where(country: filters["country"]) if filters["country"].present?
@@ -60,37 +43,55 @@ module Ahoy::Visit::Filters
         scope = scope.where(utm_medium: filters["utm_medium"]) if filters["utm_medium"].present?
         scope = scope.where(utm_campaign: filters["utm_campaign"]) if filters["utm_campaign"].present?
         scope = scope.where(browser: filters["browser"]) if filters["browser"].present?
+        scope = scope.where(browser_version: filters["browser_version"]) if filters["browser_version"].present?
         scope = scope.where(os: filters["os"]) if filters["os"].present?
+        scope = scope.where(os_version: filters["os_version"]) if filters["os_version"].present?
+
+        filters.each do |key, value|
+          next unless prop_filter_key?(key)
+          next if value.blank?
+
+          scope = apply_prop_filter(scope, key, "is", value)
+        end
       end
 
       Array(advanced_filters).each do |op, dim, value|
+        if prop_filter_key?(dim)
+          scope = apply_prop_filter(scope, dim, op, value)
+          next
+        end
+
         if dim == "channel"
           case op
           when "is_not"
-            val = Ahoy::Visit.connection.quote(value)
-            cond = "(#{Ahoy::Visit::Sources::CHANNEL_CASE_SQL}) <> #{val}"
-            scope = scope.where(Arel.sql(cond))
+            scope = scope.where(Ahoy::Visit.source_channel_sql_node.not_eq(value))
           when "contains"
-            pat = Ahoy::Visit.connection.quote(like_contains(value))
-            cond = "LOWER((#{Ahoy::Visit::Sources::CHANNEL_CASE_SQL})) LIKE #{pat}"
-            scope = scope.where(Arel.sql(cond))
+            scope = scope.where(
+              Arel::Nodes::NamedFunction.new("LOWER", [ Ahoy::Visit.source_channel_sql_node ])
+                .matches(like_contains(value), nil, true)
+            )
           end
           next
         end
         if dim == "source"
-          like = like_contains(value)
           case op
           when "contains"
-            scope = scope.where("LOWER(referring_domain) LIKE ? OR LOWER(utm_source) LIKE ?", like, like)
+            scope = scope.where(
+              Arel::Nodes::NamedFunction.new("LOWER", [ Ahoy::Visit.source_label_sql_node ])
+                .matches(like_contains(value), nil, true)
+            )
           when "is_not"
-            scope = scope.where("NOT (LOWER(referring_domain) LIKE ? OR LOWER(utm_source) LIKE ?)", like, like)
+            scope = scope.where(
+              Arel::Nodes::NamedFunction.new("LOWER", [ Ahoy::Visit.source_label_sql_node ])
+                .does_not_match(like_contains(value), nil, true)
+            )
           end
           next
         end
 
         column = case dim
         when "referrer" then "referrer"
-        when "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "country", "region", "city", "browser", "os"
+        when "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "country", "region", "city", "browser", "browser_version", "os", "os_version"
           dim
         else
           nil
@@ -105,6 +106,29 @@ module Ahoy::Visit::Filters
       end
 
       scope
+    end
+
+    def apply_prop_filter(scope, filter_key, operator, value)
+      property = prop_filter_name(filter_key)
+      return scope if property.blank? || value.to_s.strip.empty?
+
+      quoted_property = connection.quote(property)
+      value_expr = "COALESCE(NULLIF(ahoy_events.properties->>#{quoted_property}, ''), '(none)')"
+      matched_visits = Ahoy::Event
+        .where(visit_id: scope.select(:id))
+        .where(Arel.sql("ahoy_events.properties ? #{quoted_property}"))
+
+      case operator
+      when "contains"
+        matched_visits = matched_visits.where("LOWER(#{value_expr}) LIKE ?", like_contains(value))
+        scope.where(id: matched_visits.select(:visit_id).distinct)
+      when "is_not"
+        matched_visits = matched_visits.where(Arel.sql("#{value_expr} = ?"), value.to_s)
+        scope.where.not(id: matched_visits.select(:visit_id).distinct)
+      else
+        matched_visits = matched_visits.where(Arel.sql("#{value_expr} = ?"), value.to_s)
+        scope.where(id: matched_visits.select(:visit_id).distinct)
+      end
     end
 
     def scoped_visits(range, filters, advanced_filters: [])

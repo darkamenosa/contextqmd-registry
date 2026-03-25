@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import { createPortal } from "react-dom"
 import { X } from "lucide-react"
 
@@ -13,8 +20,11 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-import { fetchListPage } from "../api"
-import { useDebounce } from "../hooks/use-debounce"
+import {
+  fetchBehaviorPropertyKeys,
+  fetchBehaviorPropertyValues,
+  fetchListPage,
+} from "../api"
 import { lockBodyScroll } from "../lib/body-scroll-lock"
 import { useQueryContext } from "../query-context"
 import type { AnalyticsQuery, ListPayload } from "../types"
@@ -25,9 +35,12 @@ type DialogType =
   | "source"
   | "utm"
   | "browser"
+  | "browser_version"
   | "os"
+  | "os_version"
   | "size"
   | "goal"
+  | "property"
 type FilterDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -65,7 +78,7 @@ export default function FilterDialog({
   if (!mounted || !open) return null
   return createPortal(
     <div
-      className="fixed inset-0 z-[60] flex items-start justify-center bg-background/80 p-4 pt-10 backdrop-blur-sm sm:pt-10 md:pt-12 lg:pt-16"
+      className="fixed inset-0 z-[60] flex items-start justify-center bg-background/80 p-4 pt-10 backdrop-blur-xs md:pt-12 lg:pt-16"
       onClick={() => onOpenChange(false)}
     >
       <div
@@ -73,7 +86,7 @@ export default function FilterDialog({
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
-        className="relative mx-auto flex h-[84vh] max-h-[84vh] w-full max-w-6xl flex-col rounded-xl border border-border bg-card shadow-xl outline-none"
+        className="relative mx-auto flex h-[84vh] max-h-[84vh] w-full max-w-6xl flex-col rounded-xl border border-border bg-card shadow-xl outline-hidden"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
           if (
@@ -162,6 +175,26 @@ export default function FilterDialog({
                 }}
               />
             ) : null}
+            {type === "browser_version" ? (
+              <DeviceVersionFilterForm
+                dim="browser_version"
+                onDone={() => onOpenChange(false)}
+                onProvideControls={(apply, enabled) => {
+                  applyRef.current = apply
+                  setCanApply(enabled)
+                }}
+              />
+            ) : null}
+            {type === "os_version" ? (
+              <DeviceVersionFilterForm
+                dim="os_version"
+                onDone={() => onOpenChange(false)}
+                onProvideControls={(apply, enabled) => {
+                  applyRef.current = apply
+                  setCanApply(enabled)
+                }}
+              />
+            ) : null}
             {type === "size" ? (
               <ScreenSizeFilterForm
                 onDone={() => onOpenChange(false)}
@@ -173,6 +206,15 @@ export default function FilterDialog({
             ) : null}
             {type === "goal" ? (
               <GoalFilterForm
+                onDone={() => onOpenChange(false)}
+                onProvideControls={(apply, enabled) => {
+                  applyRef.current = apply
+                  setCanApply(enabled)
+                }}
+              />
+            ) : null}
+            {type === "property" ? (
+              <PropertyFilterForm
                 onDone={() => onOpenChange(false)}
                 onProvideControls={(apply, enabled) => {
                   applyRef.current = apply
@@ -210,6 +252,20 @@ function titleFor(type: DialogType) {
       return "Filter by Source"
     case "utm":
       return "Filter by UTM tags"
+    case "browser":
+      return "Filter by Browser"
+    case "browser_version":
+      return "Filter by Browser Version"
+    case "os":
+      return "Filter by Operating System"
+    case "os_version":
+      return "Filter by OS Version"
+    case "size":
+      return "Filter by Screen Size"
+    case "goal":
+      return "Filter by Goal"
+    case "property":
+      return "Filter by Property"
     default:
       return "Filter"
   }
@@ -711,7 +767,12 @@ function DeviceFilterForm({
 }
 
 function useDeviceFetcher(
-  mode: "browsers" | "operating-systems" | "screen-sizes"
+  mode:
+    | "browsers"
+    | "browser-versions"
+    | "operating-systems"
+    | "operating-system-versions"
+    | "screen-sizes"
 ) {
   const { query } = useQueryContext()
   return useCallback(
@@ -732,6 +793,64 @@ function useDeviceFetcher(
       }
     },
     [query, mode]
+  )
+}
+
+function DeviceVersionFilterForm({
+  dim,
+  onDone,
+  onProvideControls,
+}: {
+  dim: "browser_version" | "os_version"
+  onDone: () => void
+  onProvideControls: (apply: () => void, enabled: boolean) => void
+}) {
+  const { updateQuery } = useQueryContext()
+  const [op, setOp] = useState<Operator>("is")
+  const [val, setVal] = useState("")
+  const disabled = val.trim() === ""
+  const apply = useCallback(() => {
+    updateQuery((current) => {
+      const next: AnalyticsQuery = { ...current }
+      const eq = { ...next.filters }
+      const adv = Array.isArray(next.advancedFilters)
+        ? [...next.advancedFilters]
+        : []
+      delete eq[dim]
+      for (let i = adv.length - 1; i >= 0; i--) {
+        if (adv[i][1] === dim) adv.splice(i, 1)
+      }
+      if (op === "is") {
+        eq[dim] = val.trim()
+      } else {
+        adv.push([op, dim, val.trim()])
+      }
+      return { ...next, filters: eq, advancedFilters: adv }
+    })
+    onDone()
+  }, [updateQuery, op, val, dim, onDone])
+  useEffect(() => {
+    onProvideControls(apply, !disabled)
+  }, [apply, disabled, onProvideControls])
+  const mode =
+    dim === "browser_version" ? "browser-versions" : "operating-system-versions"
+  return (
+    <form
+      className="flex flex-col gap-4"
+      onSubmit={(e) => {
+        e.preventDefault()
+      }}
+    >
+      <FilterRow
+        label={dim === "browser_version" ? "Browser Version" : "OS Version"}
+        operator={op}
+        onOperatorChange={setOp}
+        value={val}
+        onValueChange={setVal}
+        fetcher={useDeviceFetcher(mode)}
+        placeholder={`Select a ${dim === "browser_version" ? "Browser" : "OS"} Version`}
+      />
+    </form>
   )
 }
 
@@ -843,6 +962,89 @@ function GoalFilterForm({
   )
 }
 
+function PropertyFilterForm({
+  onDone,
+  onProvideControls,
+}: {
+  onDone: () => void
+  onProvideControls: (apply: () => void, enabled: boolean) => void
+}) {
+  const { updateQuery } = useQueryContext()
+  const [op, setOp] = useState<Operator>("is")
+  const [propertyKey, setPropertyKey] = useState("")
+  const [propertyValue, setPropertyValue] = useState("")
+  const disabled = propertyKey.trim() === "" || propertyValue.trim() === ""
+  const propertyFilterKey = propertyKey.trim()
+    ? `prop:${propertyKey.trim()}`
+    : null
+
+  const apply = useCallback(() => {
+    if (!propertyFilterKey) return
+
+    updateQuery((current) => {
+      const next: AnalyticsQuery = { ...current }
+      const eq = { ...next.filters }
+      const adv = Array.isArray(next.advancedFilters)
+        ? [...next.advancedFilters]
+        : []
+
+      delete eq[propertyFilterKey]
+      for (let i = adv.length - 1; i >= 0; i--) {
+        if (adv[i][1] === propertyFilterKey) adv.splice(i, 1)
+      }
+
+      if (op === "is") {
+        eq[propertyFilterKey] = propertyValue.trim()
+      } else {
+        adv.push([op, propertyFilterKey, propertyValue.trim()])
+      }
+
+      return { ...next, filters: eq, advancedFilters: adv }
+    })
+    onDone()
+  }, [onDone, op, propertyFilterKey, propertyValue, updateQuery])
+
+  useEffect(() => {
+    onProvideControls(apply, !disabled)
+  }, [apply, disabled, onProvideControls])
+
+  const propertyKeyFetcher = useBehaviorPropertyKeyFetcher()
+  const propertyValueFetcher = useBehaviorPropertyValueFetcher(propertyKey)
+
+  return (
+    <form
+      className="flex flex-col gap-4"
+      onSubmit={(e) => {
+        e.preventDefault()
+      }}
+    >
+      <div className="grid grid-cols-1 gap-1.5 md:grid-cols-[max-content_minmax(0,1fr)] md:items-center">
+        <Label className="text-sm text-muted-foreground md:self-center">
+          Property
+        </Label>
+        <SuggestInput
+          value={propertyKey}
+          onChange={(value) => {
+            setPropertyKey(value)
+            setPropertyValue("")
+          }}
+          fetcher={propertyKeyFetcher}
+          placeholder="Select a Property"
+        />
+      </div>
+      <FilterRow
+        label="Value"
+        operator={op}
+        onOperatorChange={setOp}
+        value={propertyValue}
+        onValueChange={setPropertyValue}
+        fetcher={propertyValueFetcher}
+        placeholder="Select a Value"
+      />
+    </form>
+  )
+}
+
 function useBehaviorFetcher(mode: "conversions") {
   const { query } = useQueryContext()
   return useCallback(
@@ -863,6 +1065,45 @@ function useBehaviorFetcher(mode: "conversions") {
       }
     },
     [query, mode]
+  )
+}
+
+function useBehaviorPropertyKeyFetcher() {
+  const { query } = useQueryContext()
+  return useCallback(
+    async (input: string) => {
+      try {
+        const keys = await fetchBehaviorPropertyKeys(query as AnalyticsQuery)
+        const needle = input.trim().toLowerCase()
+        return keys
+          .filter((key) => (needle ? key.toLowerCase().includes(needle) : true))
+          .map((key) => ({ label: key, value: key }))
+      } catch {
+        return []
+      }
+    },
+    [query]
+  )
+}
+
+function useBehaviorPropertyValueFetcher(property: string) {
+  const { query } = useQueryContext()
+  return useCallback(
+    async (input: string) => {
+      const propertyName = property.trim()
+      if (!propertyName) return []
+
+      try {
+        return await fetchBehaviorPropertyValues(
+          query as AnalyticsQuery,
+          propertyName,
+          input
+        )
+      } catch {
+        return []
+      }
+    },
+    [property, query]
   )
 }
 
@@ -961,30 +1202,61 @@ function SuggestInput({
     Array<{ label: string; value: string }>
   >([])
   const [loading, setLoading] = useState(false)
-  const [query, setQuery] = useState("")
-  const debounced = useDebounce(async (q: string) => {
-    setLoading(true)
-    const res = await fetcher(q)
-    setOptions(res)
-    setLoading(false)
-  }, 250)
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const deferredValue = useDeferredValue(value)
 
   useEffect(() => {
-    if (!open) return
-    debounced(query)
-  }, [open, query, debounced])
+    if (!open || disabled) {
+      setLoading(false)
+      return
+    }
+
+    let ignore = false
+    const timeoutId = window.setTimeout(async () => {
+      setLoading(true)
+      try {
+        const res = await fetcher(deferredValue.trim())
+        if (!ignore) {
+          setOptions(res)
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false)
+        }
+      }
+    }, 250)
+
+    return () => {
+      ignore = true
+      window.clearTimeout(timeoutId)
+    }
+  }, [deferredValue, disabled, fetcher, open])
 
   return (
-    <div className="relative">
+    <div
+      ref={rootRef}
+      className="relative"
+      onBlurCapture={(event) => {
+        const nextFocused = event.relatedTarget
+        if (
+          nextFocused instanceof Node &&
+          rootRef.current?.contains(nextFocused)
+        ) {
+          return
+        }
+        setOpen(false)
+      }}
+      onFocusCapture={() => {
+        if (!disabled) {
+          setOpen(true)
+        }
+      }}
+    >
       <Input
         value={value}
         onChange={(e) => {
-          setOpen(true)
-          setQuery(e.target.value)
           onChange(e.target.value)
         }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 120)}
         placeholder={placeholder}
         disabled={disabled}
         className="h-9"
@@ -1001,8 +1273,7 @@ function SuggestInput({
                 <button
                   key={opt.value}
                   type="button"
-                  className="block w-full cursor-pointer px-3 py-2 text-left hover:bg-muted/50"
-                  onMouseDown={(e) => e.preventDefault()}
+                  className="block w-full cursor-pointer px-3 py-2 text-left hover:bg-muted/50 focus:bg-muted/50 focus:outline-hidden"
                   onClick={() => {
                     onChange(opt.value)
                     setOpen(false)

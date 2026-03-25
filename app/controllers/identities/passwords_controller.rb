@@ -33,7 +33,13 @@ module Identities
 
         if resource.active_for_authentication?
           set_flash_message!(:notice, :updated)
+          previous_identity_id = warden.user(resource_name)&.id
           sign_in(resource_name, resource)
+          AnalyticsVisitBoundary.mark_sign_in!(
+            session: session,
+            previous_identity_id: previous_identity_id,
+            next_identity_id: resource.id
+          )
           redirect_to after_authentication_path_for(resource)
         else
           redirect_to new_identity_session_path, alert: I18n.t("devise.failure.#{resource.inactive_message}")

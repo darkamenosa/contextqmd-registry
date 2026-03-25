@@ -611,12 +611,18 @@ class StandaloneAnalytics {
   // Supports '*' (single segment) and '**' (any), anchored to start and end by default
   private pathMatches(wildcardPath: string, actualPath: string): boolean {
     const wc = wildcardPath.trim()
+    const doubleWildcard = "__DOUBLE_WILDCARD__"
+    const singleWildcard = "__SINGLE_WILDCARD__"
     const pattern =
       "^" +
       wc
-        .replace(/\./g, "\\.")
-        .replace(/\*\*/g, ".*")
-        .replace(/([^\\])\*/g, "$1[^\\s/]*") +
+        .replace(/\*\*/g, doubleWildcard)
+        .replace(/\*/g, singleWildcard)
+        .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+        .split(doubleWildcard)
+        .join(".*")
+        .split(singleWildcard)
+        .join("[^/]*") +
       "\\/?$"
     try {
       return new RegExp(pattern).test(actualPath)

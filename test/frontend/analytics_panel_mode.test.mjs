@@ -79,3 +79,84 @@ test("panel mode helpers fall back to legacy mode param", async () => {
     "utm-source"
   )
 })
+
+test("channel filters do not force channels mode", async () => {
+  const panelMode = await loadPanelModeModule()
+
+  assert.equal(
+    panelMode.inferSourcesModeFromFilters({ channel: "Organic Social" }),
+    null
+  )
+  assert.equal(
+    panelMode.getSourcesModeFromSearch("", {
+      filters: { channel: "Organic Social" },
+    }),
+    null
+  )
+})
+
+test("utm filters still infer their matching source mode", async () => {
+  const panelMode = await loadPanelModeModule()
+
+  assert.equal(
+    panelMode.inferSourcesModeFromFilters({ utm_campaign: "Launch" }),
+    "utm-campaign"
+  )
+  assert.equal(
+    panelMode.getSourcesModeFromSearch("", {
+      filters: { utm_source: "newsletter" },
+    }),
+    "utm-source"
+  )
+})
+
+test("device panel infers version breakdowns from fixed browser and os filters", async () => {
+  const panelMode = await loadPanelModeModule()
+
+  assert.equal(
+    panelMode.inferDevicesModeFromFilters("browsers", { browser: "Chrome" }),
+    "browser-versions"
+  )
+  assert.equal(
+    panelMode.inferDevicesModeFromFilters("operating-systems", {
+      os: "macOS",
+    }),
+    "operating-system-versions"
+  )
+  assert.equal(
+    panelMode.inferDevicesModeFromFilters("screen-sizes", { size: "Desktop" }),
+    "screen-sizes"
+  )
+})
+
+test("locations panel falls back when parent geo filters are removed", async () => {
+  const panelMode = await loadPanelModeModule()
+
+  assert.equal(
+    panelMode.getLocationsModeAfterFilterChange(
+      "cities",
+      { country: "US", region: "California" },
+      { country: "US" },
+      "map"
+    ),
+    "regions"
+  )
+  assert.equal(
+    panelMode.getLocationsModeAfterFilterChange(
+      "regions",
+      { country: "US" },
+      {},
+      "map"
+    ),
+    "map"
+  )
+  assert.equal(
+    panelMode.getLocationsModeAfterFilterChange(
+      "countries",
+      { country: "US" },
+      {},
+      "map"
+    ),
+    null
+  )
+})

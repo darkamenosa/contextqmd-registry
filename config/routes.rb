@@ -71,6 +71,7 @@ Rails.application.routes.draw do
         resource :top_stats, only: [ :show ], controller: "top_stats"
         resource :main_graph, only: [ :show ], controller: "main_graph"
         resource :settings, only: [ :show, :update ], controller: "settings"
+        resource :source_debug, only: [ :show ], controller: "source_debug"
         resources :funnels, only: [ :create, :update, :destroy ], controller: "funnels"
         resources :sources, only: [ :index ]
         resources :search_terms, only: [ :index ]
@@ -114,6 +115,7 @@ Rails.application.routes.draw do
 
   # Public pages
   root "homepages#show"
+  get "favicon/sources/*source", to: "favicons#show"
   %w[about privacy terms contact].each do |slug|
     get slug, to: "pages#show", defaults: { id: slug }
   end

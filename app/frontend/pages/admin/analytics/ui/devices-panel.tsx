@@ -9,6 +9,11 @@ import {
 
 import { fetchDevices } from "../api"
 import {
+  categorizeScreenSize,
+  getBrowserIcon,
+  getOSIcon,
+} from "../lib/device-visuals"
+import {
   baseAnalyticsPath,
   buildDialogPath,
   devicesModeForSegment,
@@ -18,17 +23,15 @@ import {
 import {
   DEVICES_MODES,
   getDevicesModeFromSearch,
-  hasPanelModeSearchParam,
+  inferDevicesModeFromFilters,
   readStoredMode,
-  setPanelModeSearchParam,
-  syncPanelModeInUrl,
 } from "../lib/panel-mode"
 import { useScopedQuery } from "../lib/query-scope"
 import { useQueryContext } from "../query-context"
 import { useSiteContext } from "../site-context"
 import type { DevicesPayload, ListMetricKey } from "../types"
 import DetailsButton from "./details-button"
-import { MetricTable } from "./list-table"
+import { MetricTable, PanelEmptyState, PanelListSkeleton } from "./list-table"
 import { PanelTab, PanelTabs } from "./panel-tabs"
 import RemoteDetailsDialog from "./remote-details-dialog"
 
@@ -62,16 +65,18 @@ type DevicesPanelProps = {
 export default function DevicesPanel({ initialData }: DevicesPanelProps) {
   const { query, pathname, search, updateQuery } = useQueryContext()
   const site = useSiteContext()
-  const initialMode = getDevicesModeFromSearch(search, query.mode) ?? "browsers"
-
-  const [preferredMode, setPreferredMode] = useState(
-    () =>
-      readStoredMode(`${STORAGE_PREFIX}.${site.domain}`, DEVICES_MODES) ??
-      "browsers"
+  const initialBaseMode =
+    getDevicesModeFromSearch(search, query.mode) ??
+    readStoredMode(`${STORAGE_PREFIX}.${site.domain}`, DEVICES_MODES) ??
+    "browsers"
+  const initialMode = inferDevicesModeFromFilters(
+    initialBaseMode,
+    query.filters
   )
+
+  const [preferredMode, setPreferredMode] = useState(() => initialBaseMode)
   const [data, setData] = useState<DevicesPayload>(initialData)
   const [loading, setLoading] = useState(false)
-  const queryMode = getDevicesModeFromSearch(search, query.mode)
   const { value: baseQuery } = useScopedQuery(query, {
     omitMode: true,
     omitMetric: true,
@@ -82,11 +87,11 @@ export default function DevicesPanel({ initialData }: DevicesPanelProps) {
     if (parsed.type !== "segment") return null
     return devicesModeForSegment(parsed.segment)
   }, [pathname])
-  const hasExplicitModeParam = useMemo(
-    () => hasPanelModeSearchParam(search, "devices"),
-    [search]
+  const baseMode = dialogMode ?? preferredMode
+  const mode = useMemo(
+    () => inferDevicesModeFromFilters(baseMode, query.filters),
+    [baseMode, query.filters]
   )
-  const mode = dialogMode ?? queryMode ?? preferredMode
   const detailsOpen = Boolean(dialogMode)
   const initialRequestKey = useMemo(
     () => JSON.stringify([baseQuery, initialMode]),
@@ -102,12 +107,11 @@ export default function DevicesPanel({ initialData }: DevicesPanelProps) {
     try {
       const sp = new URLSearchParams(window.location.search)
       sp.delete("dialog")
-      setPanelModeSearchParam(sp, "devices", mode)
       window.history.pushState({}, "", baseAnalyticsPath(sp.toString()))
     } catch {
       // Ignore history errors; local dialog state remains authoritative.
     }
-  }, [mode])
+  }, [])
 
   useEffect(() => {
     if (requestKey === lastRequestKeyRef.current) return
@@ -124,12 +128,6 @@ export default function DevicesPanel({ initialData }: DevicesPanelProps) {
 
     return () => controller.abort()
   }, [baseQuery, mode, requestKey])
-
-  useEffect(() => {
-    if (dialogMode || hasExplicitModeParam) return
-    if (mode === "browsers") return
-    syncPanelModeInUrl("devices", mode, { history: "replace" })
-  }, [dialogMode, hasExplicitModeParam, mode])
 
   const highlightMetric = useMemo<ListMetricKey>(() => "visitors", [])
 
@@ -150,6 +148,7 @@ export default function DevicesPanel({ initialData }: DevicesPanelProps) {
   }, [mode])
 
   const activeTab = useMemo(() => MODE_TO_TAB[mode] ?? "browser", [mode])
+  const dialogBaseMode = useMemo(() => TAB_TO_MODE[activeTab], [activeTab])
 
   const firstColumnLabel = useMemo(() => {
     switch (activeTab) {
@@ -170,7 +169,6 @@ export default function DevicesPanel({ initialData }: DevicesPanelProps) {
       if (typeof window !== "undefined") {
         localStorage.setItem(`${STORAGE_PREFIX}.${site.domain}`, next)
       }
-      syncPanelModeInUrl("devices", next)
     },
     [site.domain]
   )
@@ -207,14 +205,9 @@ export default function DevicesPanel({ initialData }: DevicesPanelProps) {
       return bv - av
     })
     const sliced = sorted.slice(0, 9)
-    const cardMetrics: ListMetricKey[] = data.metrics.includes(
-      "percentage" as ListMetricKey
-    )
-      ? (["visitors", "percentage"] as ListMetricKey[])
-      : (["visitors"] as ListMetricKey[])
     return {
       ...data,
-      metrics: cardMetrics,
+      metrics: pickCardMetrics(data.metrics),
       results: sliced,
       meta: { ...data.meta, hasMore: data.results.length > 9 },
     }
@@ -241,13 +234,12 @@ export default function DevicesPanel({ initialData }: DevicesPanelProps) {
       </header>
 
       {loading ? (
-        <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
-          Loading…
-        </div>
+        <PanelListSkeleton
+          firstColumnLabel={firstColumnLabel}
+          metricLabel="%"
+        />
       ) : data.results.length === 0 ? (
-        <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
-          No data yet
-        </div>
+        <PanelEmptyState />
       ) : (
         <>
           <MetricTable
@@ -267,9 +259,11 @@ export default function DevicesPanel({ initialData }: DevicesPanelProps) {
                 try {
                   const sp = new URLSearchParams(window.location.search)
                   sp.delete("dialog")
-                  setPanelModeSearchParam(sp, "devices", mode)
                   const seg = devicesSegmentForMode(
-                    mode as "browsers" | "operating-systems" | "screen-sizes"
+                    dialogBaseMode as
+                      | "browsers"
+                      | "operating-systems"
+                      | "screen-sizes"
                   )
                   window.history.pushState(
                     {},
@@ -293,11 +287,13 @@ export default function DevicesPanel({ initialData }: DevicesPanelProps) {
           try {
             const sp = new URLSearchParams(window.location.search)
             sp.delete("dialog")
-            setPanelModeSearchParam(sp, "devices", mode)
             const qs = sp.toString()
             if (open) {
               const seg = devicesSegmentForMode(
-                mode as "browsers" | "operating-systems" | "screen-sizes"
+                dialogBaseMode as
+                  | "browsers"
+                  | "operating-systems"
+                  | "screen-sizes"
               )
               window.history.pushState({}, "", buildDialogPath(seg, qs))
             } else {
@@ -322,76 +318,12 @@ export default function DevicesPanel({ initialData }: DevicesPanelProps) {
   )
 }
 
-// Icons copied from https://github.com/alrra/browser-logos (same as Plausible)
-const BROWSER_ICONS: Record<string, string> = {
-  Chrome: "chrome.svg",
-  Safari: "safari.png",
-  Firefox: "firefox.svg",
-  "Microsoft Edge": "edge.svg",
-  Edge: "edge.svg",
-  Vivaldi: "vivaldi.svg",
-  Opera: "opera.svg",
-  "Samsung Browser": "samsung-internet.svg",
-  Chromium: "chromium.svg",
-  "UC Browser": "uc.svg",
-  "Yandex Browser": "yandex.png",
-  "DuckDuckGo Privacy Browser": "duckduckgo.svg",
-  Brave: "brave.svg",
-}
-
-function getBrowserIcon(name: string): string {
-  // Extract base browser name (e.g., "Chrome 120" -> "Chrome")
-  const baseName = name.split(/\s+\d/)[0].trim()
-
-  // Check exact match first
-  if (BROWSER_ICONS[baseName]) {
-    return BROWSER_ICONS[baseName]
-  }
-
-  // Check if name contains browser keyword
-  for (const [browserName, filename] of Object.entries(BROWSER_ICONS)) {
-    if (name.toLowerCase().includes(browserName.toLowerCase())) {
-      return filename
-    }
-  }
-
-  return "fallback.svg"
-}
-
-// Icons copied from https://github.com/ngeenx/operating-system-logos (same as Plausible)
-const OS_ICONS: Record<string, string> = {
-  iOS: "ios.png",
-  Mac: "mac.png",
-  macOS: "mac.png",
-  Windows: "windows.png",
-  "Windows Phone": "windows.png",
-  Android: "android.png",
-  "GNU/Linux": "gnu_linux.png",
-  Linux: "gnu_linux.png",
-  Ubuntu: "ubuntu.png",
-  "Chrome OS": "chrome_os.png",
-  iPadOS: "ipad_os.png",
-  Fedora: "fedora.png",
-  FreeBSD: "freebsd.png",
-}
-
-function getOSIcon(name: string): string {
-  // Extract base OS name (e.g., "macOS 15" -> "macOS")
-  const baseName = name.split(/\s+\d/)[0].trim()
-
-  // Check exact match first
-  if (OS_ICONS[baseName]) {
-    return OS_ICONS[baseName]
-  }
-
-  // Check if name contains OS keyword
-  for (const [osName, filename] of Object.entries(OS_ICONS)) {
-    if (name.toLowerCase().includes(osName.toLowerCase())) {
-      return filename
-    }
-  }
-
-  return "fallback.svg"
+function pickCardMetrics(metrics: ListMetricKey[]): ListMetricKey[] {
+  const preferred: ListMetricKey[] = []
+  if (metrics.includes("visitors")) preferred.push("visitors")
+  if (metrics.includes("percentage")) preferred.push("percentage")
+  else if (metrics.includes("conversionRate")) preferred.push("conversionRate")
+  return preferred.length > 0 ? preferred : metrics.slice(0, 2)
 }
 
 function renderDeviceLeading(mode: string, item: Record<string, unknown>) {
@@ -421,7 +353,7 @@ function BrowserIcon({ name }: { name: string }) {
     <img
       alt=""
       src={`/images/icon/browser/${filename}`}
-      className="mr-2 h-5 w-5 shrink-0 object-contain"
+      className="mr-2 size-5 shrink-0 object-contain"
     />
   )
 }
@@ -432,7 +364,7 @@ function OSIcon({ name }: { name: string }) {
     <img
       alt=""
       src={`/images/icon/os/${filename}`}
-      className="mr-2 h-5 w-5 shrink-0 object-contain"
+      className="mr-2 size-5 shrink-0 object-contain"
     />
   )
 }
@@ -540,23 +472,4 @@ function ScreenSizeIcon({ screenSize }: { screenSize: string }) {
   }
 
   return null
-}
-
-function categorizeScreenSize(screenSize: string): string {
-  // Handle already categorized sizes (from Plausible data)
-  if (["Mobile", "Tablet", "Laptop", "Desktop"].includes(screenSize)) {
-    return screenSize
-  }
-
-  // Parse dimensions (e.g., "1920x1080")
-  const match = screenSize.match(/(\d+)x(\d+)/)
-  if (!match) return "Desktop"
-
-  const width = parseInt(match[1], 10)
-
-  // Categorization based on width (following common breakpoints)
-  if (width <= 768) return "Mobile"
-  if (width <= 1024) return "Tablet"
-  if (width <= 1440) return "Laptop"
-  return "Desktop"
 }

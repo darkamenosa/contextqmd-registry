@@ -4,6 +4,7 @@ class Ahoy::Visit < AnalyticsRecord
   has_many :events, class_name: "Ahoy::Event"
   belongs_to :user, class_name: "::Identity", optional: true
   scope :with_coordinates, -> { where.not(latitude: nil, longitude: nil) }
+  before_validation :assign_source_dimensions
 
   # Analytics concerns
   include Ahoy::Visit::Constants
@@ -136,5 +137,40 @@ class Ahoy::Visit < AnalyticsRecord
 
   def self.recent_event_visit_ids_scope(window_start)
     Ahoy::Event.where("time >= ?", window_start).select(:visit_id).distinct
+  end
+
+  def assign_source_dimensions
+    resolution = Analytics::SourceResolver.resolve(
+      referrer: referrer,
+      referring_domain: referring_domain,
+      utm_source: utm_source,
+      utm_medium: utm_medium,
+      utm_campaign: utm_campaign,
+      landing_page: landing_page,
+      hostname: hostname
+    )
+
+    self.source_label = resolution.source_label
+    self.source_kind = resolution.source_kind
+    self.source_channel = resolution.source_channel
+    self.source_favicon_domain = resolution.source_favicon_domain
+    self.source_paid = resolution.source_paid
+    self.source_rule_id = resolution.source_rule_id
+    self.source_rule_version = resolution.source_rule_version
+    self.source_match_strategy = resolution.source_match_strategy
+  end
+
+  def refresh_source_dimensions!
+    assign_source_dimensions
+    update_columns(
+      source_label: source_label,
+      source_kind: source_kind,
+      source_channel: source_channel,
+      source_favicon_domain: source_favicon_domain,
+      source_paid: source_paid,
+      source_rule_id: source_rule_id,
+      source_rule_version: source_rule_version,
+      source_match_strategy: source_match_strategy
+    )
   end
 end

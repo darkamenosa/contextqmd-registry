@@ -5,37 +5,35 @@ require "test_helper"
 class DocsFetcher::WebsiteScopeTest < ActiveSupport::TestCase
   test "website runner requests website-scoped proxies" do
     fetcher = DocsFetcher::Website::RubyRunner.new
-    response = Net::HTTPOK.new("1.1", "200", "OK")
-    response.define_singleton_method(:body) { "<html><body>Hello</body></html>" }
-    response.define_singleton_method(:[]) { |key| key == "content-type" ? "text/html" : nil }
-
-    http = Class.new do
-      attr_accessor :use_ssl, :open_timeout, :read_timeout
-
-      def initialize(response)
-        @response = response
-      end
-
-      def request(_request)
-        @response
-      end
-    end.new(response)
-
     scope_seen = nil
-    original_proxy_lookup = ProxyPool.method(:next_proxy_config)
-    original_http_new = Net::HTTP.method(:new)
+    session_key_seen = nil
+    target_host_seen = nil
+    sticky_session_seen = nil
+    crawl_request = Struct.new(:url, :id, :library_id, :library, :metadata).new(
+      "https://example.com/guide",
+      123,
+      nil,
+      nil,
+      {}
+    )
 
-    ProxyPool.define_singleton_method(:next_proxy_config) do |scope: "all", target_host: nil, sticky_session: false|
+    original_checkout = ProxyPool.method(:checkout)
+
+    ProxyPool.define_singleton_method(:checkout) do |scope:, target_host:, session_key:, sticky_session:|
       scope_seen = scope
+      target_host_seen = target_host
+      session_key_seen = session_key
+      sticky_session_seen = sticky_session
       nil
     end
-    Net::HTTP.define_singleton_method(:new) { |*_args| http }
 
-    fetcher.send(:http_get_with_redirects, URI("https://example.com/guide"))
+    fetcher.send(:setup_crawl_context, crawl_request, URI("https://example.com/guide"))
 
     assert_equal "website", scope_seen
+    assert_equal "example.com", target_host_seen
+    assert_equal "website:123", session_key_seen
+    assert_equal true, sticky_session_seen
   ensure
-    ProxyPool.define_singleton_method(:next_proxy_config, original_proxy_lookup)
-    Net::HTTP.define_singleton_method(:new, original_http_new)
+    ProxyPool.define_singleton_method(:checkout, original_checkout)
   end
 end

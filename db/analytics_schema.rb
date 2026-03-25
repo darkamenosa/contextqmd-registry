@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_24_000005) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_25_000009) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -47,6 +47,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_24_000005) do
     t.string "referring_domain"
     t.string "region"
     t.string "screen_size"
+    t.string "source_channel"
+    t.string "source_favicon_domain"
+    t.string "source_kind"
+    t.string "source_label"
+    t.string "source_match_strategy"
+    t.boolean "source_paid", default: false, null: false
+    t.string "source_rule_id"
+    t.integer "source_rule_version"
     t.datetime "started_at"
     t.text "user_agent"
     t.bigint "user_id"
@@ -58,6 +66,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_24_000005) do
     t.string "visit_token"
     t.string "visitor_token"
     t.index ["latitude", "longitude"], name: "index_ahoy_visits_on_coordinates", where: "((latitude IS NOT NULL) AND (longitude IS NOT NULL))"
+    t.index ["source_channel", "started_at"], name: "index_ahoy_visits_on_source_channel_and_started_at"
+    t.index ["source_channel"], name: "index_ahoy_visits_on_source_channel"
+    t.index ["source_kind"], name: "index_ahoy_visits_on_source_kind"
+    t.index ["source_label", "started_at"], name: "index_ahoy_visits_on_source_label_and_started_at"
+    t.index ["source_label"], name: "index_ahoy_visits_on_source_label"
     t.index ["started_at"], name: "index_ahoy_visits_on_started_at"
     t.index ["user_id"], name: "index_ahoy_visits_on_user_id"
     t.index ["visit_token"], name: "index_ahoy_visits_on_visit_token", unique: true
@@ -71,6 +84,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_24_000005) do
     t.jsonb "steps", default: [], null: false
     t.datetime "updated_at", null: false
     t.index ["name"], name: "index_analytics_funnels_on_name", unique: true
+  end
+
+  create_table "analytics_goals", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "created_by_id"
+    t.jsonb "custom_props", default: {}, null: false
+    t.string "display_name", null: false
+    t.string "event_name"
+    t.string "page_path"
+    t.integer "scroll_threshold", default: -1, null: false
+    t.datetime "updated_at", null: false
+    t.index ["display_name"], name: "index_analytics_goals_on_display_name", unique: true
+    t.index ["event_name", "custom_props"], name: "index_analytics_goals_on_event_name_and_custom_props", unique: true, where: "(event_name IS NOT NULL)"
+    t.index ["page_path", "scroll_threshold"], name: "index_analytics_goals_on_page_path_and_scroll_threshold", unique: true, where: "(page_path IS NOT NULL)"
   end
 
   create_table "analytics_settings", force: :cascade do |t|

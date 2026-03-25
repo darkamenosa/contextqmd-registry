@@ -96,6 +96,43 @@ class Identities::SessionsRedirectTest < ActionDispatch::IntegrationTest
     assert_redirected_to app_path
   end
 
+  test "authenticated users cannot use login to switch identities" do
+    first_identity, = create_tenant(
+      email: "session-no-switch-a-#{SecureRandom.hex(4)}@example.com",
+      name: "Session No Switch A"
+    )
+    second_identity, = create_tenant(
+      email: "session-no-switch-b-#{SecureRandom.hex(4)}@example.com",
+      name: "Session No Switch B"
+    )
+
+    post identity_session_path, params: {
+      identity: {
+        email: first_identity.email,
+        password: "password123"
+      }
+    }
+
+    assert_redirected_to app_path
+
+    assert_no_difference -> { Ahoy::Visit.count } do
+      post identity_session_path, params: {
+        identity: {
+          email: second_identity.email,
+          password: "password123"
+        }
+      }
+    end
+
+    assert_redirected_to app_path
+
+    get app_path
+    follow_redirect!
+
+    assert_response :success
+    assert_equal first_identity.id, controller.current_identity.id
+  end
+
   test "inertia sign out from the home page redirects back to home" do
     identity, = create_tenant(
       email: "session-home-sign-out-#{SecureRandom.hex(4)}@example.com",

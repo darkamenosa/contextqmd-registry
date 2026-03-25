@@ -68,8 +68,13 @@ module DocsFetcher
       def parse_spec(raw)
         JSON.parse(raw)
       rescue JSON::ParserError
-        YAML.safe_load(raw, permitted_classes: [ Date, Time ])
-      rescue Psych::SyntaxError
+        YAML.safe_load(
+          raw,
+          permitted_classes: [ Date, Time ],
+          permitted_symbols: [],
+          aliases: false
+        )
+      rescue Psych::BadAlias, Psych::DisallowedClass, Psych::SyntaxError
         nil
       end
 

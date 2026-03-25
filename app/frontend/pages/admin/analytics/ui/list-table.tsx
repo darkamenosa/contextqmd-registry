@@ -1,17 +1,33 @@
 import type { ReactNode } from "react"
 import { ExternalLink } from "lucide-react"
 
+import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+
+import { flagFromIso2 } from "../lib/country-flag"
+import { normalizeMetricKey } from "../lib/metric-key"
 import {
   durationFormatter,
+  fractionPercentageFormatter,
   nullable,
   numberShortFormatter,
   percentageFormatter,
 } from "../lib/number-formatter"
+import {
+  formatTopStatChangeValue,
+  topStatChangeDirection,
+  topStatChangeTone,
+} from "../lib/top-stat-change"
 import type { ListItem, ListMetricKey, ListPayload } from "../types"
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const METRIC_LABELS: Record<ListMetricKey, string> = {
   visitors: "Visitors",
+  events: "Events",
   visits: "Visits",
   percentage: "%",
   uniques: "Uniques",
@@ -33,9 +49,10 @@ export const FORMATTERS: Partial<
   Record<ListMetricKey, (value: number | null | undefined) => string>
 > = {
   visitors: (value) => numberShortFormatter(value ?? 0),
+  events: (value) => numberShortFormatter(value ?? 0),
   uniques: (value) => numberShortFormatter(value ?? 0),
   total: (value) => numberShortFormatter(value ?? 0),
-  percentage: (value) => percentageFormatter(value ?? null),
+  percentage: (value) => fractionPercentageFormatter(value ?? null),
   conversionRate: (value) => percentageFormatter(value ?? null),
   exitRate: (value) => percentageFormatter(value ?? null),
   bounceRate: (value) => percentageFormatter(value ?? null),
@@ -61,6 +78,7 @@ type MetricTableProps = {
   firstColumnLabel?: string
   barColorTheme?: "indigo" | "emerald" | "amber" | "violet" | "cyan"
   metricLabels?: Partial<Record<ListMetricKey, string>>
+  revealSecondaryMetricsOnHover?: boolean
   // Optional test id root for system tests
   testId?: string
 }
@@ -74,9 +92,13 @@ export function MetricTable({
   firstColumnLabel,
   barColorTheme = "emerald",
   metricLabels,
+  revealSecondaryMetricsOnHover = true,
   testId,
 }: MetricTableProps) {
   const metrics = data.metrics
+  const primaryMetric = metrics[0]
+  const secondaryMetrics = metrics.slice(1)
+  const resolvedMetricLabels = metricLabels ?? data.meta.metricLabels
   // Base width used when labels are short
   const BASE_NUM_COL_MIN_PX = 72
 
@@ -102,11 +124,20 @@ export function MetricTable({
     cyan: ["bg-primary/6", "bg-primary/5", "bg-primary/3"],
   }
 
+  const metricWidth = (metric: string) => {
+    const title =
+      (resolvedMetricLabels && resolvedMetricLabels[metric as ListMetricKey]) ??
+      METRIC_LABELS[normalizeMetricKey(metric)] ??
+      metric
+    const len = String(title).length
+    return len >= 16 ? 144 : len >= 12 ? 120 : BASE_NUM_COL_MIN_PX
+  }
+
   // Use new DevicesPanel styling when displayBars is false
   if (!displayBars) {
     return (
       <div
-        className="overflow-hidden"
+        className={`group/report overflow-hidden ${PANEL_MIN_HEIGHT_CLASS}`}
         data-testid={testId ? `${testId}-wrap` : undefined}
       >
         <table
@@ -122,26 +153,20 @@ export function MetricTable({
                 {itemLabel}
               </th>
               <th scope="col" className="pb-2 text-right">
-                <div className="flex items-center justify-end gap-8">
-                  {metrics.map((metric) => {
-                    const title =
-                      (metricLabels && metricLabels[metric]) ??
-                      METRIC_LABELS[metric] ??
-                      metric
-                    const len = String(title).length
-                    const w =
-                      len >= 16 ? 144 : len >= 12 ? 120 : BASE_NUM_COL_MIN_PX
-                    return (
-                      <span
-                        key={metric}
-                        className="text-right text-xs font-semibold tracking-wide whitespace-nowrap text-muted-foreground uppercase"
-                        style={{ minWidth: w, width: w }}
-                      >
-                        {title}
-                      </span>
-                    )
-                  })}
-                </div>
+                {primaryMetric ? (
+                  <span
+                    className="inline-block text-right text-xs font-semibold tracking-wide whitespace-nowrap text-muted-foreground uppercase"
+                    style={{
+                      minWidth: metricWidth(primaryMetric),
+                      width: metricWidth(primaryMetric),
+                    }}
+                  >
+                    {(resolvedMetricLabels &&
+                      resolvedMetricLabels[primaryMetric]) ??
+                      METRIC_LABELS[normalizeMetricKey(primaryMetric)] ??
+                      primaryMetric}
+                  </span>
+                ) : null}
               </th>
             </tr>
           </thead>
@@ -185,7 +210,7 @@ export function MetricTable({
                         />
                         {/* Fixed icon column so bars never overlap icons (only when present) */}
                         {hasLeading ? (
-                          <span className="absolute left-1 z-10 inline-flex h-6 w-6 items-center justify-center">
+                          <span className="absolute left-1 z-10 inline-flex size-6 items-center justify-center">
                             {leadingEl}
                           </span>
                         ) : null}
@@ -202,36 +227,56 @@ export function MetricTable({
                                 aria-label="Open page in new tab"
                                 title="Open page"
                               >
-                                <ExternalLink className="h-3.5 w-3.5" />
+                                <ExternalLink className="size-3.5" />
                               </a>
                             ) : null}
                           </span>
                         </span>
                       </div>
                       {/* Right metrics untouched by the bar */}
-                      <div className="flex shrink-0 items-center gap-8">
-                        {metrics.map((metric) => {
-                          const title =
-                            (metricLabels && metricLabels[metric]) ??
-                            METRIC_LABELS[metric] ??
-                            metric
-                          const len = String(title).length
-                          const w =
-                            len >= 16
-                              ? 144
-                              : len >= 12
-                                ? 120
-                                : BASE_NUM_COL_MIN_PX
-                          return (
-                            <span
-                              key={metric}
-                              className="text-right font-semibold whitespace-nowrap text-foreground tabular-nums"
-                              style={{ minWidth: w, width: w }}
-                            >
-                              {formatMetric(metric, item[metric])}
-                            </span>
-                          )
-                        })}
+                      <div className="flex shrink-0 items-center justify-end">
+                        {primaryMetric ? (
+                          <span
+                            className="text-right font-semibold whitespace-nowrap text-foreground tabular-nums"
+                            style={{
+                              minWidth: metricWidth(primaryMetric),
+                              width: metricWidth(primaryMetric),
+                            }}
+                          >
+                            <MetricValueCell
+                              item={item}
+                              metric={primaryMetric}
+                              meta={data.meta}
+                            />
+                          </span>
+                        ) : null}
+                        {secondaryMetrics.length > 0 ? (
+                          <div
+                            className={[
+                              "ml-4 flex items-center gap-4 overflow-hidden",
+                              revealSecondaryMetricsOnHover
+                                ? "transition-all duration-150 md:ml-0 md:max-w-0 md:translate-x-3 md:opacity-0 md:group-hover/report:ml-4 md:group-hover/report:max-w-[20rem] md:group-hover/report:translate-x-0 md:group-hover/report:opacity-100"
+                                : "",
+                            ].join(" ")}
+                          >
+                            {secondaryMetrics.map((metric) => (
+                              <span
+                                key={metric}
+                                className="text-right font-semibold whitespace-nowrap text-muted-foreground tabular-nums"
+                                style={{
+                                  minWidth: metricWidth(metric),
+                                  width: metricWidth(metric),
+                                }}
+                              >
+                                <MetricValueCell
+                                  item={item}
+                                  metric={metric}
+                                  meta={data.meta}
+                                />
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   </td>
@@ -251,7 +296,9 @@ export function MetricTable({
 
   // Original table with bars for other panels
   return (
-    <div className="overflow-hidden rounded-xs border">
+    <div
+      className={`overflow-hidden rounded-xs border ${PANEL_MIN_HEIGHT_CLASS}`}
+    >
       <table
         className="min-w-full divide-y divide-border text-sm"
         data-testid={testId ? `${testId}-table` : undefined}
@@ -270,7 +317,7 @@ export function MetricTable({
                 scope="col"
                 className="px-4 py-1.5 text-right font-semibold text-muted-foreground"
               >
-                {METRIC_LABELS[metric] ?? metric}
+                {METRIC_LABELS[normalizeMetricKey(metric)] ?? metric}
               </th>
             ))}
           </tr>
@@ -310,7 +357,7 @@ export function MetricTable({
                             aria-label="Open page in new tab"
                             title="Open page"
                           >
-                            <ExternalLink className="h-3.5 w-3.5" />
+                            <ExternalLink className="size-3.5" />
                           </a>
                         ) : null}
                       </span>
@@ -340,7 +387,11 @@ export function MetricTable({
                       </span>
                     ) : null}
                     <span className="text-foreground tabular-nums">
-                      {formatMetric(metric, item[metric])}
+                      <MetricValueCell
+                        item={item}
+                        metric={metric}
+                        meta={data.meta}
+                      />
                     </span>
                   </div>
                 </td>
@@ -354,6 +405,61 @@ export function MetricTable({
           * Imported data omitted: {data.meta.skipImportedReason}
         </p>
       )}
+    </div>
+  )
+}
+
+/** Height of one table row (h-9 = 2.25rem) × 9 rows + header ≈ 22.5rem */
+const PANEL_ROWS = 9
+const PANEL_MIN_HEIGHT_CLASS = "min-h-[22.5rem]"
+const SKELETON_BAR_WIDTHS = [82, 58, 50, 42, 68, 36, 62, 46, 32]
+
+export function PanelListSkeleton({
+  rows = PANEL_ROWS,
+  firstColumnLabel = "Item",
+  metricLabel = "Visitors",
+}: {
+  rows?: number
+  firstColumnLabel?: string
+  metricLabel?: string
+}) {
+  return (
+    <div className="animate-pulse">
+      <div className="flex items-center justify-between border-b border-border pb-2">
+        <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+          {firstColumnLabel}
+        </span>
+        <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+          {metricLabel}
+        </span>
+      </div>
+      <div className="divide-y divide-border/50">
+        {Array.from({ length: rows }).map((_, i) => (
+          <div key={i} className="flex h-9 items-center justify-between gap-4">
+            <Skeleton
+              className="h-5 rounded-sm"
+              style={{
+                width: `${SKELETON_BAR_WIDTHS[i % SKELETON_BAR_WIDTHS.length]}%`,
+              }}
+            />
+            <Skeleton className="h-4 w-8 shrink-0 rounded-sm" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export function PanelEmptyState({
+  children = "No data yet",
+}: {
+  children?: ReactNode
+}) {
+  return (
+    <div
+      className={`flex items-center justify-center text-sm text-muted-foreground ${PANEL_MIN_HEIGHT_CLASS}`}
+    >
+      {children}
     </div>
   )
 }
@@ -378,24 +484,9 @@ export function renderFlag(item: ListItem) {
   return flag ? <span aria-hidden>{flag}</span> : null
 }
 
-function flagFromIso2(code?: string) {
-  if (!code) return ""
-  const m = String(code)
-    .toUpperCase()
-    .match(/^[A-Z]{2}$/)
-  if (!m) return ""
-  const A = 0x1f1e6
-  return Array.from(m[0])
-    .map((c) => String.fromCodePoint(A + (c.charCodeAt(0) - 65)))
-    .join("")
-}
-
 // eslint-disable-next-line react-refresh/only-export-components
-export function formatMetric(
-  metric: ListMetricKey,
-  value: ListItem[keyof ListItem]
-) {
-  const formatter = FORMATTERS[metric]
+export function formatMetric(metric: string, value: ListItem[keyof ListItem]) {
+  const formatter = FORMATTERS[normalizeMetricKey(metric)]
   if (formatter) {
     return formatter(typeof value === "number" ? value : Number(value))
   }
@@ -405,4 +496,147 @@ export function formatMetric(
 function isPathLike(name: unknown): boolean {
   const s = String(name || "")
   return s.startsWith("/") && !s.startsWith("//")
+}
+
+function MetricValueCell({
+  item,
+  metric,
+  meta,
+}: {
+  item: ListItem
+  metric: string
+  meta: ListPayload["meta"]
+}) {
+  const value = readItemMetric(item, metric)
+  const comparison = readComparisonMetric(item, metric)
+  const change = readComparisonChange(item, metric)
+  const direction =
+    typeof change === "number" ? topStatChangeDirection(change) : null
+  const tone =
+    typeof change === "number" ? topStatChangeTone(metric, change) : null
+
+  const arrow =
+    typeof change === "number" && direction !== "flat" ? (
+      <span
+        className={`inline-flex items-center ${
+          tone === "good"
+            ? "text-emerald-600 dark:text-emerald-400"
+            : "text-rose-600 dark:text-rose-400"
+        }`}
+        aria-hidden="true"
+      >
+        {direction === "up" ? "↗" : "↘"}
+      </span>
+    ) : null
+
+  const valueContent = (
+    <span className="inline-flex items-center justify-end gap-1.5">
+      <span>{formatMetric(metric, value)}</span>
+      {arrow}
+    </span>
+  )
+
+  if (typeof change !== "number" || comparison == null || !meta) {
+    return valueContent
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger render={valueContent} />
+      <TooltipContent className="max-w-none min-w-44 px-3 py-2">
+        <div className="space-y-2 text-left">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="font-medium">
+                {formatMetric(metric, value)}
+                {metricLabelSuffix(metric)}
+              </div>
+              {meta.dateRangeLabel ? (
+                <div className="text-[11px] text-background/70">
+                  {meta.dateRangeLabel}
+                </div>
+              ) : null}
+            </div>
+            <span
+              className={`inline-flex items-center gap-1 text-[11px] font-medium ${
+                tone === "good" ? "text-emerald-300" : "text-rose-300"
+              }`}
+            >
+              {direction === "up" ? "▲" : direction === "down" ? "▼" : ""}
+              {formatTopStatChangeValue(change)}
+            </span>
+          </div>
+          <div className="border-t border-background/15" />
+          <div>
+            <div className="font-medium text-background/80">
+              {formatMetric(metric, comparison as ListItem[keyof ListItem])}
+              {metricLabelSuffix(metric)}
+            </div>
+            {meta.comparisonDateRangeLabel ? (
+              <div className="text-[11px] text-background/70">
+                {meta.comparisonDateRangeLabel}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
+function metricLabelSuffix(metric: string) {
+  const title = METRIC_LABELS[normalizeMetricKey(metric)] ?? metric
+  return title.length < 3 ? "" : ` ${title.toLowerCase()}`
+}
+
+function readItemMetric(item: ListItem, metric: string) {
+  const camelMetric = metric.replace(/_([a-z])/g, (_, c: string) =>
+    c.toUpperCase()
+  )
+  return (
+    item[metric] ??
+    item[metric as keyof ListItem] ??
+    item[camelMetric] ??
+    item[camelMetric as keyof ListItem]
+  )
+}
+
+function readComparisonMetric(item: ListItem, metric: string) {
+  const comparison =
+    item.comparison && typeof item.comparison === "object"
+      ? item.comparison
+      : null
+  if (!comparison) return undefined
+
+  const camelMetric = metric.replace(/_([a-z])/g, (_, c: string) =>
+    c.toUpperCase()
+  )
+  return (
+    (comparison as Record<string, unknown>)[metric] ??
+    (comparison as Record<string, unknown>)[camelMetric]
+  )
+}
+
+function readComparisonChange(item: ListItem, metric: string) {
+  const comparison =
+    item.comparison && typeof item.comparison === "object"
+      ? item.comparison
+      : null
+  if (!comparison) return undefined
+
+  const change =
+    (comparison as Record<string, unknown>).change &&
+    typeof (comparison as Record<string, unknown>).change === "object"
+      ? ((comparison as Record<string, unknown>).change as Record<
+          string,
+          unknown
+        >)
+      : null
+  if (!change) return undefined
+
+  const camelMetric = metric.replace(/_([a-z])/g, (_, c: string) =>
+    c.toUpperCase()
+  )
+  const value = change[metric] ?? change[camelMetric]
+  return typeof value === "number" && !Number.isNaN(value) ? value : undefined
 }

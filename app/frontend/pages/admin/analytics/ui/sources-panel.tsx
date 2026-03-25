@@ -7,7 +7,9 @@ import {
   useState,
   type ReactNode,
 } from "react"
-import { Mail } from "lucide-react"
+import { Bug, Mail } from "lucide-react"
+
+import { Button } from "@/components/ui/button"
 
 import {
   analyticsApiErrorCode,
@@ -26,23 +28,26 @@ import {
   type SourcesMode,
 } from "../lib/dialog-path"
 import {
-  getSourcesModeFromQuery,
   getSourcesModeFromSearch,
   hasPanelModeSearchParam,
   inferSourcesModeFromFilters,
   readStoredMode,
-  setPanelModeSearchParam,
   SOURCES_MODES,
-  syncPanelModeInUrl,
 } from "../lib/panel-mode"
 import { useScopedQuery } from "../lib/query-scope"
+import {
+  getSourceFaviconDomain,
+  normalizeSourceKey,
+  sourceNeedsLightBackground,
+} from "../lib/source-visuals"
 import { useQueryContext } from "../query-context"
 import { useSiteContext } from "../site-context"
 import type { ListItem, ListMetricKey, ListPayload } from "../types"
 import DetailsButton from "./details-button"
-import { MetricTable } from "./list-table"
+import { MetricTable, PanelEmptyState, PanelListSkeleton } from "./list-table"
 import { PanelTab, PanelTabDropdown, PanelTabs } from "./panel-tabs"
 import RemoteDetailsDialog from "./remote-details-dialog"
+import SourceDebugDialog from "./source-debug-dialog"
 
 const CAMPAIGN_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "utm-medium", label: "UTM Mediums" },
@@ -64,72 +69,6 @@ const TITLE_FOR_MODE: Record<string, string> = {
 
 const STORAGE_PREFIX = "admin.analytics.sources"
 
-// Favicon domain mapping - matches Plausible's referer_favicon_domains.json
-// Maps categorized source names to their primary domains for favicon fetching
-const FAVICON_DOMAIN_MAP: Record<string, string> = {
-  Google: "google.com",
-  Bing: "bing.com",
-  DuckDuckGo: "duckduckgo.com",
-  "Yahoo!": "yahoo.com",
-  "Yahoo! Mail": "mail.yahoo.com",
-  Baidu: "baidu.com",
-  Yandex: "yandex.ru",
-  AOL: "aol.com",
-  Ask: "ask.com",
-  Ecosia: "ecosia.org",
-  Qwant: "qwant.com",
-  Naver: "naver.com",
-  Seznam: "seznam.cz",
-  Sogou: "sogou.com",
-  Startpage: "startpage.com",
-  Perplexity: "perplexity.ai",
-  ChatGPT: "chatgpt.com",
-  Facebook: "facebook.com",
-  Instagram: "instagram.com",
-  Twitter: "twitter.com",
-  LinkedIn: "linkedin.com",
-  Pinterest: "pinterest.com",
-  Reddit: "reddit.com",
-  YouTube: "youtube.com",
-  TikTok: "tiktok.com",
-  WhatsApp: "web.whatsapp.com",
-  Telegram: "web.telegram.org",
-  Snapchat: "snapchat.com",
-  Threads: "threads.net",
-  Discord: "discord.com",
-  Quora: "quora.com",
-  VK: "vk.com",
-  Weibo: "weibo.com",
-  GitHub: "github.com",
-  StackOverflow: "stackoverflow.com",
-  "Hacker News": "news.ycombinator.com",
-  Gmail: "mail.google.com",
-  "Outlook.com": "mail.live.com",
-}
-
-const SOURCE_DOMAIN_ALIASES: Record<string, string> = {
-  google: "google.com",
-  facebook: "facebook.com",
-  github: "github.com",
-  hackernews: "news.ycombinator.com",
-  hn: "news.ycombinator.com",
-  linkedin: "linkedin.com",
-  reddit: "reddit.com",
-  twitter: "x.com",
-  x: "x.com",
-  youtube: "youtube.com",
-}
-
-const NORMALIZED_FAVICON_DOMAIN_MAP: Record<string, string> = Object.entries(
-  FAVICON_DOMAIN_MAP
-).reduce(
-  (acc, [label, domain]) => {
-    acc[normalizeSourceKey(label)] = domain
-    return acc
-  },
-  { ...SOURCE_DOMAIN_ALIASES }
-)
-
 type SourcesPanelProps = {
   initialData: ListPayload
 }
@@ -137,16 +76,23 @@ type SourcesPanelProps = {
 export default function SourcesPanel({ initialData }: SourcesPanelProps) {
   const { query, pathname, search, updateQuery } = useQueryContext()
   const site = useSiteContext()
-  const initialMode = getSourcesModeFromSearch(search, query) ?? "all"
+  const storedMode =
+    readStoredMode(`${STORAGE_PREFIX}.${site.domain}`, SOURCES_MODES) ?? "all"
+  const explicitSearchMode = hasPanelModeSearchParam(search, "sources")
+    ? getSourcesModeFromSearch(search, query)
+    : null
+  const initialMode =
+    explicitSearchMode ??
+    inferSourcesModeFromFilters(query.filters) ??
+    storedMode ??
+    "all"
 
   const [data, setData] = useState<ListPayload>(initialData)
   const [loading, setLoading] = useState(false)
+  const [debugOpen, setDebugOpen] = useState(false)
   const [preferredMode, setPreferredMode] = useState(
-    () =>
-      readStoredMode(`${STORAGE_PREFIX}.${site.domain}`, SOURCES_MODES) ?? "all"
+    () => explicitSearchMode ?? storedMode
   )
-  const queryMode =
-    getSourcesModeFromSearch(search, query) ?? getSourcesModeFromQuery(query)
   const { value: baseQuery } = useScopedQuery(query, {
     omitMode: true,
     omitMetric: true,
@@ -159,15 +105,11 @@ export default function SourcesPanel({ initialData }: SourcesPanelProps) {
       return modeForSegment(parsedDialog.segment)
     return null
   }, [parsedDialog])
-  const hasExplicitModeParam = useMemo(
-    () => hasPanelModeSearchParam(search, "sources"),
-    [search]
-  )
   const derivedModeFromFilters = useMemo(
     () => inferSourcesModeFromFilters(query.filters),
     [query.filters]
   )
-  const mode = dialogMode ?? queryMode ?? preferredMode
+  const mode = dialogMode ?? derivedModeFromFilters ?? preferredMode
   const detailsOpen =
     parsedDialog.type === "segment" ||
     (parsedDialog.type === "referrers" && /^google$/i.test(parsedDialog.source))
@@ -187,12 +129,11 @@ export default function SourcesPanel({ initialData }: SourcesPanelProps) {
     try {
       const sp = new URLSearchParams(window.location.search)
       sp.delete("dialog")
-      setPanelModeSearchParam(sp, "sources", mode)
       window.history.pushState({}, "", baseAnalyticsPath(sp.toString()))
     } catch {
       // Ignore history errors; local dialog state remains usable.
     }
-  }, [mode])
+  }, [])
 
   const setAndStoreMode = useCallback(
     (value: string) => {
@@ -200,10 +141,8 @@ export default function SourcesPanel({ initialData }: SourcesPanelProps) {
       if (typeof window !== "undefined") {
         localStorage.setItem(`${STORAGE_PREFIX}.${site.domain}`, value)
       }
-      syncPanelModeInUrl("sources", value)
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [site.domain, updateQuery]
+    [site.domain]
   )
 
   const applyFilter = useCallback(
@@ -231,13 +170,6 @@ export default function SourcesPanel({ initialData }: SourcesPanelProps) {
 
     return () => controller.abort()
   }, [baseQuery, mode, requestKey])
-
-  useEffect(() => {
-    if (dialogMode || hasExplicitModeParam) return
-    if (derivedModeFromFilters) return
-    if (mode === "all") return
-    syncPanelModeInUrl("sources", mode, { history: "replace" })
-  }, [derivedModeFromFilters, dialogMode, hasExplicitModeParam, mode])
 
   // Drilldown for a selected source (when mode === 'all')
   const activeSource =
@@ -353,7 +285,7 @@ export default function SourcesPanel({ initialData }: SourcesPanelProps) {
     const sliced = sorted.slice(0, 9)
     return {
       ...data,
-      metrics: ["visitors"] as ListMetricKey[],
+      metrics: pickCardMetrics(data.metrics),
       results: sliced,
       meta: { ...data.meta, hasMore: data.results.length > 9 },
     }
@@ -414,18 +346,12 @@ export default function SourcesPanel({ initialData }: SourcesPanelProps) {
       </header>
 
       {loading ? (
-        <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
-          Loading…
-        </div>
+        <PanelListSkeleton firstColumnLabel={firstColumnLabel} />
       ) : takeOverWithReferrers ? (
         refLoading ? (
-          <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
-            Loading…
-          </div>
+          <PanelListSkeleton firstColumnLabel="Referrer" />
         ) : !refData || refData.results.length === 0 ? (
-          <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
-            No data yet
-          </div>
+          <PanelEmptyState />
         ) : (
           <>
             <MetricTable
@@ -447,7 +373,6 @@ export default function SourcesPanel({ initialData }: SourcesPanelProps) {
                   try {
                     const sp = new URLSearchParams(window.location.search)
                     sp.delete("dialog")
-                    setPanelModeSearchParam(sp, "sources", mode)
                     const qs = sp.toString()
                     if (activeSource) {
                       window.history.pushState(
@@ -468,9 +393,7 @@ export default function SourcesPanel({ initialData }: SourcesPanelProps) {
         )
       ) : mode === "all" && isGoogleActive ? (
         termsLoading ? (
-          <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
-            Loading…
-          </div>
+          <PanelListSkeleton firstColumnLabel="Search term" />
         ) : termsData && termsData.results.length > 0 ? (
           <>
             <MetricTable
@@ -486,7 +409,6 @@ export default function SourcesPanel({ initialData }: SourcesPanelProps) {
                   try {
                     const sp = new URLSearchParams(window.location.search)
                     sp.delete("dialog")
-                    setPanelModeSearchParam(sp, "sources", mode)
                     const qs = sp.toString()
                     // For Google Search Terms, mirror Plausible route
                     window.history.pushState(
@@ -504,29 +426,31 @@ export default function SourcesPanel({ initialData }: SourcesPanelProps) {
             </div>
           </>
         ) : termsError ? (
-          <div className="flex min-h-40 flex-col items-center justify-center gap-4 rounded-lg border border-border bg-card p-8 text-center">
-            <div className="text-lg font-semibold text-foreground">
-              Search Terms
+          <PanelEmptyState>
+            <div className="flex flex-col items-center gap-4 text-center">
+              <div className="text-lg font-semibold text-foreground">
+                Search Terms
+              </div>
+              <div className="max-w-prose text-sm text-muted-foreground">
+                {termsError}
+              </div>
             </div>
-            <div className="max-w-prose text-sm text-muted-foreground">
-              {termsError}
-            </div>
-          </div>
+          </PanelEmptyState>
         ) : (
-          <div className="flex min-h-40 flex-col items-center justify-center gap-4 rounded-lg border border-border bg-card p-8 text-center">
-            <div className="text-lg font-semibold text-foreground">
-              Search Terms
+          <PanelEmptyState>
+            <div className="flex flex-col items-center gap-4 text-center">
+              <div className="text-lg font-semibold text-foreground">
+                Search Terms
+              </div>
+              <div className="max-w-prose text-sm text-muted-foreground">
+                No search terms found for this period. This feature is in
+                development.
+              </div>
             </div>
-            <div className="max-w-prose text-sm text-muted-foreground">
-              No search terms found for this period. This feature is in
-              development.
-            </div>
-          </div>
+          </PanelEmptyState>
         )
       ) : data.results.length === 0 || (isUtmMode && !utmHasUsableData) ? (
-        <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
-          No data yet
-        </div>
+        <PanelEmptyState />
       ) : (
         <>
           <MetricTable
@@ -554,42 +478,57 @@ export default function SourcesPanel({ initialData }: SourcesPanelProps) {
           />
           {!isUtmMode || utmHasUsableData ? (
             <div className="mt-auto flex justify-center pt-3">
-              <DetailsButton
-                data-testid="sources-details-btn"
-                onClick={() => {
-                  // If a specific source is active, open Referrer Details instead of Sources
-                  if (mode === "all" && activeSource && !isGoogleActive) {
-                    try {
-                      const sp = new URLSearchParams(window.location.search)
-                      sp.delete("dialog")
-                      setPanelModeSearchParam(sp, "sources", mode)
-                      const qs = sp.toString()
-                      if (activeSource) {
+              <div className="flex items-center gap-2">
+                {mode === "all" && activeSource ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => setDebugOpen(true)}
+                  >
+                    <Bug className="size-3.5" />
+                    Inspect
+                  </Button>
+                ) : null}
+                <DetailsButton
+                  data-testid="sources-details-btn"
+                  onClick={() => {
+                    // If a specific source is active, open Referrer Details instead of Sources
+                    if (mode === "all" && activeSource && !isGoogleActive) {
+                      try {
+                        const sp = new URLSearchParams(window.location.search)
+                        sp.delete("dialog")
+                        const qs = sp.toString()
+                        if (activeSource) {
+                          window.history.pushState(
+                            {},
+                            "",
+                            buildReferrersPath(String(activeSource), qs)
+                          )
+                        }
+                      } catch {
+                        // Ignore history errors when opening referrer details.
+                      }
+                    } else {
+                      try {
+                        const sp = new URLSearchParams(window.location.search)
+                        sp.delete("dialog")
+                        const qs = sp.toString()
+                        const seg = dialogSegmentForMode(mode as SourcesMode)
                         window.history.pushState(
                           {},
                           "",
-                          buildReferrersPath(String(activeSource), qs)
+                          buildDialogPath(seg, qs)
                         )
+                      } catch {
+                        // Ignore history errors when opening source details.
                       }
-                    } catch {
-                      // Ignore history errors when opening referrer details.
                     }
-                  } else {
-                    try {
-                      const sp = new URLSearchParams(window.location.search)
-                      sp.delete("dialog")
-                      setPanelModeSearchParam(sp, "sources", mode)
-                      const qs = sp.toString()
-                      const seg = dialogSegmentForMode(mode as SourcesMode)
-                      window.history.pushState({}, "", buildDialogPath(seg, qs))
-                    } catch {
-                      // Ignore history errors when opening source details.
-                    }
-                  }
-                }}
-              >
-                Details
-              </DetailsButton>
+                  }}
+                >
+                  Details
+                </DetailsButton>
+              </div>
             </div>
           ) : null}
         </>
@@ -604,7 +543,6 @@ export default function SourcesPanel({ initialData }: SourcesPanelProps) {
           try {
             const sp = new URLSearchParams(window.location.search)
             sp.delete("dialog")
-            setPanelModeSearchParam(sp, "sources", mode)
             const qs = sp.toString()
             if (open) {
               if (isGoogleActive) {
@@ -657,7 +595,6 @@ export default function SourcesPanel({ initialData }: SourcesPanelProps) {
             try {
               const sp = new URLSearchParams(window.location.search)
               sp.delete("dialog")
-              setPanelModeSearchParam(sp, "sources", mode)
               const qs = sp.toString()
               if (open && activeSource) {
                 window.history.pushState(
@@ -696,8 +633,22 @@ export default function SourcesPanel({ initialData }: SourcesPanelProps) {
           }}
         />
       ) : null}
+
+      <SourceDebugDialog
+        open={debugOpen}
+        onOpenChange={setDebugOpen}
+        source={mode === "all" ? activeSource || null : null}
+      />
     </section>
   )
+}
+
+function pickCardMetrics(metrics: ListMetricKey[]): ListMetricKey[] {
+  const preferred: ListMetricKey[] = []
+  if (metrics.includes("visitors")) preferred.push("visitors")
+  if (metrics.includes("percentage")) preferred.push("percentage")
+  else if (metrics.includes("conversionRate")) preferred.push("conversionRate")
+  return preferred.length > 0 ? preferred : metrics.slice(0, 2)
 }
 
 function searchTermsErrorMessage(error: unknown) {
@@ -742,10 +693,6 @@ function renderSourceIcon(item: ListItem) {
   return <SourceIcon name={name} />
 }
 
-function normalizeSourceKey(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "")
-}
-
 function SourceIcon({ name }: { name: string }) {
   const [error, setError] = useState(false)
   const slug = name.toLowerCase()
@@ -786,12 +733,18 @@ function SourceIcon({ name }: { name: string }) {
 
   const fallbackEmoji = (): string | null => {
     if (slug.includes("google")) return "🔍"
+    if (slug.includes("perplexity") || slug.includes("chatgpt")) return "🤖"
     if (slug.includes("facebook")) return "📘"
     if (slug.includes("twitter") || slug.includes("x.com")) return "🐦"
     if (slug.includes("github")) return "🐙"
     if (slug.includes("bing")) return "🅱️"
     if (slug.includes("brave")) return "🦁"
     if (slug.includes("duck")) return "🦆"
+    if (slug.includes("slack")) return "💬"
+    if (slug.includes("product hunt") || slug.includes("producthunt"))
+      return "🚀"
+    if (slug.includes("teams")) return "👥"
+    if (slug.includes("wikipedia")) return "📚"
     if (slug.includes("email")) return "✉️"
     if (slug.includes("direct") || slug.includes("none")) return "↩️"
     if (slug.includes("linkedin")) return "💼"
@@ -840,72 +793,36 @@ function SourceIcon({ name }: { name: string }) {
     return fallbackBadge(name)
   }
 
-  // Plausible proxies favicons through their server for privacy.
-  // We use DuckDuckGo directly (same service Plausible uses internally).
-  // Derive a safe domain:
-  // - Known mappings for categorized sources (e.g. "Google" -> google.com)
-  // - If it's a URL, parse and use hostname
-  // - If it's a bare domain with a slash, take the hostname part
-  // - Otherwise, fall back to emoji/badge for non-domains like "(none)" or "Direct / None"
-  let domain: string
-
-  if (FAVICON_DOMAIN_MAP[name]) {
-    // Use mapped domain for categorized sources
-    domain = FAVICON_DOMAIN_MAP[name]
-  } else if (NORMALIZED_FAVICON_DOMAIN_MAP[normalizedName]) {
-    domain = NORMALIZED_FAVICON_DOMAIN_MAP[normalizedName]
-  } else {
-    // Names that should not attempt favicon fetch
-    if (/^\(none\)$/i.test(name) || /direct/.test(slug)) {
-      const emoji = fallbackEmoji()
-      return (
-        <span
-          className="flex size-6 items-center justify-center text-lg"
-          aria-hidden
-        >
-          {emoji ?? "↩️"}
-        </span>
-      )
-    }
-
-    // Try to parse a full URL
-    try {
-      let urlStr = name
-      if (/^\/\//.test(urlStr)) urlStr = `https:${urlStr}`
-      if (!/^https?:/i.test(urlStr) && /\./.test(urlStr)) {
-        urlStr = `https://${urlStr}`
-      }
-      const u = new URL(urlStr)
-      domain = u.hostname
-    } catch {
-      // Fallback: take token before first slash when it looks domain-like
-      if (/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(name)) {
-        domain = name.split("/")[0]
-      } else {
-        // Give up on favicon; show emoji/badge instead
-        const emoji = fallbackEmoji()
-        return emoji ? (
-          <span
-            className="flex size-6 items-center justify-center text-lg"
-            aria-hidden
-          >
-            {emoji}
-          </span>
-        ) : (
-          fallbackBadge(name)
-        )
-      }
-    }
+  const domain = getSourceFaviconDomain(name)
+  if (!domain) {
+    const emoji = fallbackEmoji()
+    return emoji ? (
+      <span
+        className="flex size-6 items-center justify-center text-lg"
+        aria-hidden
+      >
+        {emoji}
+      </span>
+    ) : (
+      fallbackBadge(name)
+    )
   }
 
-  const faviconUrl = `https://icons.duckduckgo.com/ip3/${encodeURIComponent(domain)}.ico`
+  const faviconUrl = `/favicon/sources/${encodeURIComponent(name)}`
 
   return (
     <span className="flex size-6 items-center justify-center" aria-hidden>
       <img
         src={faviconUrl}
         alt=""
-        className="h-5 w-5 shrink-0 object-contain"
+        className={[
+          "size-5 shrink-0 object-contain",
+          sourceNeedsLightBackground(domain)
+            ? "rounded-full border border-white/90 bg-white p-0.5"
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
         onError={() => setError(true)}
         referrerPolicy="no-referrer"
       />

@@ -17,18 +17,15 @@ import {
 } from "../lib/dialog-path"
 import {
   getPagesModeFromSearch,
-  hasPanelModeSearchParam,
   PAGES_MODES,
   readStoredMode,
-  setPanelModeSearchParam,
-  syncPanelModeInUrl,
 } from "../lib/panel-mode"
 import { useScopedQuery } from "../lib/query-scope"
 import { useQueryContext } from "../query-context"
 import { useSiteContext } from "../site-context"
 import type { ListMetricKey, ListPayload } from "../types"
 import DetailsButton from "./details-button"
-import { MetricTable } from "./list-table"
+import { MetricTable, PanelEmptyState, PanelListSkeleton } from "./list-table"
 import { PanelTab, PanelTabs } from "./panel-tabs"
 import RemoteDetailsDialog from "./remote-details-dialog"
 
@@ -53,15 +50,14 @@ type PagesPanelProps = {
 export default function PagesPanel({ initialData }: PagesPanelProps) {
   const { query, pathname, search, updateQuery } = useQueryContext()
   const site = useSiteContext()
-  const initialMode = getPagesModeFromSearch(search, query.mode) ?? "pages"
+  const initialMode =
+    getPagesModeFromSearch(search, query.mode) ??
+    readStoredMode(`${STORAGE_PREFIX}.${site.domain}`, PAGES_MODES) ??
+    "pages"
 
   const [data, setData] = useState<ListPayload>(initialData)
-  const [preferredMode, setPreferredMode] = useState(
-    () =>
-      readStoredMode(`${STORAGE_PREFIX}.${site.domain}`, PAGES_MODES) ?? "pages"
-  )
+  const [preferredMode, setPreferredMode] = useState(() => initialMode)
   const [loading, setLoading] = useState(false)
-  const queryMode = getPagesModeFromSearch(search, query.mode)
   const { value: baseQuery } = useScopedQuery(query, {
     omitMode: true,
     omitMetric: true,
@@ -72,11 +68,7 @@ export default function PagesPanel({ initialData }: PagesPanelProps) {
     if (parsed.type !== "segment") return null
     return pagesModeForSegment(parsed.segment)
   }, [pathname])
-  const hasExplicitModeParam = useMemo(
-    () => hasPanelModeSearchParam(search, "pages"),
-    [search]
-  )
-  const mode = dialogMode ?? queryMode ?? preferredMode
+  const mode = dialogMode ?? preferredMode
   const detailsOpen = Boolean(dialogMode)
   const initialRequestKey = useMemo(
     () => JSON.stringify([baseQuery, initialMode]),
@@ -131,12 +123,6 @@ export default function PagesPanel({ initialData }: PagesPanelProps) {
     return () => controller.abort()
   }, [baseQuery, mode, requestKey])
 
-  useEffect(() => {
-    if (dialogMode || hasExplicitModeParam) return
-    if (mode === "pages") return
-    syncPanelModeInUrl("pages", mode, { history: "replace" })
-  }, [dialogMode, hasExplicitModeParam, mode])
-
   const drillKey = useMemo(() => {
     switch (mode) {
       case "entry":
@@ -170,7 +156,7 @@ export default function PagesPanel({ initialData }: PagesPanelProps) {
     const sliced = sorted.slice(0, 9)
     return {
       ...data,
-      metrics: ["visitors"] as ListMetricKey[],
+      metrics: pickCardMetrics(data.metrics),
       results: sliced,
       meta: { ...data.meta, hasMore: data.results.length > 9 },
     }
@@ -194,7 +180,6 @@ export default function PagesPanel({ initialData }: PagesPanelProps) {
                   `${STORAGE_PREFIX}.${site.domain}`,
                   tab.value
                 )
-                syncPanelModeInUrl("pages", tab.value)
               }}
             >
               {tab.short}
@@ -204,13 +189,18 @@ export default function PagesPanel({ initialData }: PagesPanelProps) {
       </header>
 
       {loading ? (
-        <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
-          Loading…
-        </div>
+        <PanelListSkeleton
+          firstColumnLabel={firstColumnLabel}
+          metricLabel={
+            mode === "entry"
+              ? "Unique Entrances"
+              : mode === "exit"
+                ? "Unique Exits"
+                : "Visitors"
+          }
+        />
       ) : data.results.length === 0 ? (
-        <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
-          No data yet
-        </div>
+        <PanelEmptyState />
       ) : (
         <>
           <MetricTable
@@ -236,7 +226,6 @@ export default function PagesPanel({ initialData }: PagesPanelProps) {
                 try {
                   const sp = new URLSearchParams(window.location.search)
                   sp.delete("dialog")
-                  setPanelModeSearchParam(sp, "pages", mode)
                   const seg = pagesSegmentForMode(
                     mode as "pages" | "entry" | "exit"
                   )
@@ -262,7 +251,6 @@ export default function PagesPanel({ initialData }: PagesPanelProps) {
           try {
             const sp = new URLSearchParams(window.location.search)
             sp.delete("dialog")
-            setPanelModeSearchParam(sp, "pages", mode)
             const qs = sp.toString()
             if (open) {
               const seg = pagesSegmentForMode(
@@ -288,4 +276,12 @@ export default function PagesPanel({ initialData }: PagesPanelProps) {
       />
     </section>
   )
+}
+
+function pickCardMetrics(metrics: ListMetricKey[]): ListMetricKey[] {
+  const preferred: ListMetricKey[] = []
+  if (metrics.includes("visitors")) preferred.push("visitors")
+  if (metrics.includes("percentage")) preferred.push("percentage")
+  else if (metrics.includes("conversionRate")) preferred.push("conversionRate")
+  return preferred.length > 0 ? preferred : metrics.slice(0, 2)
 }

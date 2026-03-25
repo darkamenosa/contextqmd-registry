@@ -7,10 +7,8 @@ module Admin
         render inertia: "admin/analytics/settings", props: {
           site: site_context,
           user: user_context,
-          funnels: Funnel.order(:name).pluck(:name, :steps).map { |(name, steps)| { name:, steps: } },
-          settings: {
-            gsc_configured: AnalyticsSetting.get_bool("gsc_configured", fallback: false)
-          }
+          funnels: analytics_funnels_payload,
+          settings: analytics_settings_payload
         }
       end
     end

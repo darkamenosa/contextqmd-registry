@@ -16,10 +16,11 @@ class Admin::AnalyticsReportsTest < ActionDispatch::IntegrationTest
     Ahoy::Event.delete_all
     Ahoy::Visit.delete_all
     AnalyticsSetting.delete_all
+    Goal.delete_all
     Funnel.delete_all
   end
 
-  test "reports shell keeps behaviors available when there are no goal events yet" do
+  test "reports shell hides behaviors when nothing is configured or discovered" do
     staff_identity, = create_tenant(
       email: "staff-reports-#{SecureRandom.hex(4)}@example.com",
       name: "Staff Reports"
@@ -36,9 +37,34 @@ class Admin::AnalyticsReportsTest < ActionDispatch::IntegrationTest
     site = payload.fetch("props").fetch("site")
 
     assert_equal false, site.fetch("hasGoals")
+    assert_equal false, site.fetch("propsAvailable")
+    assert_equal false, site.fetch("funnelsAvailable")
+    assert_equal true, site.fetch("flags").fetch("dbip")
+  ensure
+    Current.reset
+  end
+
+  test "reports shell reads behaviors capabilities from stored analytics config" do
+    staff_identity, = create_tenant(
+      email: "staff-reports-config-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Reports Config"
+    )
+    staff_identity.update!(staff: true)
+
+    Goal.create!(display_name: "Signup", event_name: "Signup", custom_props: {})
+    AnalyticsSetting.set_json("allowed_event_props", [ "plan" ])
+    Funnel.create!(name: "Signup funnel", steps: [ { type: "event", value: "Signup" } ])
+
+    sign_in(staff_identity)
+
+    get "/admin/analytics/reports", headers: INERTIA_HEADERS
+
+    assert_response :success
+
+    site = JSON.parse(response.body).fetch("props").fetch("site")
+    assert_equal true, site.fetch("hasGoals")
     assert_equal true, site.fetch("propsAvailable")
     assert_equal true, site.fetch("funnelsAvailable")
-    assert_equal true, site.fetch("flags").fetch("dbip")
   ensure
     Current.reset
   end
@@ -94,6 +120,36 @@ class Admin::AnalyticsReportsTest < ActionDispatch::IntegrationTest
 
     assert_equal true, site.fetch("hasGoals")
   ensure
+    Current.reset
+  end
+
+  test "reports shell capability booleans avoid loading full goal and property lists" do
+    staff_identity, = create_tenant(
+      email: "staff-reports-cheap-capabilities-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Reports Cheap Capabilities"
+    )
+    staff_identity.update!(staff: true)
+
+    sign_in(staff_identity)
+
+    original_available_goal_names = Ahoy::Visit.method(:available_goal_names)
+    original_available_property_keys = Ahoy::Visit.method(:available_property_keys)
+    original_goals_available = Ahoy::Visit.method(:goals_available?)
+    original_properties_available = Ahoy::Visit.method(:properties_available?)
+
+    Ahoy::Visit.define_singleton_method(:available_goal_names) { raise "should not load goal names" }
+    Ahoy::Visit.define_singleton_method(:available_property_keys) { |_events = nil| raise "should not load property keys" }
+    Ahoy::Visit.define_singleton_method(:goals_available?) { false }
+    Ahoy::Visit.define_singleton_method(:properties_available?) { false }
+
+    get "/admin/analytics/reports", headers: INERTIA_HEADERS
+
+    assert_response :success
+  ensure
+    Ahoy::Visit.define_singleton_method(:available_goal_names, original_available_goal_names) if defined?(original_available_goal_names) && original_available_goal_names
+    Ahoy::Visit.define_singleton_method(:available_property_keys, original_available_property_keys) if defined?(original_available_property_keys) && original_available_property_keys
+    Ahoy::Visit.define_singleton_method(:goals_available?, original_goals_available) if defined?(original_goals_available) && original_goals_available
+    Ahoy::Visit.define_singleton_method(:properties_available?, original_properties_available) if defined?(original_properties_available) && original_properties_available
     Current.reset
   end
 

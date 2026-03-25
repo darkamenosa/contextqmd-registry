@@ -204,7 +204,7 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     assert_includes @crawl_request.error_message, "Network error"
   end
 
-  test "rolls back partial import rows when page import fails" do
+  test "deconflicts colliding page_uids during import" do
     crawl_request = CrawlRequest.create!(
       creator: @user,
       url: "https://github.com/example/docs-repo",
@@ -241,19 +241,22 @@ class ProcessCrawlRequestJobTest < ActiveSupport::TestCase
     )
 
     with_stub_fetcher(result) do
-      assert_raises(ActiveRecord::RecordInvalid) do
+      assert_difference -> { Page.count }, 2 do
         ProcessCrawlRequestJob.perform_now(crawl_request)
       end
     end
 
     crawl_request.reload
-    assert_equal "failed", crawl_request.status
-    assert_nil crawl_request.library_id
-    assert_nil crawl_request.library_source_id
-    assert_nil LibrarySource.find_matching(url: crawl_request.url, source_type: crawl_request.source_type)
-    refute Library.exists?(slug: "example")
-    assert_equal 0, Version.where(version: "latest").joins(:library).where(libraries: { slug: "example" }).count
-    assert_equal 0, Page.joins(version: :library).where(libraries: { slug: "example" }).count
+    assert_equal "completed", crawl_request.status
+
+    version = crawl_request.library.versions.find_by!(version: "latest")
+    pages = version.pages.order(:page_uid).to_a
+
+    assert_equal 2, pages.size
+    assert_equal pages.map(&:page_uid).uniq, pages.map(&:page_uid)
+    assert_includes pages.map(&:page_uid), "intro"
+    assert_equal 1, pages.count { |page| page.page_uid.match?(/\Aintro-/) }
+    assert_equal [ "intro.md", "duplicate.md" ], pages.map(&:path)
   end
 
   test "skips oversized pages and imports the remaining content" do

@@ -15,6 +15,7 @@ import {
 } from "../api"
 import {
   getBehaviorsFunnelFromSearch,
+  getBehaviorsPropertyFromSearch,
   getGraphIntervalFromSearch,
   getGraphMetricFromSearch,
 } from "../lib/dashboard-url-state"
@@ -33,6 +34,7 @@ import {
   getLocationsModeFromSearch,
   getPagesModeFromSearch,
   getSourcesModeFromSearch,
+  inferDevicesModeFromFilters,
   LOCATIONS_MODES,
   PAGES_MODES,
   readStoredMode,
@@ -149,41 +151,60 @@ export default function AnalyticsDashboard() {
             : (getLocationsModeFromSearch(initialSearch, bootQuery.mode) ??
               storedLocationsMode ??
               "map")
-        const devicesMode =
+        const devicesMode = inferDevicesModeFromFilters(
           parsedDialog.type === "segment"
             ? (devicesModeForSegment(parsedDialog.segment) ??
-              getDevicesModeFromSearch(initialSearch, bootQuery.mode) ??
-              storedDevicesMode ??
-              "browsers")
+                getDevicesModeFromSearch(initialSearch, bootQuery.mode) ??
+                storedDevicesMode ??
+                "browsers")
             : (getDevicesModeFromSearch(initialSearch, bootQuery.mode) ??
-              storedDevicesMode ??
-              "browsers")
-        const topStats = await fetchTopStats(bootQuery, controller.signal)
-        const graphMetric =
-          getGraphMetricFromSearch(initialSearch, bootQuery.metric) ??
-          topStats.graphableMetrics[0] ??
-          "visitors"
-        const graphInterval =
-          getGraphIntervalFromSearch(initialSearch, bootQuery.interval) ??
-          topStats.interval
-        const behaviorsMode =
-          getBehaviorsModeFromSearch(
-            initialSearch,
-            bootQuery.mode,
-            site.hasGoals
-          ) ??
-          storedBehaviorsMode ??
-          (site.hasGoals
-            ? "conversions"
-            : site.propsAvailable
-              ? "props"
-              : site.funnelsAvailable
-                ? "funnels"
-                : undefined)
-        const behaviorsFunnel = getBehaviorsFunnelFromSearch(
-          initialSearch,
-          bootQuery.funnel
+                storedDevicesMode ??
+                "browsers"),
+          bootQuery.filters
         )
+        const topStats = await fetchTopStats(bootQuery, controller.signal)
+        const requestedGraphMetric = getGraphMetricFromSearch(initialSearch)
+        const graphMetric =
+          requestedGraphMetric &&
+          topStats.graphableMetrics.includes(requestedGraphMetric)
+            ? requestedGraphMetric
+            : (topStats.graphableMetrics[0] ?? "visitors")
+        const requestedGraphInterval = getGraphIntervalFromSearch(initialSearch)
+        const graphInterval = requestedGraphInterval || topStats.interval
+        const behaviorsMode =
+          parsedDialog.type === "segment" &&
+          parsedDialog.segment === "behaviors"
+            ? (getBehaviorsModeFromSearch(
+                initialSearch,
+                bootQuery.mode,
+                site.hasGoals
+              ) ??
+              storedBehaviorsMode ??
+              (site.hasGoals
+                ? "conversions"
+                : site.propsAvailable
+                  ? "props"
+                  : site.funnelsAvailable
+                    ? "funnels"
+                    : undefined))
+            : (storedBehaviorsMode ??
+              (site.hasGoals
+                ? "conversions"
+                : site.propsAvailable
+                  ? "props"
+                  : site.funnelsAvailable
+                    ? "funnels"
+                    : undefined))
+        const behaviorsFunnel =
+          parsedDialog.type === "segment" &&
+          parsedDialog.segment === "behaviors"
+            ? getBehaviorsFunnelFromSearch(initialSearch, bootQuery.funnel)
+            : null
+        const behaviorsProperty =
+          parsedDialog.type === "segment" &&
+          parsedDialog.segment === "behaviors"
+            ? getBehaviorsPropertyFromSearch(initialSearch)
+            : null
 
         const [mainGraph, sources, pages, locations, devices, behaviors] =
           await Promise.all([
@@ -210,6 +231,10 @@ export default function AnalyticsDashboard() {
                   {
                     mode: behaviorsMode,
                     funnel: behaviorsFunnel ?? undefined,
+                    property:
+                      behaviorsMode === "props"
+                        ? (behaviorsProperty ?? undefined)
+                        : undefined,
                   },
                   controller.signal
                 )
@@ -320,7 +345,7 @@ function AnalyticsSkeleton() {
           ))}
         </div>
         <div className="pt-4">
-          <Skeleton className="h-56 w-full rounded" />
+          <Skeleton className="h-56 w-full rounded-sm" />
         </div>
       </div>
 

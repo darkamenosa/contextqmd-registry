@@ -92,6 +92,8 @@ module DocsFetcher
     private
 
       def strip_noise
+        normalize_embeds
+
         STRIP_SELECTORS.each do |sel|
           @doc.css(sel).each(&:remove)
         end
@@ -239,13 +241,113 @@ module DocsFetcher
         src = image["src"].to_s
         alt = image["alt"].to_s.strip
 
-        alt.empty? || src.start_with?("data:")
+        return true if src.start_with?("data:")
+        return false unless alt.empty?
+        return false if meaningful_image?(image)
+
+        hidden_image?(image) || icon_image?(image) || tiny_image?(image)
       end
 
       def strip_empty_links
         @doc.css("a").each do |link|
-          link.remove if link.text.strip.empty?
+          link.remove if link.text.strip.empty? && !link.at_css("img, video, audio, iframe")
         end
+      end
+
+      def normalize_embeds
+        @doc.css("iframe").each do |iframe|
+          replace_media_embed(iframe, [ iframe["src"] ], default_text: "Embedded content")
+        end
+
+        @doc.css("video, audio").each do |media|
+          sources = [ media["src"] ] + media.css("source[src]").map { |source| source["src"] }
+          replace_media_embed(media, sources, default_text: media.name == "audio" ? "Audio" : "Video")
+        end
+      end
+
+      def replace_media_embed(node, raw_urls, default_text:)
+        urls = raw_urls.filter_map { |url| normalized_href(url) }.uniq
+        return node.remove if urls.empty?
+
+        fragment = urls.map do |url|
+          href = CGI.escapeHTML(url)
+          text = CGI.escapeHTML(media_link_text(url, default_text))
+          %(<p><a href="#{href}">#{text}</a></p>)
+        end.join
+
+        node.replace(Nokogiri::HTML::DocumentFragment.parse(fragment))
+      end
+
+      def media_link_text(url, default_text)
+        uri = parse_uri(url)
+        host = uri&.host.to_s.downcase
+
+        return "YouTube video" if host.include?("youtube.com") || host.include?("youtu.be")
+        return "Vimeo video" if host.include?("vimeo.com")
+        return "Loom video" if host.include?("loom.com")
+
+        default_text
+      end
+
+      def meaningful_image?(image)
+        linked_media?(image) || large_image?(image) || responsive_image?(image)
+      end
+
+      def linked_media?(image)
+        image.ancestors("a[href]").any?
+      end
+
+      def large_image?(image)
+        numeric_attribute(image["width"]) >= 96 ||
+          numeric_attribute(image["height"]) >= 96 ||
+          style_dimension(image["style"], "width") >= 96 ||
+          style_dimension(image["style"], "height") >= 96
+      end
+
+      def responsive_image?(image)
+        image["srcset"].present? || image["sizes"].present?
+      end
+
+      def hidden_image?(image)
+        style = image["style"].to_s.downcase
+        classes = image["class"].to_s.downcase
+
+        image["hidden"].present? ||
+          image["aria-hidden"] == "true" ||
+          style.include?("display:none") ||
+          style.include?("visibility:hidden") ||
+          classes.match?(/\bhidden\b/)
+      end
+
+      def icon_image?(image)
+        tokens = [
+          image["class"],
+          image["id"],
+          image["data-testid"],
+          image["role"],
+          image["aria-label"]
+        ].compact.join(" ").downcase
+
+        tokens.match?(/\b(icon|avatar|logo|emoji|badge|favicon)\b/)
+      end
+
+      def tiny_image?(image)
+        max_dimension = [
+          numeric_attribute(image["width"]),
+          numeric_attribute(image["height"]),
+          style_dimension(image["style"], "width"),
+          style_dimension(image["style"], "height")
+        ].max
+
+        max_dimension.positive? && max_dimension < 96
+      end
+
+      def numeric_attribute(value)
+        value.to_s[/\d+/].to_i
+      end
+
+      def style_dimension(style, property)
+        style.to_s[/#{property}\s*:\s*(\d+(?:\.\d+)?)px/i, 1].to_f
       end
 
       def parse_uri(href)

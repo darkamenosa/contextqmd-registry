@@ -383,8 +383,9 @@ module CrawlRequest::Importable
       path = uri.path.to_s.chomp("/")
       path = "/" if path.empty?
       query = uri.query.present? ? "?#{uri.query}" : ""
+      fragment = uri.fragment.present? ? "##{uri.fragment}" : ""
 
-      "#{uri.scheme}://#{uri.host&.downcase}#{path}#{query}"
+      "#{uri.scheme}://#{uri.host&.downcase}#{path}#{query}#{fragment}"
     rescue URI::InvalidURIError
       raw
     end

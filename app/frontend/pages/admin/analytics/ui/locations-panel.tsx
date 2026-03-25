@@ -11,6 +11,7 @@ import { geoMercator, geoPath } from "d3-geo"
 import { feature } from "topojson-client"
 
 import { fetchLocations } from "../api"
+import { flagFromIso2 } from "../lib/country-flag"
 import {
   baseAnalyticsPath,
   buildDialogPath,
@@ -20,12 +21,10 @@ import {
 } from "../lib/dialog-path"
 import { numberShortFormatter } from "../lib/number-formatter"
 import {
+  getLocationsModeAfterFilterChange,
   getLocationsModeFromSearch,
-  hasPanelModeSearchParam,
   LOCATIONS_MODES,
   readStoredMode,
-  setPanelModeSearchParam,
-  syncPanelModeInUrl,
 } from "../lib/panel-mode"
 import { useScopedQuery } from "../lib/query-scope"
 import { useQueryContext } from "../query-context"
@@ -38,7 +37,7 @@ import type {
   MapPayload,
 } from "../types"
 import DetailsButton from "./details-button"
-import { MetricTable } from "./list-table"
+import { MetricTable, PanelEmptyState, PanelListSkeleton } from "./list-table"
 import { PanelTab, PanelTabs } from "./panel-tabs"
 import RemoteDetailsDialog from "./remote-details-dialog"
 
@@ -87,20 +86,18 @@ type PanelData =
 export default function LocationsPanel({ initialData }: LocationsPanelProps) {
   const { query, pathname, search, updateQuery } = useQueryContext()
   const site = useSiteContext()
-  const initialMode = getLocationsModeFromSearch(search, query.mode) ?? "map"
+  const initialMode =
+    getLocationsModeFromSearch(search, query.mode) ??
+    readStoredMode(`${STORAGE_PREFIX}.${site.domain}`, LOCATIONS_MODES) ??
+    "map"
 
-  const [preferredMode, setPreferredMode] = useState(
-    () =>
-      readStoredMode(`${STORAGE_PREFIX}.${site.domain}`, LOCATIONS_MODES) ??
-      "map"
-  )
+  const [preferredMode, setPreferredMode] = useState(() => initialMode)
   const [data, setData] = useState<PanelData>(() =>
     "map" in initialData
       ? { type: "map", payload: initialData as MapPayload }
       : { type: "list", payload: initialData as ListPayload }
   )
   const [loading, setLoading] = useState(false)
-  const queryMode = getLocationsModeFromSearch(search, query.mode)
   const { value: baseQuery } = useScopedQuery(query, {
     omitMode: true,
     omitMetric: true,
@@ -111,11 +108,7 @@ export default function LocationsPanel({ initialData }: LocationsPanelProps) {
     if (parsed.type !== "segment") return null
     return locationsModeForSegment(parsed.segment)
   }, [pathname])
-  const hasExplicitModeParam = useMemo(
-    () => hasPanelModeSearchParam(search, "locations"),
-    [search]
-  )
-  const mode = dialogMode ?? queryMode ?? preferredMode
+  const mode = dialogMode ?? preferredMode
   const detailsOpen = Boolean(dialogMode)
   const initialRequestKey = useMemo(
     () => JSON.stringify([baseQuery, initialMode]),
@@ -126,17 +119,18 @@ export default function LocationsPanel({ initialData }: LocationsPanelProps) {
     [baseQuery, mode]
   )
   const lastRequestKeyRef = useRef(initialRequestKey)
+  const previousFiltersRef = useRef(query.filters)
+  const countriesRestoreModeRef = useRef<"map" | "countries">("countries")
 
   const closeDetailsDialog = useCallback(() => {
     try {
       const sp = new URLSearchParams(window.location.search)
       sp.delete("dialog")
-      setPanelModeSearchParam(sp, "locations", mode)
       window.history.pushState({}, "", baseAnalyticsPath(sp.toString()))
     } catch {
       // Ignore history errors; local dialog state still works.
     }
-  }, [mode])
+  }, [])
 
   useEffect(() => {
     if (requestKey === lastRequestKeyRef.current) return
@@ -161,10 +155,21 @@ export default function LocationsPanel({ initialData }: LocationsPanelProps) {
   }, [baseQuery, mode, requestKey])
 
   useEffect(() => {
-    if (dialogMode || hasExplicitModeParam) return
-    if (mode === "map") return
-    syncPanelModeInUrl("locations", mode, { history: "replace" })
-  }, [dialogMode, hasExplicitModeParam, mode])
+    const nextMode = getLocationsModeAfterFilterChange(
+      mode,
+      previousFiltersRef.current,
+      query.filters,
+      countriesRestoreModeRef.current
+    )
+    previousFiltersRef.current = query.filters
+
+    if (!nextMode || nextMode === mode) return
+
+    setPreferredMode(nextMode)
+    if (typeof window !== "undefined") {
+      localStorage.setItem(`${STORAGE_PREFIX}.${site.domain}`, nextMode)
+    }
+  }, [mode, query.filters, site.domain])
 
   const highlightMetric = useMemo(() => {
     if (data.type === "list") {
@@ -237,7 +242,7 @@ export default function LocationsPanel({ initialData }: LocationsPanelProps) {
     const sliced = sorted.slice(0, 9)
     return {
       ...data.payload,
-      metrics: ["visitors"] as ListMetricKey[],
+      metrics: pickCardMetrics(data.payload.metrics),
       results: sliced,
       meta: { ...data.payload.meta, hasMore: data.payload.results.length > 9 },
     }
@@ -245,6 +250,7 @@ export default function LocationsPanel({ initialData }: LocationsPanelProps) {
 
   const handleCountrySelect = useCallback(
     (countryCode: string, countryLabel?: string) => {
+      countriesRestoreModeRef.current = mode === "map" ? "map" : "countries"
       updateQuery((current) => {
         const next: AnalyticsQuery = {
           ...current,
@@ -260,9 +266,8 @@ export default function LocationsPanel({ initialData }: LocationsPanelProps) {
       if (typeof window !== "undefined") {
         localStorage.setItem(`${STORAGE_PREFIX}.${site.domain}`, "regions")
       }
-      syncPanelModeInUrl("locations", "regions", { history: "replace" })
     },
-    [closeDetailsDialog, site.domain, updateQuery]
+    [closeDetailsDialog, mode, site.domain, updateQuery]
   )
 
   const handleRegionSelect = useCallback(
@@ -282,7 +287,6 @@ export default function LocationsPanel({ initialData }: LocationsPanelProps) {
       if (typeof window !== "undefined") {
         localStorage.setItem(`${STORAGE_PREFIX}.${site.domain}`, "cities")
       }
-      syncPanelModeInUrl("locations", "cities", { history: "replace" })
     },
     [closeDetailsDialog, site.domain, updateQuery]
   )
@@ -316,7 +320,6 @@ export default function LocationsPanel({ initialData }: LocationsPanelProps) {
                   `${STORAGE_PREFIX}.${site.domain}`,
                   tab.value
                 )
-                syncPanelModeInUrl("locations", tab.value)
               }}
             >
               {tab.label}
@@ -326,9 +329,7 @@ export default function LocationsPanel({ initialData }: LocationsPanelProps) {
       </header>
 
       {loading ? (
-        <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
-          Loading…
-        </div>
+        <PanelListSkeleton firstColumnLabel={firstColumnLabel} />
       ) : data.type === "map" ? (
         <>
           <CountriesMap
@@ -341,7 +342,6 @@ export default function LocationsPanel({ initialData }: LocationsPanelProps) {
                 try {
                   const sp = new URLSearchParams(window.location.search)
                   sp.delete("dialog")
-                  setPanelModeSearchParam(sp, "locations", mode)
                   const seg = locationsSegmentForMode(
                     mode as "map" | "countries" | "regions" | "cities"
                   )
@@ -362,9 +362,7 @@ export default function LocationsPanel({ initialData }: LocationsPanelProps) {
       ) : (
         <>
           {data.payload.results.length === 0 ? (
-            <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
-              No data yet
-            </div>
+            <PanelEmptyState />
           ) : (
             <MetricTable
               data={
@@ -412,7 +410,6 @@ export default function LocationsPanel({ initialData }: LocationsPanelProps) {
                 try {
                   const sp = new URLSearchParams(window.location.search)
                   sp.delete("dialog")
-                  setPanelModeSearchParam(sp, "locations", mode)
                   const seg = locationsSegmentForMode(
                     mode as "map" | "countries" | "regions" | "cities"
                   )
@@ -439,7 +436,6 @@ export default function LocationsPanel({ initialData }: LocationsPanelProps) {
             try {
               const sp = new URLSearchParams(window.location.search)
               sp.delete("dialog")
-              setPanelModeSearchParam(sp, "locations", mode)
               const qs = sp.toString()
               if (open) {
                 const seg = locationsSegmentForMode(
@@ -485,6 +481,14 @@ export default function LocationsPanel({ initialData }: LocationsPanelProps) {
       }
     </section>
   )
+}
+
+function pickCardMetrics(metrics: ListMetricKey[]): ListMetricKey[] {
+  const preferred: ListMetricKey[] = []
+  if (metrics.includes("visitors")) preferred.push("visitors")
+  if (metrics.includes("percentage")) preferred.push("percentage")
+  else if (metrics.includes("conversionRate")) preferred.push("conversionRate")
+  return preferred.length > 0 ? preferred : metrics.slice(0, 2)
 }
 
 type CountriesMapProps = {
@@ -682,7 +686,7 @@ function CountriesMap({ data, onSelectCountry }: CountriesMapProps) {
       </div>
       {tooltip ? (
         <div
-          className="pointer-events-none absolute z-50 rounded-xl border border-border/70 bg-popover/96 p-3 text-popover-foreground shadow-xl backdrop-blur-sm"
+          className="pointer-events-none absolute z-50 rounded-xl border border-border/70 bg-popover/96 p-3 text-popover-foreground shadow-xl backdrop-blur-xs"
           style={{
             left: Math.min(tooltip.x + 12, tooltip.width - 200),
             top: Math.min(tooltip.y + 12, tooltip.height - 72),
@@ -691,7 +695,7 @@ function CountriesMap({ data, onSelectCountry }: CountriesMapProps) {
         >
           <div className="mb-1 flex items-center gap-1.5">
             {tooltip.flag ? (
-              <span aria-hidden className="shrink-0 text-sm leading-[18px]">
+              <span aria-hidden className="shrink-0 text-sm/4.5">
                 {tooltip.flag}
               </span>
             ) : null}
@@ -722,18 +726,6 @@ function colorForIntensity(value: number) {
   const toWeight = 100 - fromWeight
 
   return `color-mix(in oklch, ${from} ${fromWeight}%, ${to} ${toWeight}%)`
-}
-
-// Emoji flag from ISO 3166-1 alpha-2
-function flagFromIso2(code?: string) {
-  if (!code) return ""
-  const iso2 = code.toUpperCase()
-  if (!/^[A-Z]{2}$/.test(iso2)) return ""
-  const A = 0x1f1e6 // regional indicator 'A'
-  const chars = Array.from(iso2).map((c) =>
-    String.fromCodePoint(A + (c.charCodeAt(0) - 65))
-  )
-  return chars.join("")
 }
 
 // Prefer short, user-friendly country names for UI tooltips

@@ -94,6 +94,7 @@ export type MainGraphPayload = {
 
 export type ListMetricKey =
   | "visitors"
+  | "events"
   | "visits"
   | "percentage"
   | "uniques"
@@ -110,8 +111,55 @@ export type ListMetricKey =
   | "ctr"
   | "position"
 
-export type ListItem = Record<string, string | number | null | undefined> & {
+export type CountBreakdownRow = {
+  value: string
+  count: number
+}
+
+export type SourceRowSourceInfo = {
+  filterValue: string
+  normalizedName: string
+  topReferringDomain?: string | null
+  topUtmSource?: string | null
+  topRuleId?: string | null
+  topMatchStrategy?: string | null
+  rawReferringDomains?: CountBreakdownRow[]
+  rawUtmSources?: CountBreakdownRow[]
+  matchedRules?: CountBreakdownRow[]
+  matchStrategies?: CountBreakdownRow[]
+}
+
+export type SourceDebugPayload = {
+  source: {
+    requestedValue: string
+    normalizedValue: string
+    kind: string
+    faviconDomain: string | null
+    visitors: number
+    visits: number
+    fallbackCount: number
+  }
+  channels: CountBreakdownRow[]
+  matchedRules: CountBreakdownRow[]
+  matchStrategies: CountBreakdownRow[]
+  rawReferringDomains: CountBreakdownRow[]
+  rawUtmSources: CountBreakdownRow[]
+  rawReferrers: CountBreakdownRow[]
+  latestSamples: Array<{
+    startedAt: string | null
+    referringDomain: string | null
+    utmSource: string | null
+    utmMedium: string | null
+    referrer: string | null
+    ruleId: string | null
+    matchStrategy: string | null
+  }>
+}
+
+export type ListItem = Record<string, unknown> & {
   name: string
+  comparison?: Record<string, unknown>
+  sourceInfo?: SourceRowSourceInfo
 }
 
 export type ListPayload = {
@@ -121,6 +169,8 @@ export type ListPayload = {
     hasMore: boolean
     skipImportedReason: string | null
     metricLabels?: Record<string, string>
+    dateRangeLabel?: string
+    comparisonDateRangeLabel?: string
   }
 }
 
@@ -144,15 +194,25 @@ export type BehaviorsPayload =
   | {
       list: ListPayload
       goalHighlighted?: string | null
+      propertyKeys?: string[]
+      activeProperty?: string | null
     }
   | {
       funnels: string[]
       active: {
         name: string
+        conversionRate: number
+        enteringVisitors: number
+        enteringVisitorsPercentage: number
+        neverEnteringVisitors: number
+        neverEnteringVisitorsPercentage: number
         steps: Array<{
           name: string
           visitors: number
           conversionRate: number
+          conversionRateStep: number
+          dropoff: number
+          dropoffPercentage: number
         }>
       }
     }

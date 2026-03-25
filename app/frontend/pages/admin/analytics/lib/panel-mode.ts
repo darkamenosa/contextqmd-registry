@@ -130,7 +130,40 @@ export function inferSourcesModeFromFilters(
   if (activeFilters.utm_campaign) return "utm-campaign"
   if (activeFilters.utm_content) return "utm-content"
   if (activeFilters.utm_term) return "utm-term"
-  if (activeFilters.channel) return "channels"
+  return null
+}
+
+export function inferDevicesModeFromFilters(
+  baseMode: string,
+  filters: AnalyticsQuery["filters"]
+) {
+  const activeFilters = filters || {}
+  if (baseMode === "browsers" && activeFilters.browser) {
+    return "browser-versions"
+  }
+  if (baseMode === "operating-systems" && activeFilters.os) {
+    return "operating-system-versions"
+  }
+  return baseMode
+}
+
+export function getLocationsModeAfterFilterChange(
+  currentMode: string,
+  previousFilters: AnalyticsQuery["filters"],
+  nextFilters: AnalyticsQuery["filters"],
+  countriesRestoreMode: string | null
+) {
+  const before = previousFilters || {}
+  const after = nextFilters || {}
+
+  if (currentMode === "cities" && before.region && !after.region) {
+    return "regions"
+  }
+
+  if (currentMode === "regions" && before.country && !after.country) {
+    return countriesRestoreMode || "countries"
+  }
+
   return null
 }
 

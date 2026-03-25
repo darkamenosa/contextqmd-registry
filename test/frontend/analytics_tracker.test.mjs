@@ -232,3 +232,17 @@ test("analytics tracker skips the server-tracked initial pageview and seeds foll
     cleanupBrowserStubs()
   }
 })
+
+test("analytics tracker path matching keeps ** semantics for nested paths", async () => {
+  installBrowserStubs()
+  const { StandaloneAnalytics } = await loadTrackerModule()
+  const analytics = new StandaloneAnalytics()
+
+  try {
+    assert.equal(analytics["pathMatches"]("/docs/**", "/docs/a"), true)
+    assert.equal(analytics["pathMatches"]("/docs/**", "/docs/a/b"), true)
+    assert.equal(analytics["pathMatches"]("/docs/*", "/docs/a/b"), false)
+  } finally {
+    cleanupBrowserStubs()
+  }
+})

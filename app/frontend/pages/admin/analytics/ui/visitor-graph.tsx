@@ -39,11 +39,13 @@ import { useLastLoadContext } from "../last-load-context"
 import {
   getGraphIntervalFromSearch,
   getGraphMetricFromSearch,
-  syncGraphControlsInUrl,
-  syncGraphIntervalInUrl,
-  syncGraphMetricInUrl,
 } from "../lib/dashboard-url-state"
 import { useScopedQuery } from "../lib/query-scope"
+import {
+  formatTopStatChangeValue,
+  topStatChangeDirection,
+  topStatChangeTone,
+} from "../lib/top-stat-change"
 import { useQueryContext } from "../query-context"
 import { useSiteContext } from "../site-context"
 import { useTopStatsContext } from "../top-stats-context"
@@ -85,14 +87,67 @@ function is12HourClock(): boolean {
 function resolvePreferredMetric(
   graphableMetrics: string[],
   siteDomain: string,
-  fallbackMetric: string
+  fallbackMetric: string,
+  requestedMetric?: string | null
 ) {
+  if (requestedMetric && graphableMetrics.includes(requestedMetric)) {
+    return requestedMetric
+  }
   if (typeof window === "undefined") return fallbackMetric
   const stored = localStorage.getItem(`${STORAGE_PREFIX}.${siteDomain}.metric`)
   if (stored && graphableMetrics.includes(stored)) {
     return stored
   }
   return fallbackMetric
+}
+
+function availableIntervalsForPeriod(period: string) {
+  switch (period) {
+    case "realtime":
+      return ["minute"]
+    case "day":
+      return ["minute", "hour"]
+    case "7d":
+      return ["hour", "day"]
+    case "28d":
+    case "30d":
+      return ["day", "week"]
+    case "91d":
+      return ["day", "week", "month"]
+    case "month":
+      return ["day", "week"]
+    case "12mo":
+    case "year":
+    case "all":
+    case "custom":
+      return ["day", "week", "month"]
+    default:
+      return ["day"]
+  }
+}
+
+function resolvePreferredInterval(
+  period: string,
+  siteDomain: string,
+  fallbackInterval: string,
+  requestedInterval?: string | null
+) {
+  const options = availableIntervalsForPeriod(period)
+  if (requestedInterval && options.includes(requestedInterval)) {
+    return requestedInterval
+  }
+  if (typeof window !== "undefined") {
+    const stored = localStorage.getItem(
+      `${STORAGE_PREFIX}.${siteDomain}.interval`
+    )
+    if (stored && options.includes(stored)) {
+      return stored
+    }
+  }
+  if (options.includes(fallbackInterval)) {
+    return fallbackInterval
+  }
+  return options[0] ?? fallbackInterval
 }
 
 // Date formatting utilities matching Plausible's exact logic
@@ -139,17 +194,65 @@ export default function VisitorGraph({ initialGraph }: VisitorGraphProps) {
   const [graph, setGraph] = useState<MainGraphPayload>(initialGraph)
   const [loading, setLoading] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
-  const { value: baseQuery } = useScopedQuery(query)
-  const graphMetricFromSearch = getGraphMetricFromSearch(search, query.metric)
-  const graphIntervalFromSearch = getGraphIntervalFromSearch(
-    search,
-    query.interval
-  )
-  const lastQueryWithoutGraphRef = useRef(stripGraphControls(baseQuery))
-  const didHydratePreferredMetricRef = useRef(false)
-  const didFetchForQueryRef = useRef(false)
+  const { value: baseQuery } = useScopedQuery(query, {
+    omitMetric: true,
+    omitInterval: true,
+  })
+  const didFetchTopStatsRef = useRef(false)
+  const didFetchGraphRef = useRef(false)
 
   const graphableMetrics = payload.graphableMetrics
+  const availableIntervals = useMemo(
+    () => availableIntervalsForPeriod(query.period),
+    [query.period]
+  )
+  const requestedMetric = getGraphMetricFromSearch(search, initialGraph.metric)
+  const requestedInterval = getGraphIntervalFromSearch(
+    search,
+    initialGraph.interval
+  )
+  const [selectedMetric, setSelectedMetric] = useState(() =>
+    resolvePreferredMetric(
+      payload.graphableMetrics,
+      site.domain,
+      initialGraph.metric,
+      requestedMetric
+    )
+  )
+  const [selectedInterval, setSelectedInterval] = useState(() =>
+    resolvePreferredInterval(
+      query.period,
+      site.domain,
+      initialGraph.interval,
+      requestedInterval
+    )
+  )
+
+  const effectiveMetric = useMemo(() => {
+    if (graphableMetrics.includes(selectedMetric)) return selectedMetric
+    return (
+      resolvePreferredMetric(
+        graphableMetrics,
+        site.domain,
+        graphableMetrics[0] ?? initialGraph.metric
+      ) || initialGraph.metric
+    )
+  }, [graphableMetrics, initialGraph.metric, selectedMetric, site.domain])
+
+  const effectiveInterval = useMemo(() => {
+    if (availableIntervals.includes(selectedInterval)) return selectedInterval
+    return resolvePreferredInterval(
+      query.period,
+      site.domain,
+      initialGraph.interval
+    )
+  }, [
+    availableIntervals,
+    initialGraph.interval,
+    query.period,
+    selectedInterval,
+    site.domain,
+  ])
 
   const fetchGraphData = useCallback(
     async (
@@ -166,141 +269,47 @@ export default function VisitorGraph({ initialGraph }: VisitorGraphProps) {
     [baseQuery]
   )
 
-  const replaceGraphControls = useCallback(
-    (nextMetric: string, nextInterval: string) => {
-      syncGraphControlsInUrl(
-        { metric: nextMetric, interval: nextInterval },
-        { history: "replace" }
-      )
-    },
-    []
-  )
-
   useEffect(() => {
-    if (didHydratePreferredMetricRef.current) return
-    didHydratePreferredMetricRef.current = true
-
-    const preferredMetric = resolvePreferredMetric(
-      graphableMetrics,
-      site.domain,
-      initialGraph.metric
-    )
-    if (preferredMetric === initialGraph.metric) return
+    if (!didFetchTopStatsRef.current) {
+      didFetchTopStatsRef.current = true
+      return
+    }
 
     const controller = new AbortController()
-    abortRef.current?.abort()
-    abortRef.current = controller
-    startTransition(() => setLoading(true))
 
-    fetchGraphData(preferredMetric, initialGraph.interval, controller)
+    fetchTopStats(baseQuery, controller.signal)
       .then((data) => {
-        setGraph(data)
-        if (!graphMetricFromSearch) {
-          replaceGraphControls(data.metric, data.interval)
-        }
+        update(data)
+        touch()
       })
       .catch((error) => {
         if (error.name !== "AbortError") {
           console.error(error)
         }
       })
-      .finally(() => {
-        startTransition(() => setLoading(false))
-      })
-  }, [
-    fetchGraphData,
-    graphMetricFromSearch,
-    graphableMetrics,
-    initialGraph.interval,
-    initialGraph.metric,
-    replaceGraphControls,
-    site.domain,
-  ])
+
+    return () => controller.abort()
+  }, [baseQuery, touch, update])
 
   useEffect(() => {
-    const queryWithoutGraph = stripGraphControls(baseQuery)
-    const onlyGraphControlsChanged =
-      lastQueryWithoutGraphRef.current === queryWithoutGraph
-    lastQueryWithoutGraphRef.current = queryWithoutGraph
-
-    if (!didFetchForQueryRef.current) {
-      didFetchForQueryRef.current = true
-      return
+    if (!didFetchGraphRef.current) {
+      didFetchGraphRef.current = true
+      if (
+        effectiveMetric === initialGraph.metric &&
+        effectiveInterval === initialGraph.interval
+      ) {
+        return
+      }
     }
 
     const controller = new AbortController()
     abortRef.current?.abort()
     abortRef.current = controller
-
     startTransition(() => setLoading(true))
 
-    if (onlyGraphControlsChanged) {
-      const requestedMetric =
-        graphMetricFromSearch ??
-        resolvePreferredMetric(
-          payload.graphableMetrics,
-          site.domain,
-          payload.graphableMetrics[0] ?? graph.metric
-        )
-      const requestedInterval =
-        graphIntervalFromSearch ?? payload.interval ?? graph.interval
-
-      if (
-        requestedMetric === graph.metric &&
-        requestedInterval === graph.interval
-      ) {
-        startTransition(() => setLoading(false))
-        return () => controller.abort()
-      }
-
-      fetchGraphData(requestedMetric, requestedInterval, controller)
-        .then((data) => {
-          setGraph(data)
-          if (
-            graphMetricFromSearch !== data.metric ||
-            graphIntervalFromSearch !== data.interval
-          ) {
-            replaceGraphControls(data.metric, data.interval)
-          }
-        })
-        .catch((error) => {
-          if (error.name !== "AbortError") {
-            console.error(error)
-          }
-        })
-        .finally(() => {
-          startTransition(() => setLoading(false))
-        })
-
-      return () => controller.abort()
-    }
-
-    fetchTopStats(baseQuery, controller.signal)
+    fetchGraphData(effectiveMetric, effectiveInterval, controller)
       .then((data) => {
-        update(data)
-        touch()
-        const preferredMetric =
-          resolvePreferredMetric(
-            data.graphableMetrics,
-            site.domain,
-            graphMetricFromSearch ?? data.graphableMetrics[0] ?? "visitors"
-          ) || "visitors"
-        const preferredInterval = graphIntervalFromSearch ?? data.interval
-        return fetchGraphData(
-          preferredMetric,
-          preferredInterval,
-          controller
-        ).then((graphData) => {
-          setGraph(graphData)
-          if (
-            (graphMetricFromSearch &&
-              graphMetricFromSearch !== graphData.metric) ||
-            (graphIntervalFromSearch &&
-              graphIntervalFromSearch !== graphData.interval)
-          ) {
-            replaceGraphControls(graphData.metric, graphData.interval)
-          }
-        })
+        setGraph(data)
       })
       .catch((error) => {
         if (error.name !== "AbortError") {
@@ -314,37 +323,32 @@ export default function VisitorGraph({ initialGraph }: VisitorGraphProps) {
     return () => controller.abort()
   }, [
     baseQuery,
+    effectiveInterval,
+    effectiveMetric,
     fetchGraphData,
-    graph.interval,
-    graph.metric,
-    graphableMetrics,
-    graphIntervalFromSearch,
-    graphMetricFromSearch,
-    payload.interval,
-    payload.graphableMetrics,
-    replaceGraphControls,
-    site.domain,
-    touch,
-    update,
+    initialGraph.interval,
+    initialGraph.metric,
   ])
 
   const changeMetric = useCallback(
     (next: string) => {
-      if (next === graph.metric) return
-
+      if (next === effectiveMetric) return
       localStorage.setItem(`${STORAGE_PREFIX}.${site.domain}.metric`, next)
-      syncGraphMetricInUrl(next)
+      setSelectedMetric(next)
     },
-    [graph.metric, site.domain]
+    [effectiveMetric, site.domain]
   )
 
   const changeInterval = useCallback(
     (nextInterval: string) => {
-      if (nextInterval === graph.interval) return
-
-      syncGraphIntervalInUrl(nextInterval)
+      if (nextInterval === effectiveInterval) return
+      localStorage.setItem(
+        `${STORAGE_PREFIX}.${site.domain}.interval`,
+        nextInterval
+      )
+      setSelectedInterval(nextInterval)
     },
-    [graph.interval]
+    [effectiveInterval, site.domain]
   )
 
   const chartData = useMemo(() => createChartData(graph), [graph])
@@ -359,7 +363,7 @@ export default function VisitorGraph({ initialGraph }: VisitorGraphProps) {
         <TopStatsGrid
           stats={payload.topStats}
           graphableMetrics={graphableMetrics}
-          selectedMetric={graph.metric}
+          selectedMetric={effectiveMetric}
           onSelectMetric={changeMetric}
           comparingFrom={payload.comparingFrom}
           comparingTo={payload.comparingTo}
@@ -372,13 +376,13 @@ export default function VisitorGraph({ initialGraph }: VisitorGraphProps) {
 
         <div className="relative">
           {loading && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xs bg-card/75 backdrop-blur-sm">
+            <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xs bg-card/75 backdrop-blur-xs">
               <Spinner />
             </div>
           )}
           <div className="flex justify-end gap-2 pb-2">
             <IntervalPicker
-              interval={graph.interval}
+              interval={effectiveInterval}
               onChange={changeInterval}
             />
           </div>
@@ -400,28 +404,48 @@ function Spinner() {
   )
 }
 
-function stripGraphControls(query: {
-  metric?: string
-  interval?: string
-}): string {
-  const { metric: _metric, interval: _interval, ...rest } = query
-  return JSON.stringify(rest)
+type ChartPoint = number | null
+
+function splitPrimaryPlot(
+  plot: number[],
+  presentIndex?: number | null
+): {
+  solidPlot: ChartPoint[]
+  dashedPlot: ChartPoint[] | null
+} {
+  if (
+    presentIndex == null ||
+    presentIndex <= 0 ||
+    presentIndex >= plot.length
+  ) {
+    return { solidPlot: plot, dashedPlot: null }
+  }
+
+  return {
+    solidPlot: plot.slice(0, presentIndex),
+    dashedPlot: Array.from<ChartPoint>({ length: presentIndex - 1 }).concat(
+      plot.slice(presentIndex - 1, presentIndex + 1)
+    ),
+  }
 }
 
 function createChartData(graph: MainGraphPayload) {
   // Chart palette — rgba equivalents of --primary (oklch 0.205 0 0 ≈ #1a1a1a)
   const PRIMARY_STROKE = "rgba(26, 26, 26, 1)"
   const PRIMARY_FILL_START = "rgba(26, 26, 26, 0.06)"
-  const COMP_STROKE = "rgba(128, 128, 128, 0.35)"
-  const COMP_FILL = "rgba(128, 128, 128, 0.04)"
+  const COMP_STROKE = "rgba(120, 120, 120, 0.7)"
   const COMP_POINT = COMP_STROKE
   const COMP_POINT_HOVER = "rgba(128, 128, 128, 0.7)"
-  const COMP_FILL_START = COMP_FILL
 
-  const datasets: ChartDataset<"line", number[]>[] = [
+  const { solidPlot, dashedPlot } = splitPrimaryPlot(
+    graph.plot,
+    graph.presentIndex
+  )
+
+  const datasets: ChartDataset<"line", ChartPoint[]>[] = [
     {
       label: graph.metric,
-      data: graph.plot,
+      data: solidPlot,
       borderColor: PRIMARY_STROKE,
       backgroundColor: (context) => {
         const ctx = context.chart.ctx
@@ -437,30 +461,47 @@ function createChartData(graph: MainGraphPayload) {
       pointHoverBackgroundColor: "rgba(26, 26, 26, 0.7)",
       pointBorderColor: "transparent",
       pointHoverRadius: 3,
-      borderWidth: 1.5,
+      borderWidth: 2,
     },
   ]
+
+  if (dashedPlot) {
+    datasets.push({
+      label: `${graph.metric}-present`,
+      data: dashedPlot,
+      borderDash: [3, 3],
+      borderColor: PRIMARY_STROKE,
+      backgroundColor: (context) => {
+        const ctx = context.chart.ctx
+        const gradient = ctx.createLinearGradient(0, 0, 0, 300)
+        gradient.addColorStop(0, PRIMARY_FILL_START)
+        gradient.addColorStop(1, "rgba(26, 26, 26, 0)")
+        return gradient
+      },
+      tension: 0,
+      fill: true,
+      pointRadius: 0,
+      pointBackgroundColor: PRIMARY_STROKE,
+      pointHoverBackgroundColor: "rgba(26, 26, 26, 0.7)",
+      pointBorderColor: "transparent",
+      pointHoverRadius: 3,
+      borderWidth: 2,
+    })
+  }
 
   if (graph.comparisonPlot) {
     datasets.push({
       label: "Comparison",
       data: graph.comparisonPlot,
-      borderDash: [5, 4],
       borderColor: COMP_STROKE,
-      backgroundColor: (context) => {
-        const ctx = context.chart.ctx
-        const gradient = ctx.createLinearGradient(0, 0, 0, 300)
-        gradient.addColorStop(0, COMP_FILL_START)
-        gradient.addColorStop(1, "rgba(128, 128, 128, 0)")
-        return gradient
-      },
+      backgroundColor: "transparent",
       tension: 0,
       pointRadius: 0,
       pointBackgroundColor: COMP_POINT,
       pointHoverBackgroundColor: COMP_POINT_HOVER,
       pointBorderColor: "transparent",
       pointHoverRadius: 3,
-      fill: true,
+      fill: false,
       borderWidth: 2,
       yAxisID: "y", // Use same y-axis
     })
@@ -481,13 +522,18 @@ function createChartOptions(
     visitors: "Visitors",
     visits: "Visits",
     pageviews: "Pageviews",
+    events: "Conversions",
     views_per_visit: "Views per visit",
     bounce_rate: "Bounce rate",
     visit_duration: "Visit duration",
+    conversion_rate: "Conversion rate",
+    scroll_depth: "Scroll depth",
+    time_on_page: "Time on page",
   }
   const metricFormatter = (val: number): string => {
     const m = graph.metric
-    if (m === "visit_duration") return durationFormatter(val)
+    if (m === "visit_duration" || m === "time_on_page")
+      return durationFormatter(val)
     if (m === "bounce_rate" || m === "conversion_rate" || m === "scroll_depth")
       return `${val.toFixed(2)}%`
     if (m === "views_per_visit") return val.toFixed(2)
@@ -569,10 +615,19 @@ function createChartOptions(
       : "oklch(0.637 0.237 25.331)"
 
     // Colors based on datasets
-    const ds = chart.config.data.datasets || []
-    const primaryColor = (ds[0]?.borderColor as string) || "rgba(26, 26, 26, 1)"
+    const ds = (chart.config.data.datasets || []) as ChartDataset<
+      "line",
+      ChartPoint[]
+    >[]
+    const primaryDataset =
+      ds.find((dataset) => dataset.label !== "Comparison") ?? ds[0]
+    const comparisonDataset = ds.find(
+      (dataset) => dataset.label === "Comparison"
+    )
+    const primaryColor =
+      (primaryDataset?.borderColor as string) || "rgba(26, 26, 26, 1)"
     const compColor =
-      (ds[1]?.borderColor as string) || "rgba(128, 128, 128, 0.75)"
+      (comparisonDataset?.borderColor as string) || "rgba(128, 128, 128, 0.75)"
 
     const primaryValStr = metricFormatter(currentVal)
     const compValStr =
@@ -822,18 +877,25 @@ function TopStatsGrid({
             ) : null}
           </>
         ) : null}
-        {!showComparison && stat.change != null ? (
-          <span
-            className={`inline-flex items-center gap-1 text-xs font-medium ${
-              stat.change >= 0
-                ? "text-emerald-600 dark:text-emerald-400"
-                : "text-rose-600 dark:text-rose-400"
-            }`}
-          >
-            {stat.change >= 0 ? "▲" : "▼"}{" "}
-            {Math.round(Math.abs(stat.change) * 1000) / 10}%
-          </span>
-        ) : null}
+        {(() => {
+          if (showComparison || stat.change == null) return null
+
+          const direction = topStatChangeDirection(stat.change)
+          const tone = topStatChangeTone(stat.graphMetric, stat.change)
+
+          return (
+            <span
+              className={`inline-flex items-center gap-1 text-xs font-medium ${
+                tone === "good"
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : "text-rose-600 dark:text-rose-400"
+              }`}
+            >
+              {direction === "up" ? "▲ " : direction === "down" ? "▼ " : ""}
+              {formatTopStatChangeValue(stat.change)}
+            </span>
+          )
+        })()}
       </button>
     )
   })
@@ -905,11 +967,13 @@ function formatTopStatValue(stat: TopStat) {
     case "conversion_rate":
     case "scroll_depth":
       return `${value.toFixed(2)}%`
+    case "time_on_page":
     case "visit_duration":
       return durationFormatter(value)
     case "views_per_visit":
       return value.toFixed(2)
     case "visitors":
+    case "events":
     case "visits":
     case "pageviews":
       return numberShortFormatter(value)
@@ -1000,30 +1064,7 @@ type IntervalPickerProps = {
 function IntervalPicker({ interval, onChange }: IntervalPickerProps) {
   // Determine allowed options similar to Plausible
   const { query } = useQueryContext()
-  const options = (() => {
-    switch (query.period) {
-      case "realtime":
-        return ["minute"]
-      case "day":
-        return ["minute", "hour"]
-      case "7d":
-        return ["hour", "day"]
-      case "28d":
-      case "30d":
-        return ["day", "week"]
-      case "91d":
-        return ["day", "week", "month"]
-      case "month":
-        return ["day", "week"]
-      case "12mo":
-      case "year":
-      case "all":
-      case "custom":
-        return ["day", "week", "month"]
-      default:
-        return ["day"]
-    }
-  })()
+  const options = availableIntervalsForPeriod(query.period)
 
   const currentLabel = INTERVAL_LABELS[interval] || interval
 
@@ -1031,7 +1072,7 @@ function IntervalPicker({ interval, onChange }: IntervalPickerProps) {
     <DropdownMenu>
       <DropdownMenuTrigger className="inline-flex h-7 items-center gap-1 text-sm font-medium text-primary underline-offset-4 hover:underline">
         {currentLabel}
-        <ChevronDown className="ml-1 h-4 w-4" />
+        <ChevronDown className="ml-1 size-4" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {options.map((opt) => (

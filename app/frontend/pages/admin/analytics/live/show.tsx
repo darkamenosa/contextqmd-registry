@@ -328,7 +328,7 @@ export default function LiveAnalytics({
                     {(query.trim().length === 1 ||
                       isSearching ||
                       suggestions.length > 0) && (
-                      <div className="absolute z-20 mt-1 w-full overflow-hidden rounded border border-border bg-card text-sm shadow-lg">
+                      <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-sm border border-border bg-card text-sm shadow-lg">
                         {query.trim().length === 1 ? (
                           <div className="px-3 py-2 text-muted-foreground">
                             Type one more character…
@@ -457,7 +457,7 @@ export default function LiveAnalytics({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-8 border border-border bg-card/80 text-foreground backdrop-blur-sm"
+                  className="size-8 border border-border bg-card/80 text-foreground backdrop-blur-xs"
                   onClick={toggleCardsVisibility}
                 >
                   <EyeOff className="size-4" />
@@ -524,7 +524,7 @@ export default function LiveAnalytics({
                   (isSearching ||
                     suggestions.length > 0 ||
                     (query && query.trim().length === 1)) && (
-                    <div className="absolute z-20 mt-2 w-[22rem] overflow-hidden rounded border border-border bg-card text-sm shadow-lg">
+                    <div className="absolute z-20 mt-2 w-[22rem] overflow-hidden rounded-sm border border-border bg-card text-sm shadow-lg">
                       {query.trim().length === 1 ? (
                         <div className="px-3 py-2 text-muted-foreground">
                           Type one more character…
@@ -554,7 +554,7 @@ export default function LiveAnalytics({
               <Button
                 variant="ghost"
                 size="icon"
-                className="border border-border bg-card/80 text-foreground backdrop-blur-sm"
+                className="border border-border bg-card/80 text-foreground backdrop-blur-xs"
                 onClick={toggleCardsVisibility}
                 aria-pressed={areCardsVisible}
               >
@@ -572,7 +572,7 @@ export default function LiveAnalytics({
               <Button
                 variant="ghost"
                 size="icon"
-                className="border border-border bg-card/80 text-foreground backdrop-blur-sm"
+                className="border border-border bg-card/80 text-foreground backdrop-blur-xs"
                 onClick={toggleFullscreen}
               >
                 {isFullscreen ? (

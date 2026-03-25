@@ -16,7 +16,7 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
       end
 
       assert_response :success
-      assert_includes response.body, "\"visitDurationMinutes\":240"
+      assert_includes response.body, "\"visitDurationMinutes\":30"
       assert_includes response.body, "\"trackVisits\":false"
       assert_includes response.body, "\"useBeaconForEvents\":false"
       assert_includes response.body, "\"useCookies\":false"

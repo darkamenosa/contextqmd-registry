@@ -174,7 +174,7 @@ export default function DateRangePicker({
     <Popover open={open} onOpenChange={handleOpenChange} modal>
       <PopoverTrigger
         ref={buttonRef}
-        className="pointer-events-none h-9 w-0 opacity-0 outline-none"
+        className="pointer-events-none h-9 w-0 opacity-0 outline-hidden"
         tabIndex={-1}
         aria-hidden="true"
       />

@@ -1,8 +1,21 @@
 require Rails.root.join("lib/client_ip")
 require Rails.root.join("lib/analytics_anonymous_identity")
+require Rails.root.join("lib/analytics_visit_boundary")
 
 module AhoyServerOwnedIdentity
   private
+    def visit_token_helper
+      return super if Ahoy.cookies?
+
+      @visit_token_helper ||= begin
+        if AnalyticsVisitBoundary.force_new_visit?(request)
+          generate_id unless Ahoy.api_only
+        else
+          super()
+        end
+      end
+    end
+
     def existing_visit_token
       return super if Ahoy.cookies?
 
@@ -27,6 +40,7 @@ module AhoyServerOwnedIdentity
 end
 
 Ahoy::Tracker.prepend(AhoyServerOwnedIdentity)
+Ahoy.user_method = :current_identity
 
 class Ahoy::Store < Ahoy::DatabaseStore
   def visit_columns
@@ -38,11 +52,15 @@ class Ahoy::Store < Ahoy::DatabaseStore
       if ahoy.send(:existing_visit_token) || ahoy.instance_variable_get(:@visit_token)
         @visit = visit_model.where(visit_token: ahoy.visit_token).take if ahoy.visit_token
       elsif !Ahoy.cookies?
-        @visit = visit_model
-          .where(visitor_token: anonymous_visitor_tokens)
-          .where(started_at: Ahoy.visit_duration.ago..)
-          .order(started_at: :desc)
-          .first
+        @visit = if force_new_visit_boundary?
+          nil
+        else
+          visit_model
+            .where(visitor_token: anonymous_visitor_tokens)
+            .where(started_at: Ahoy.visit_duration.ago..)
+            .order(started_at: :desc)
+            .first
+        end
       else
         @visit = nil
       end
@@ -111,6 +129,7 @@ class Ahoy::Store < Ahoy::DatabaseStore
     end
 
     result = super(attrs)
+    AnalyticsVisitBoundary.consume_force_new_visit!(req) if req
 
     # Post-create cleanup
     begin
@@ -125,6 +144,8 @@ class Ahoy::Store < Ahoy::DatabaseStore
         if local_host?(v.referring_domain) || same_site_host?(v.referring_domain, site_host)
           v.update_columns(referrer: nil, referring_domain: nil)
         end
+        v.reload
+        v.refresh_source_dimensions!
       end
     rescue StandardError
       # never block tracking
@@ -135,6 +156,11 @@ class Ahoy::Store < Ahoy::DatabaseStore
 
   def track_event(data)
     data = data.with_indifferent_access
+
+    # Plausible-style engagement only extends an active session. It should not
+    # open a brand new visit on its own after the session window has expired.
+    return nil if data[:name].to_s == "engagement" && visit.nil?
+
     result = super(data)
 
     # Extract screen_size from viewport string
@@ -166,7 +192,11 @@ class Ahoy::Store < Ahoy::DatabaseStore
       if visit && url.present?
         lp = visit.landing_page.to_s
         needs_fix = lp.blank? || internal_path?(lp)
-        visit.update_column(:landing_page, url) if needs_fix
+        if needs_fix
+          visit.update_column(:landing_page, url)
+          visit.reload
+          visit.refresh_source_dimensions!
+        end
       end
     rescue StandardError
       # never block ingestion
@@ -229,6 +259,10 @@ class Ahoy::Store < Ahoy::DatabaseStore
     def anonymous_visitor_tokens
       tokens = AnalyticsAnonymousIdentity.tokens(request)
       tokens.presence || [ ahoy.visitor_token ].compact
+    end
+
+    def force_new_visit_boundary?
+      request.present? && AnalyticsVisitBoundary.force_new_visit?(request)
     end
 end
 

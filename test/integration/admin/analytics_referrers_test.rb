@@ -9,6 +9,7 @@ class Admin::AnalyticsReferrersTest < ActionDispatch::IntegrationTest
     Ahoy::Event.delete_all
     Ahoy::Visit.delete_all
     AnalyticsSetting.delete_all
+    Goal.delete_all
   end
 
   test "google referrer alias requires gsc configuration" do

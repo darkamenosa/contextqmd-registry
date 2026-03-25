@@ -42,7 +42,7 @@ class DocsFetcher::Website::NodeRunnerTest < ActiveSupport::TestCase
         output_path: input.output_path
       }));
     JAVASCRIPT
-    proxy_lease = build_proxy_lease
+    proxy_lease = build_proxy_lease(nil)
     checkout_options = nil
     progress_events = []
     crawl_request = Struct.new(:url, :library_id, :library, :metadata).new(
@@ -254,7 +254,7 @@ class DocsFetcher::Website::NodeRunnerTest < ActiveSupport::TestCase
 
   test "fetch deduplicates redirected canonical urls during crawl" do
     runner = DocsFetcher::Website::NodeRunner.new
-    proxy_lease = build_proxy_lease
+    proxy_lease = build_proxy_lease(nil)
     hits = Hash.new(0)
 
     with_test_server do |base_url|
@@ -350,13 +350,15 @@ class DocsFetcher::Website::NodeRunnerTest < ActiveSupport::TestCase
       path
     end
 
-    def build_proxy_lease
-      proxy_config = Struct.new(:bypass) do
+    def build_proxy_config(bypass: nil)
+      Struct.new(:bypass) do
         def to_uri
           URI("http://proxy-user:proxy-pass@proxy.example.com:8080")
         end
-      end.new(nil)
+      end.new(bypass)
+    end
 
+    def build_proxy_lease(proxy_config = build_proxy_config)
       Struct.new(:crawl_proxy_config, :successes, :failures, :releases) do
         def record_success(target_host: nil)
           successes << target_host

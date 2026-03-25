@@ -6,6 +6,7 @@ module Ahoy::Visit::Ranges
     # Accepts optional query for date/from/to parameters.
     def range_and_interval_for(period, requested_interval = nil, query = nil)
       now = Time.zone.now
+      range_override = query && query[:range_override]
 
       parse_time = lambda do |str|
         Time.zone.parse(str.to_s)
@@ -122,6 +123,7 @@ module Ahoy::Visit::Ranges
 
       interval = requested_interval.to_s.presence
       interval = default unless interval && allowed.include?(interval)
+      range = range_override if range_override.is_a?(Range)
       [ range, interval ]
     end
 
@@ -130,11 +132,12 @@ module Ahoy::Visit::Ranges
       return range unless %w[day month year].include?(period.to_s)
       return range if comparison.present? && period.to_s == "day"
 
-      today = Time.zone.today
+      now = Time.zone.now
+      today = now.to_date
       case period.to_s
       when "day"
         if range.begin.to_date == today && range.end.to_date == today
-          return range.begin..Time.zone.now
+          return range.begin..now.end_of_hour
         end
       when "month"
         month_start = today.beginning_of_month
@@ -168,45 +171,81 @@ module Ahoy::Visit::Ranges
     def custom_compare_range(query)
       cf = query[:compare_from]
       ct = query[:compare_to]
-      return nil unless cf.present? && ct.present?
-      from = Time.zone.parse(cf.to_s)
-      to = Time.zone.parse(ct.to_s)
-      return nil unless from && to
 
-      from.beginning_of_day..to.end_of_day
+      if cf.present? && ct.present?
+        from = Time.zone.parse(cf.to_s)
+        to = Time.zone.parse(ct.to_s)
+
+        if from && to
+          from.beginning_of_day..to.end_of_day
+        end
+      end
     rescue ArgumentError, TypeError
       nil
     end
 
+    def comparison_range_for(query, source_range, effective_source_range: source_range)
+      case query[:comparison]
+      when "year_over_year"
+        range = Ahoy::Visit.year_over_year_range(source_range)
+        if ActiveModel::Type::Boolean.new.cast(query[:match_day_of_week])
+          range = Ahoy::Visit.align_comparison_weekday(range, source_range)
+        end
+        trim_comparison_range_to_source_progress(range, source_range, effective_source_range)
+      when "custom"
+        Ahoy::Visit.custom_compare_range(query)
+      when "previous_period"
+        range = Ahoy::Visit.previous_range(source_range)
+        if ActiveModel::Type::Boolean.new.cast(query[:match_day_of_week])
+          range = Ahoy::Visit.align_comparison_weekday(range, source_range)
+        end
+        trim_comparison_range_to_source_progress(range, source_range, effective_source_range)
+      end
+    end
+
     # When enabled, adjust the comparison range to start on the same weekday as the source range.
     def align_comparison_weekday(comparison_range, source_range)
-      return comparison_range unless comparison_range && source_range
-      source_first = source_range.begin.to_date
-      comp_first   = comparison_range.begin.to_date
+      if comparison_range && source_range
+        source_first = source_range.begin.to_date
+        comp_first   = comparison_range.begin.to_date
 
-      target_wday = source_first.wday # 0..6 (Sun..Sat)
+        target_wday = source_first.wday # 0..6 (Sun..Sat)
 
-      return comparison_range if comp_first.wday == target_wday
+        if comp_first.wday == target_wday
+          comparison_range
+        else
+          next_occurring = begin
+            delta = (target_wday - comp_first.wday) % 7
+            delta = 7 if delta == 0
+            comp_first + delta
+          end
 
-      next_occurring = begin
-        delta = (target_wday - comp_first.wday) % 7
-        delta = 7 if delta == 0
-        comp_first + delta
+          prev_occurring = begin
+            delta = (comp_first.wday - target_wday) % 7
+            delta = 7 if delta == 0
+            comp_first - delta
+          end
+
+          new_first_date = (next_occurring == source_first) ? prev_occurring : next_occurring
+          days_shifted = (new_first_date - comp_first).to_i
+          new_last_date = comparison_range.end.to_date + days_shifted
+
+          new_begin = Time.zone.parse(new_first_date.to_s).beginning_of_day
+          new_end   = Time.zone.parse(new_last_date.to_s).end_of_day
+          new_begin..new_end
+        end
+      else
+        comparison_range
       end
+    end
 
-      prev_occurring = begin
-        delta = (comp_first.wday - target_wday) % 7
-        delta = 7 if delta == 0
-        comp_first - delta
-      end
+    def trim_comparison_range_to_source_progress(comparison_range, source_range, effective_source_range)
+      return comparison_range unless comparison_range && source_range && effective_source_range
+      return comparison_range unless effective_source_range.end < source_range.end
 
-      new_first_date = (next_occurring == source_first) ? prev_occurring : next_occurring
-      days_shifted = (new_first_date - comp_first).to_i
-      new_last_date = comparison_range.end.to_date + days_shifted
-
-      new_begin = Time.zone.parse(new_first_date.to_s).beginning_of_day
-      new_end   = Time.zone.parse(new_last_date.to_s).end_of_day
-      new_begin..new_end
+      elapsed = effective_source_range.end - source_range.begin
+      adjusted_end = comparison_range.begin + elapsed
+      comparison_range.begin..[ adjusted_end, comparison_range.end ].min
     end
 
     # Build SQL for time bucketing in the app (site) timezone, then convert back to UTC.

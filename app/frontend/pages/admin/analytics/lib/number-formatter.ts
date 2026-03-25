@@ -87,14 +87,29 @@ export function durationFormatter(duration: number): string {
 }
 
 /**
- * Formats percentage values.
- * Backend returns decimals (0.45), we convert to whole numbers (45%)
- * Example: 0.45 → "45%", 0.123 → "12.3%"
+ * Formats percentage values already expressed on a 0-100 scale.
+ * Example: 45 → "45%", 12.34 → "12.3%"
  */
 export function percentageFormatter(value: number | null): string {
   if (value == null || Number.isNaN(value as number)) return "-"
-  const num = Number(value)
-  // Accept both decimal fractions (0.0645) and percent values (6.45)
-  const pct = num <= 1 ? Math.round(num * 1000) / 10 : Math.round(num * 10) / 10
-  return `${pct}%`
+  return formatPercentValue(Number(value))
+}
+
+/**
+ * Formats decimal fractions as percentages.
+ * Example: 0.45 → "45%", 0.123 → "12.3%"
+ */
+export function fractionPercentageFormatter(value: number | null): string {
+  if (value == null || Number.isNaN(value as number)) return "-"
+  return formatPercentValue(Number(value) * 100)
+}
+
+function formatPercentValue(value: number): string {
+  if (value >= 100 || Number.isInteger(value)) {
+    return `${Math.round(value)}%`
+  }
+  if (value >= 10) {
+    return `${value.toFixed(1).replace(/\.0$/, "")}%`
+  }
+  return `${value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "")}%`
 }

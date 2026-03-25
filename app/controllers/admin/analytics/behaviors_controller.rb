@@ -6,7 +6,7 @@ module Admin
       def index
         limit, page = parsed_pagination
         search = normalized_search
-        payload = cache_for([ :behaviors, @query[:mode], @query[:funnel], limit, page, search, params[:order_by] ]) do
+        payload = cache_for([ :behaviors, @query[:mode], @query[:funnel], @query[:property], limit, page, search, params[:order_by] ]) do
           behaviors_payload(@query, limit:, page:, search:)
         end
         render json: camelize_keys(payload)

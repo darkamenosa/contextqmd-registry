@@ -1,32 +1,7 @@
-const GRAPH_SEARCH_PARAMS = {
-  metric: "graph_metric",
-  interval: "graph_interval",
-} as const
-
 const BEHAVIORS_SEARCH_PARAMS = {
   funnel: "behaviors_funnel",
   property: "behaviors_property",
 } as const
-
-const PANEL_MODE_DEFAULTS = {
-  sources_mode: "all",
-  pages_mode: "pages",
-  locations_mode: "map",
-  devices_mode: "browsers",
-} as const
-
-const GRAPH_DEFAULT_INTERVALS: Record<string, string> = {
-  realtime: "minute",
-  day: "hour",
-  "7d": "day",
-  "28d": "day",
-  "30d": "day",
-  "91d": "day",
-  month: "day",
-  "6mo": "month",
-  "12mo": "month",
-  year: "month",
-}
 
 type HistoryMode = "push" | "replace"
 
@@ -41,11 +16,36 @@ function normalizeSearchValue(value: string | null | undefined) {
   return value
 }
 
-function hasFilterKey(params: URLSearchParams, key: string) {
-  return params.getAll("f").some((token) => {
-    const parts = token.split(",")
-    return parts[1] === key
-  })
+function hasFilterValue(params: URLSearchParams, dimension: string) {
+  return params
+    .getAll("f")
+    .some((entry) => entry.split(",", 3)[1] === dimension)
+}
+
+export function getGraphMetricFromSearch(
+  search: string,
+  legacyMetric?: string
+) {
+  const params = new URLSearchParams(search)
+  return (
+    normalizeSearchValue(params.get("graph_metric")) ??
+    normalizeSearchValue(params.get("metric")) ??
+    normalizeSearchValue(legacyMetric) ??
+    null
+  )
+}
+
+export function getGraphIntervalFromSearch(
+  search: string,
+  legacyInterval?: string
+) {
+  const params = new URLSearchParams(search)
+  return (
+    normalizeSearchValue(params.get("graph_interval")) ??
+    normalizeSearchValue(params.get("interval")) ??
+    normalizeSearchValue(legacyInterval) ??
+    null
+  )
 }
 
 export function canonicalizeDashboardSearchParams(
@@ -61,6 +61,7 @@ export function canonicalizeDashboardSearchParams(
   params.delete("mode")
   params.delete("funnel")
   params.delete("dialog")
+  params.delete("graph_interval")
 
   const period = params.get("period") ?? "day"
   if (period === "day") {
@@ -71,40 +72,33 @@ export function canonicalizeDashboardSearchParams(
     params.delete("with_imported")
   }
 
-  const graphMetric = normalizeSearchValue(
-    params.get(GRAPH_SEARCH_PARAMS.metric)
-  )
-  if (graphMetric === "visitors") {
-    params.delete(GRAPH_SEARCH_PARAMS.metric)
-  }
-
-  const defaultGraphInterval = GRAPH_DEFAULT_INTERVALS[period]
-  const graphInterval = normalizeSearchValue(
-    params.get(GRAPH_SEARCH_PARAMS.interval)
-  )
-  if (graphInterval && defaultGraphInterval === graphInterval) {
-    params.delete(GRAPH_SEARCH_PARAMS.interval)
-  }
-
-  for (const [key, value] of Object.entries(PANEL_MODE_DEFAULTS)) {
-    if (
-      key === "sources_mode" &&
-      value === "all" &&
-      hasFilterKey(params, "channel")
-    ) {
-      continue
-    }
-    if (params.get(key) === value) {
-      params.delete(key)
-    }
-  }
-
   const behaviorsMode = normalizeSearchValue(params.get("behaviors_mode"))
   if (behaviorsMode !== "props") {
     params.delete(BEHAVIORS_SEARCH_PARAMS.property)
   }
   if (behaviorsMode !== "funnels") {
     params.delete(BEHAVIORS_SEARCH_PARAMS.funnel)
+  }
+
+  if (normalizeSearchValue(params.get("pages_mode")) === "pages") {
+    params.delete("pages_mode")
+  }
+
+  if (normalizeSearchValue(params.get("locations_mode")) === "map") {
+    params.delete("locations_mode")
+  }
+
+  if (normalizeSearchValue(params.get("devices_mode")) === "browsers") {
+    params.delete("devices_mode")
+  }
+
+  const sourcesMode = normalizeSearchValue(params.get("sources_mode"))
+  if (sourcesMode === "all" && !hasFilterValue(params, "channel")) {
+    params.delete("sources_mode")
+  }
+
+  if (sourcesMode === "channels" && !hasFilterValue(params, "channel")) {
+    params.delete("sources_mode")
   }
 
   return params
@@ -127,76 +121,6 @@ export function updateDashboardSearchParams(
   } else {
     window.history.pushState({}, "", url)
   }
-}
-
-export function getGraphMetricFromSearch(
-  search: string,
-  legacyMetric?: string
-) {
-  const params = new URLSearchParams(search)
-  return (
-    params.get(GRAPH_SEARCH_PARAMS.metric) ??
-    params.get("metric") ??
-    legacyMetric ??
-    null
-  )
-}
-
-export function getGraphIntervalFromSearch(
-  search: string,
-  legacyInterval?: string
-) {
-  const params = new URLSearchParams(search)
-  return (
-    params.get(GRAPH_SEARCH_PARAMS.interval) ??
-    params.get("interval") ??
-    legacyInterval ??
-    null
-  )
-}
-
-export function setGraphMetricSearchParam(
-  params: URLSearchParams,
-  metric: string
-) {
-  params.set(GRAPH_SEARCH_PARAMS.metric, metric)
-  return params
-}
-
-export function setGraphIntervalSearchParam(
-  params: URLSearchParams,
-  interval: string
-) {
-  params.set(GRAPH_SEARCH_PARAMS.interval, interval)
-  return params
-}
-
-export function syncGraphMetricInUrl(
-  metric: string,
-  options?: UpdateSearchOptions
-) {
-  updateDashboardSearchParams((params) => {
-    setGraphMetricSearchParam(params, metric)
-  }, options)
-}
-
-export function syncGraphIntervalInUrl(
-  interval: string,
-  options?: UpdateSearchOptions
-) {
-  updateDashboardSearchParams((params) => {
-    setGraphIntervalSearchParam(params, interval)
-  }, options)
-}
-
-export function syncGraphControlsInUrl(
-  graph: { metric: string; interval: string },
-  options?: UpdateSearchOptions
-) {
-  updateDashboardSearchParams((params) => {
-    setGraphMetricSearchParam(params, graph.metric)
-    setGraphIntervalSearchParam(params, graph.interval)
-  }, options)
 }
 
 export function getBehaviorsFunnelFromSearch(

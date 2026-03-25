@@ -59,6 +59,7 @@ module Authentication
       if authenticated? && !Current.identity.active_for_authentication?
         inactive_message = Current.identity.inactive_message
         clear_stored_location_for(:identity)
+        AnalyticsVisitBoundary.mark_sign_out!(session: session, identity_id: Current.identity.id)
         sign_out(:identity)
         Current.reset
         redirect_to new_identity_session_path, alert: I18n.t("devise.failure.#{inactive_message}")

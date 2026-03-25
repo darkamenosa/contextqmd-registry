@@ -5,8 +5,11 @@ module Ahoy::Visit::Locations
     def locations_payload(query, limit: nil, page: nil, search: nil, order_by: nil)
       mode = query[:mode] || "map"
       filters = query[:filters] || {}
+      advanced_filters = query[:advanced_filters] || []
+      comparison_names = Ahoy::Visit.comparison_names_filter(query)
+      comparison_codes = Ahoy::Visit.comparison_codes_filter(query)
       range, = Ahoy::Visit.range_and_interval_for(query[:period], nil, query)
-      visits = Ahoy::Visit.scoped_visits(range, filters)
+      visits = Ahoy::Visit.scoped_visits(range, filters, advanced_filters: advanced_filters)
       goal = filters["goal"].presence
 
       case mode
@@ -21,10 +24,18 @@ module Ahoy::Visit::Locations
           rel = rel.where("LOWER(COALESCE(country, '(unknown)')) LIKE ?", pattern) if pattern.present?
           grouped_visit_ids = rel.group(Arel.sql(expr)).pluck(Arel.sql("#{expr}, ARRAY_AGG(ahoy_visits.id)")).to_h
           counts = Ahoy::Visit.unique_counts_from_grouped_visit_ids(grouped_visit_ids, visits)
-          total = counts.values.sum.nonzero? || 1
+          filter_location_groups!(
+            "countries",
+            grouped_visit_ids,
+            counts,
+            comparison_names,
+            comparison_codes
+          )
+          total = Ahoy::Visit.percentage_total_visitors(visits)
 
           if goal.present?
-            conversions, cr = Ahoy::Visit.conversions_and_rates(grouped_visit_ids, visits, range, filters, goal)
+            denominator_counts = goal_denominator_counts_for_locations(query, mode: mode, search: search)
+            conversions, cr = Ahoy::Visit.conversions_and_rates(grouped_visit_ids, visits, range, filters, goal, advanced_filters: advanced_filters, denominator_counts: denominator_counts)
             sorted_names = Ahoy::Visit.order_names_with_conversions(conversions: conversions, cr: cr, order_by: order_by)
 
             paged_names, has_more = Ahoy::Visit.paginate_names(sorted_names, limit: limit, page: page)
@@ -37,7 +48,7 @@ module Ahoy::Visit::Locations
               else
                 "(unknown)"
               end
-              { name: name, code: code_str != "(unknown)" ? code_str : nil, visitors: conversions[code] || 0, conversion_rate: cr[code] }.compact
+              { name: name, code: code_str != "(unknown)" ? code_str : nil, visitors: conversions[code] || 0, conversion_rate: Ahoy::Visit.goal_conversion_rate(conversions[code] || 0, denominator_counts[name]) }.compact
             end
             { results: items, metrics: %i[visitors conversion_rate], meta: { has_more: has_more, skip_imported_reason: Ahoy::Visit.skip_imported_reason(query), metric_labels: { visitors: "Conversions", conversionRate: "Conversion Rate" } } }
           else
@@ -67,21 +78,22 @@ module Ahoy::Visit::Locations
           end
         else
           counts = visits.group(:country).count("DISTINCT visitor_token")
+          total = Ahoy::Visit.percentage_total_visitors(visits)
           items = counts.map do |code, v|
             code_str = code.to_s
             if code_str.present?
               c = ::ISO3166::Country.new(code_str.upcase)
               if c
-                { name: short_country_name(c), code: c.alpha2, visitors: v }
+                { name: short_country_name(c), code: c.alpha2, visitors: v, percentage: (v.to_f / total).round(3) }
               else
-                { name: code_str, visitors: v }
+                { name: code_str, visitors: v, percentage: (v.to_f / total).round(3) }
               end
             else
-              { name: "(unknown)", visitors: v }
+              { name: "(unknown)", visitors: v, percentage: (v.to_f / total).round(3) }
             end
           end
           items = items.sort_by { |it| [ -it[:visitors].to_i, it[:name].to_s ] }
-          { results: items, metrics: %i[visitors], meta: { has_more: false, skip_imported_reason: Ahoy::Visit.skip_imported_reason(query) } }
+          { results: items, metrics: %i[visitors percentage], meta: { has_more: false, skip_imported_reason: Ahoy::Visit.skip_imported_reason(query), metric_labels: { percentage: "Percentage" } } }
         end
       when "regions"
         if limit && page
@@ -91,30 +103,47 @@ module Ahoy::Visit::Locations
           rel = rel.where("LOWER(COALESCE(region, '(unknown)')) LIKE ?", pattern) if pattern.present?
           grouped_visit_ids = rel.group(Arel.sql(expr)).pluck(Arel.sql("#{expr}, ARRAY_AGG(ahoy_visits.id)")).to_h
           counts = Ahoy::Visit.unique_counts_from_grouped_visit_ids(grouped_visit_ids, visits)
+          filter_location_groups!(
+            "regions",
+            grouped_visit_ids,
+            counts,
+            comparison_names,
+            comparison_codes
+          )
+          total = Ahoy::Visit.percentage_total_visitors(visits)
 
           if goal.present?
-            conversions, cr = Ahoy::Visit.conversions_and_rates(grouped_visit_ids, visits, range, filters, goal)
+            denominator_counts = goal_denominator_counts_for_locations(query, mode: mode, search: search)
+            conversions, cr = Ahoy::Visit.conversions_and_rates(grouped_visit_ids, visits, range, filters, goal, advanced_filters: advanced_filters, denominator_counts: denominator_counts)
             sorted_names = Ahoy::Visit.order_names_with_conversions(conversions: conversions, cr: cr, order_by: order_by)
 
             paged_names, has_more = Ahoy::Visit.paginate_names(sorted_names, limit: limit, page: page)
             flags_by_region = country_flags_for_grouped(grouped_visit_ids.slice(*paged_names), visits, :region, filters)
             results = paged_names.map do |name|
-              { name: name.to_s.presence || "(none)", visitors: conversions[name] || 0, conversion_rate: cr[name], country_flag: flags_by_region[name] }.compact
+              label = name.to_s.presence || "(none)"
+              { name: label, visitors: conversions[name] || 0, conversion_rate: Ahoy::Visit.goal_conversion_rate(conversions[name] || 0, denominator_counts[label]), country_flag: flags_by_region[name] }.compact
             end
             { results: results, metrics: %i[visitors conversion_rate], meta: { has_more: has_more, skip_imported_reason: Ahoy::Visit.skip_imported_reason(query), metric_labels: { visitors: "Conversions", conversionRate: "Conversion Rate" } } }
           else
-            sorted_names = Ahoy::Visit.order_names(counts: counts, metrics_map: {}, order_by: order_by)
+            metrics_map =
+              if order_by&.first == "percentage"
+                counts.keys.index_with { |name| { percentage: (counts[name].to_f / total) } }
+              else
+                {}
+              end
+            sorted_names = Ahoy::Visit.order_names(counts: counts, metrics_map: metrics_map, order_by: order_by)
 
             paged_names, has_more = Ahoy::Visit.paginate_names(sorted_names, limit: limit, page: page)
             flags_by_region = country_flags_for_grouped(grouped_visit_ids.slice(*paged_names), visits, :region, filters)
             results = paged_names.map do |name|
               v = counts[name]
-              { name: name.to_s.presence || "(none)", visitors: v, country_flag: flags_by_region[name] }.compact
+              { name: name.to_s.presence || "(none)", visitors: v, percentage: (v.to_f / total).round(3), country_flag: flags_by_region[name] }.compact
             end
-            { results: results, metrics: %i[visitors], meta: { has_more: has_more, skip_imported_reason: Ahoy::Visit.skip_imported_reason(query) } }
+            { results: results, metrics: %i[visitors percentage], meta: { has_more: has_more, skip_imported_reason: Ahoy::Visit.skip_imported_reason(query), metric_labels: { percentage: "Percentage" } } }
           end
         else
           counts = visits.group(:region).count("DISTINCT visitor_token")
+          total = Ahoy::Visit.percentage_total_visitors(visits)
           flags_by_region = if filters[:country].present?
             code = filters[:country].to_s.upcase
             flag = emoji_flag_for(code)
@@ -134,11 +163,11 @@ module Ahoy::Visit::Locations
 
           rows = counts.sort_by { |_, v| -v.to_i }.map do |(name, v)|
             label = name.to_s.presence || "(unknown)"
-            h = { name: label, visitors: v }
+            h = { name: label, visitors: v, percentage: (v.to_f / total).round(3) }
             flag = flags_by_region[name]
             flag.present? ? h.merge(country_flag: flag) : h
           end
-          { results: rows, metrics: %i[visitors], meta: { has_more: false, skip_imported_reason: Ahoy::Visit.skip_imported_reason(query) } }
+          { results: rows, metrics: %i[visitors percentage], meta: { has_more: false, skip_imported_reason: Ahoy::Visit.skip_imported_reason(query), metric_labels: { percentage: "Percentage" } } }
         end
       when "cities"
         if limit && page
@@ -148,30 +177,47 @@ module Ahoy::Visit::Locations
           rel = rel.where("LOWER(COALESCE(city, '(unknown)')) LIKE ?", pattern) if pattern.present?
           grouped_visit_ids = rel.group(Arel.sql(expr)).pluck(Arel.sql("#{expr}, ARRAY_AGG(ahoy_visits.id)")).to_h
           counts = Ahoy::Visit.unique_counts_from_grouped_visit_ids(grouped_visit_ids, visits)
+          filter_location_groups!(
+            "cities",
+            grouped_visit_ids,
+            counts,
+            comparison_names,
+            comparison_codes
+          )
+          total = Ahoy::Visit.percentage_total_visitors(visits)
 
           if goal.present?
-            conversions, cr = Ahoy::Visit.conversions_and_rates(grouped_visit_ids, visits, range, filters, goal)
+            denominator_counts = goal_denominator_counts_for_locations(query, mode: mode, search: search)
+            conversions, cr = Ahoy::Visit.conversions_and_rates(grouped_visit_ids, visits, range, filters, goal, advanced_filters: advanced_filters, denominator_counts: denominator_counts)
             sorted_names = Ahoy::Visit.order_names_with_conversions(conversions: conversions, cr: cr, order_by: order_by)
 
             paged_names, has_more = Ahoy::Visit.paginate_names(sorted_names, limit: limit, page: page)
             flags_by_city = country_flags_for_grouped(grouped_visit_ids.slice(*paged_names), visits, :city, filters)
             results = paged_names.map do |name|
-              { name: name.to_s.presence || "(none)", visitors: conversions[name] || 0, conversion_rate: cr[name], country_flag: flags_by_city[name] }.compact
+              label = name.to_s.presence || "(none)"
+              { name: label, visitors: conversions[name] || 0, conversion_rate: Ahoy::Visit.goal_conversion_rate(conversions[name] || 0, denominator_counts[label]), country_flag: flags_by_city[name] }.compact
             end
             { results: results, metrics: %i[visitors conversion_rate], meta: { has_more: has_more, skip_imported_reason: Ahoy::Visit.skip_imported_reason(query), metric_labels: { visitors: "Conversions", conversionRate: "Conversion Rate" } } }
           else
-            sorted_names = Ahoy::Visit.order_names(counts: counts, metrics_map: {}, order_by: order_by)
+            metrics_map =
+              if order_by&.first == "percentage"
+                counts.keys.index_with { |name| { percentage: (counts[name].to_f / total) } }
+              else
+                {}
+              end
+            sorted_names = Ahoy::Visit.order_names(counts: counts, metrics_map: metrics_map, order_by: order_by)
 
             paged_names, has_more = Ahoy::Visit.paginate_names(sorted_names, limit: limit, page: page)
             flags_by_city = country_flags_for_grouped(grouped_visit_ids.slice(*paged_names), visits, :city, filters)
             results = paged_names.map do |name|
               v = counts[name]
-              { name: name.to_s.presence || "(none)", visitors: v, country_flag: flags_by_city[name] }.compact
+              { name: name.to_s.presence || "(none)", visitors: v, percentage: (v.to_f / total).round(3), country_flag: flags_by_city[name] }.compact
             end
-            { results: results, metrics: %i[visitors], meta: { has_more: has_more, skip_imported_reason: Ahoy::Visit.skip_imported_reason(query) } }
+            { results: results, metrics: %i[visitors percentage], meta: { has_more: has_more, skip_imported_reason: Ahoy::Visit.skip_imported_reason(query), metric_labels: { percentage: "Percentage" } } }
           end
         else
           counts = visits.group(:city).count("DISTINCT visitor_token")
+          total = Ahoy::Visit.percentage_total_visitors(visits)
           flags_by_city = if filters[:country].present?
             code = filters[:country].to_s.upcase
             flag = emoji_flag_for(code)
@@ -191,11 +237,11 @@ module Ahoy::Visit::Locations
 
           rows = counts.sort_by { |_, v| -v.to_i }.map do |(name, v)|
             label = name.to_s.presence || "(unknown)"
-            h = { name: label, visitors: v }
+            h = { name: label, visitors: v, percentage: (v.to_f / total).round(3) }
             flag = flags_by_city[name]
             flag.present? ? h.merge(country_flag: flag) : h
           end
-          { results: rows, metrics: %i[visitors], meta: { has_more: false, skip_imported_reason: Ahoy::Visit.skip_imported_reason(query) } }
+          { results: rows, metrics: %i[visitors percentage], meta: { has_more: false, skip_imported_reason: Ahoy::Visit.skip_imported_reason(query), metric_labels: { percentage: "Percentage" } } }
         end
       else
         counts = visits.group(:country).count
@@ -232,20 +278,24 @@ module Ahoy::Visit::Locations
       return {} if grouped_visit_ids.blank?
       if filters[:country].present?
         flag = emoji_flag_for(filters[:country].to_s.upcase)
-        return grouped_visit_ids.keys.each_with_object({}) { |name, h| h[name] = flag }
-      end
-      all_ids = grouped_visit_ids.values.flatten.uniq
-      return {} if all_ids.empty?
-      pairs = visits_relation.where(id: all_ids).group(dimension, :country).count
-      best = {}
-      pairs.each do |(name, country), c|
-        next if name.blank?
-        prev = best[name]
-        if prev.nil? || c.to_i > prev[:count].to_i
-          best[name] = { country: country, count: c.to_i }
+        grouped_visit_ids.keys.each_with_object({}) { |name, h| h[name] = flag }
+      else
+        all_ids = grouped_visit_ids.values.flatten.uniq
+        if all_ids.empty?
+          {}
+        else
+          pairs = visits_relation.where(id: all_ids).group(dimension, :country).count
+          best = {}
+          pairs.each do |(name, country), c|
+            next if name.blank?
+            prev = best[name]
+            if prev.nil? || c.to_i > prev[:count].to_i
+              best[name] = { country: country, count: c.to_i }
+            end
+          end
+          best.transform_values { |v| emoji_flag_for(v[:country].to_s.upcase) }
         end
       end
-      best.transform_values { |v| emoji_flag_for(v[:country].to_s.upcase) }
     rescue
       {}
     end
@@ -271,6 +321,32 @@ module Ahoy::Visit::Locations
       else
         name
       end
+    end
+
+    def goal_denominator_counts_for_locations(query, mode:, search: nil)
+      base_query = Ahoy::Visit.query_without_goal_and_props(query).merge(mode: mode)
+      payload = locations_payload(base_query, search: search)
+      payload.fetch(:results, []).each_with_object({}) do |row, counts|
+        counts[row[:name].to_s] = row[:visitors].to_i
+        counts[row[:code].to_s] = row[:visitors].to_i if row[:code].present?
+      end
+    end
+
+    def filter_location_groups!(mode, grouped_visit_ids, counts, comparison_names, comparison_codes)
+      return if comparison_names.empty? && comparison_codes.empty?
+
+      matcher = lambda do |key|
+        if mode == "countries"
+          code = key.to_s.upcase
+          comparison_codes.include?(code) || comparison_names.include?(country_name_for(code))
+        else
+          label = key.to_s.presence || "(unknown)"
+          comparison_names.include?(label)
+        end
+      end
+
+      grouped_visit_ids.select! { |key, _| matcher.call(key) }
+      counts.select! { |key, _| matcher.call(key) }
     end
   end
 end

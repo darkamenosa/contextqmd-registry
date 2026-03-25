@@ -6,13 +6,8 @@ import {
   useRef,
   useState,
 } from "react"
+import { ArrowDown, Check, ChevronDown } from "lucide-react"
 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 
 import { fetchBehaviors } from "../api"
@@ -21,29 +16,31 @@ import {
   getBehaviorsPropertyFromSearch,
   setBehaviorsFunnelSearchParam,
   setBehaviorsPropertySearchParam,
-  syncBehaviorsFunnelInUrl,
-  syncBehaviorsPropertyInUrl,
 } from "../lib/dashboard-url-state"
 import {
   baseAnalyticsPath,
   buildDialogPath,
   parseDialogFromPath,
 } from "../lib/dialog-path"
+import { percentageFormatter } from "../lib/number-formatter"
 import {
   BEHAVIORS_MODES,
   getBehaviorsModeFromSearch,
-  hasPanelModeSearchParam,
   readStoredMode,
   setPanelModeSearchParam,
-  syncPanelModeInUrl,
 } from "../lib/panel-mode"
 import { useScopedQuery } from "../lib/query-scope"
 import { useQueryContext } from "../query-context"
 import { useSiteContext } from "../site-context"
-import type { BehaviorsPayload, ListMetricKey, ListPayload } from "../types"
+import type {
+  BehaviorsPayload,
+  ListItem,
+  ListMetricKey,
+  ListPayload,
+} from "../types"
 import DetailsButton from "./details-button"
-import { MetricTable } from "./list-table"
-import { PanelTab, PanelTabDropdown, PanelTabs } from "./panel-tabs"
+import { MetricTable, PanelEmptyState, PanelListSkeleton } from "./list-table"
+import { PanelTab, PanelTabs } from "./panel-tabs"
 import RemoteDetailsDialog from "./remote-details-dialog"
 
 const BEHAVIOR_TABS: Array<{ value: string; label: string }> = [
@@ -71,11 +68,6 @@ export default function BehaviorsPanel({ initialData }: BehaviorsPanelProps) {
   )
 
   const defaultMode = behaviourTabs[0]?.value ?? "props"
-  const initialMode = getBehaviorsModeFromSearch(
-    search,
-    query.mode,
-    site.hasGoals
-  )
   const queryMode = getBehaviorsModeFromSearch(
     search,
     query.mode,
@@ -90,6 +82,9 @@ export default function BehaviorsPanel({ initialData }: BehaviorsPanelProps) {
         : BEHAVIORS_MODES.filter((value) => value !== "conversions")
     )
   })
+  const [modeState, setModeState] = useState(
+    queryMode ?? preferredMode ?? defaultMode
+  )
   const [data, setData] = useState<BehaviorsPayload>(initialData)
   const [loading, setLoading] = useState(false)
   const selectedFunnelFromSearch = getBehaviorsFunnelFromSearch(
@@ -97,7 +92,12 @@ export default function BehaviorsPanel({ initialData }: BehaviorsPanelProps) {
     query.funnel
   )
   const selectedPropertyFromSearch = getBehaviorsPropertyFromSearch(search)
-  const mode = queryMode ?? preferredMode ?? defaultMode
+  const [selectedFunnelState, setSelectedFunnelState] = useState(
+    selectedFunnelFromSearch
+  )
+  const [selectedPropertyState, setSelectedPropertyState] = useState(
+    selectedPropertyFromSearch
+  )
   const { value: baseQuery } = useScopedQuery(query, {
     omitMode: true,
     omitMetric: true,
@@ -107,18 +107,22 @@ export default function BehaviorsPanel({ initialData }: BehaviorsPanelProps) {
     const parsed = parseDialogFromPath(pathname)
     return parsed.type === "segment" && parsed.segment === "behaviors"
   }, [pathname])
-  const hasExplicitModeParam = useMemo(
-    () => hasPanelModeSearchParam(search, "behaviors"),
-    [search]
-  )
+  const localMode = behaviourTabs.some((tab) => tab.value === modeState)
+    ? modeState
+    : (preferredMode ?? defaultMode)
+  const mode = detailsOpen && queryMode ? queryMode : localMode
   const availableFunnels = useMemo(
     () => ("funnels" in data ? data.funnels : []),
     [data]
   )
+  const routeSelectedFunnel = detailsOpen ? selectedFunnelFromSearch : null
+  const routeSelectedProperty = detailsOpen ? selectedPropertyFromSearch : null
   const selectedFunnel =
-    selectedFunnelFromSearch ??
+    routeSelectedFunnel ??
+    selectedFunnelState ??
     ("funnels" in data ? (data.active?.name ?? data.funnels[0]) : undefined)
-  const requestedFunnel = selectedFunnelFromSearch ?? undefined
+  const requestedFunnel =
+    routeSelectedFunnel ?? selectedFunnelState ?? undefined
   const listPayload: ListPayload | null = useMemo(() => {
     if ("list" in data) {
       return data.list
@@ -129,27 +133,40 @@ export default function BehaviorsPanel({ initialData }: BehaviorsPanelProps) {
     return null
   }, [data])
   const propertyOptions = useMemo(() => {
-    if (mode !== "props" || !listPayload) {
+    if (mode !== "props" || !("list" in data)) {
       return []
     }
-    return Array.from(
-      new Set(listPayload.results.map((item) => String(item.name ?? "")))
-    )
-  }, [listPayload, mode])
+    return Array.isArray(data.propertyKeys) ? data.propertyKeys : []
+  }, [data, mode])
   const activeProperty = useMemo(() => {
     if (mode !== "props") return null
     if (propertyOptions.length === 0) return null
-    return selectedPropertyFromSearch &&
-      propertyOptions.includes(selectedPropertyFromSearch)
-      ? selectedPropertyFromSearch
-      : propertyOptions[0]
-  }, [mode, propertyOptions, selectedPropertyFromSearch])
-  const initialRequestMode = initialMode ?? defaultMode
+    return routeSelectedProperty &&
+      propertyOptions.includes(routeSelectedProperty)
+      ? routeSelectedProperty
+      : selectedPropertyState && propertyOptions.includes(selectedPropertyState)
+        ? selectedPropertyState
+        : "list" in data &&
+            data.activeProperty &&
+            propertyOptions.includes(data.activeProperty)
+          ? data.activeProperty
+          : propertyOptions[0]
+  }, [
+    data,
+    mode,
+    propertyOptions,
+    routeSelectedProperty,
+    selectedPropertyState,
+  ])
+  const initialRequestMode = queryMode ?? defaultMode
   const initialRequestFunnel =
     selectedFunnelFromSearch ??
     ("funnels" in initialData
       ? (initialData.active?.name ?? initialData.funnels[0])
       : undefined)
+  const initialRequestProperty =
+    selectedPropertyState ??
+    ("list" in initialData ? (initialData.activeProperty ?? null) : null)
   const initialRequestKey = useMemo(
     () =>
       JSON.stringify([
@@ -157,41 +174,81 @@ export default function BehaviorsPanel({ initialData }: BehaviorsPanelProps) {
         initialRequestMode,
         initialRequestMode === "funnels"
           ? (initialRequestFunnel ?? null)
-          : null,
+          : initialRequestMode === "props"
+            ? (initialRequestProperty ?? null)
+            : null,
       ]),
-    [baseQuery, initialRequestFunnel, initialRequestMode]
+    [
+      baseQuery,
+      initialRequestFunnel,
+      initialRequestMode,
+      initialRequestProperty,
+    ]
   )
   const requestKey = useMemo(
     () =>
       JSON.stringify([
         baseQuery,
         mode,
-        mode === "funnels" ? (requestedFunnel ?? null) : null,
+        mode === "funnels"
+          ? (requestedFunnel ?? null)
+          : mode === "props"
+            ? (selectedPropertyState ?? null)
+            : null,
       ]),
-    [baseQuery, mode, requestedFunnel]
+    [baseQuery, mode, requestedFunnel, selectedPropertyState]
   )
   const lastRequestKeyRef = useRef(initialRequestKey)
 
   const setAndStoreMode = (value: string) => {
+    setModeState(value)
     setPreferredMode(value)
     if (typeof window !== "undefined") {
       localStorage.setItem(`${STORAGE_PREFIX}.${site.domain}`, value)
     }
-    syncPanelModeInUrl("behaviors", value)
   }
 
-  const selectFunnel = useCallback(
-    (value: string, options?: { history?: "push" | "replace" }) => {
-      syncBehaviorsFunnelInUrl(value, options)
+  const selectModeWithValue = useCallback(
+    (modeValue: string, value: string) => {
+      setModeState(modeValue)
+      setPreferredMode(modeValue)
+      if (modeValue === "funnels") {
+        setSelectedFunnelState(value)
+      }
+      if (modeValue === "props") {
+        setSelectedPropertyState(value)
+      }
+      if (typeof window !== "undefined") {
+        localStorage.setItem(`${STORAGE_PREFIX}.${site.domain}`, modeValue)
+      }
     },
-    []
+    [site.domain]
   )
 
-  const selectProperty = useCallback(
-    (value: string, options?: { history?: "push" | "replace" }) => {
-      syncBehaviorsPropertyInUrl(value, options)
+  const handleRowClick = useCallback(
+    (item: ListItem) => {
+      if (mode === "props") {
+        const propertyKey = activeProperty
+        if (!propertyKey) return
+        updateQuery((current) => ({
+          ...current,
+          filters: {
+            ...Object.fromEntries(
+              Object.entries(current.filters).filter(
+                ([key]) => !key.startsWith("prop:")
+              )
+            ),
+            [`prop:${propertyKey}`]: String(item.name),
+          },
+        }))
+      } else {
+        updateQuery((current) => ({
+          ...current,
+          filters: { ...current.filters, goal: String(item.name) },
+        }))
+      }
     },
-    []
+    [activeProperty, mode, updateQuery]
   )
 
   useEffect(() => {
@@ -202,7 +259,12 @@ export default function BehaviorsPanel({ initialData }: BehaviorsPanelProps) {
     startTransition(() => setLoading(true))
     fetchBehaviors(
       baseQuery,
-      { mode, funnel: requestedFunnel },
+      {
+        mode,
+        funnel: requestedFunnel,
+        property:
+          mode === "props" ? (selectedPropertyState ?? undefined) : undefined,
+      },
       controller.signal
     )
       .then((value) => {
@@ -216,11 +278,22 @@ export default function BehaviorsPanel({ initialData }: BehaviorsPanelProps) {
               resolvedFunnel,
             ])
           }
-          if (requestedFunnel && value.funnels.includes(requestedFunnel)) return
-          if (resolvedFunnel) {
-            selectFunnel(resolvedFunnel, { history: "replace" })
-          } else {
-            syncBehaviorsFunnelInUrl(null, { history: "replace" })
+          if (requestedFunnel && value.funnels.includes(requestedFunnel)) {
+            return
+          }
+          setSelectedFunnelState(resolvedFunnel ?? null)
+        } else if (mode === "props" && "list" in value) {
+          const resolvedProperty = value.activeProperty ?? null
+          if (resolvedProperty) {
+            lastRequestKeyRef.current = JSON.stringify([
+              baseQuery,
+              mode,
+              resolvedProperty,
+            ])
+          }
+          if (selectedPropertyState === resolvedProperty) return
+          if (resolvedProperty || selectedPropertyState) {
+            setSelectedPropertyState(resolvedProperty)
           }
         }
       })
@@ -230,13 +303,7 @@ export default function BehaviorsPanel({ initialData }: BehaviorsPanelProps) {
       .finally(() => setLoading(false))
 
     return () => controller.abort()
-  }, [baseQuery, mode, requestKey, requestedFunnel, selectFunnel])
-
-  useEffect(() => {
-    if (detailsOpen || hasExplicitModeParam) return
-    if (mode === defaultMode) return
-    syncPanelModeInUrl("behaviors", mode, { history: "replace" })
-  }, [defaultMode, detailsOpen, hasExplicitModeParam, mode])
+  }, [baseQuery, mode, requestKey, requestedFunnel, selectedPropertyState])
 
   const closeDetailsDialog = useCallback(() => {
     try {
@@ -255,29 +322,7 @@ export default function BehaviorsPanel({ initialData }: BehaviorsPanelProps) {
     }
   }, [activeProperty, mode, selectedFunnel])
 
-  useEffect(() => {
-    if (mode !== "props" || !activeProperty) return
-    if (selectedPropertyFromSearch === activeProperty) return
-    syncBehaviorsPropertyInUrl(activeProperty, { history: "replace" })
-  }, [activeProperty, mode, selectedPropertyFromSearch])
-
-  const tablePayload = useMemo(() => {
-    if (!listPayload) return null
-    if (mode === "props") {
-      const target = activeProperty
-      const results = listPayload.results
-        .filter((item) => (target ? String(item.name) === target : true))
-        .map((item) => ({
-          ...item,
-          name: String((item as Record<string, unknown>).value ?? item.name),
-        }))
-      return {
-        ...listPayload,
-        results,
-      }
-    }
-    return listPayload
-  }, [activeProperty, listPayload, mode])
+  const tablePayload = listPayload
 
   // Limit card view to top 9 by first metric; Details uses full tablePayload
   const limitedTablePayload = useMemo((): ListPayload | null => {
@@ -295,9 +340,6 @@ export default function BehaviorsPanel({ initialData }: BehaviorsPanelProps) {
     const sliced = sorted.slice(0, 9)
     return {
       ...tablePayload,
-      metrics: (isConversions
-        ? ["uniques"]
-        : tablePayload.metrics) as ListMetricKey[],
       results: sliced,
       meta: { ...tablePayload.meta, hasMore: tablePayload.results.length > 9 },
     }
@@ -337,7 +379,7 @@ export default function BehaviorsPanel({ initialData }: BehaviorsPanelProps) {
         <h2 className="text-base font-medium">{activeTitle}</h2>
         <PanelTabs>
           {behaviourTabs
-            .filter((tab) => tab.value !== "funnels")
+            .filter((tab) => tab.value !== "funnels" && tab.value !== "props")
             .map((tab) => (
               <PanelTab
                 key={tab.value}
@@ -347,17 +389,34 @@ export default function BehaviorsPanel({ initialData }: BehaviorsPanelProps) {
                 {tab.label}
               </PanelTab>
             ))}
+          {propertyOptions.length > 0 ? (
+            <SelectionTabDropdown
+              active={mode === "props"}
+              label="Properties"
+              options={propertyOptions}
+              value={activeProperty ?? undefined}
+              searchPlaceholder="Search properties"
+              onSelect={(value) => {
+                selectModeWithValue("props", value)
+              }}
+            />
+          ) : (
+            <PanelTab
+              active={mode === "props"}
+              onClick={() => setAndStoreMode("props")}
+            >
+              Properties
+            </PanelTab>
+          )}
           {availableFunnels.length > 0 ? (
-            <PanelTabDropdown
+            <SelectionTabDropdown
               active={mode === "funnels"}
               label="Funnels"
-              options={availableFunnels.map((funnel) => ({
-                value: funnel,
-                label: funnel,
-              }))}
+              options={availableFunnels}
+              value={selectedFunnel}
+              searchPlaceholder="Search funnels"
               onSelect={(value) => {
-                selectFunnel(value)
-                setAndStoreMode("funnels")
+                selectModeWithValue("funnels", value)
               }}
             />
           ) : (
@@ -372,37 +431,25 @@ export default function BehaviorsPanel({ initialData }: BehaviorsPanelProps) {
       </header>
       {!site.hasGoals ? (
         <p className="text-sm text-muted-foreground">
-          Goal tracking configuration is coming soon. Explore properties or
-          funnels in the meantime.
+          No goals configured yet. Explore properties or funnels in the
+          meantime.
         </p>
       ) : null}
 
       {loading ? (
-        <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
-          Loading…
-        </div>
+        <PanelListSkeleton firstColumnLabel={firstColumnLabel} />
       ) : hasRenderableFunnels ? (
-        <FunnelSteps
-          data={data}
-          onSelectFunnel={selectFunnel}
-          selectedFunnel={selectedFunnel}
-        />
+        <FunnelSteps data={data} />
       ) : mode === "funnels" ? (
         <p className="text-sm text-muted-foreground">No funnels available</p>
       ) : tablePayload ? (
         <>
-          {mode === "props" && propertyOptions.length > 0 ? (
-            <div className="flex justify-end">
-              <PropertyCombobox
-                value={activeProperty ?? undefined}
-                options={propertyOptions}
-                onChange={selectProperty}
-              />
-            </div>
-          ) : null}
           {mode === "props" && activeProperty ? (
-            <p className="text-xs font-semibold text-muted-foreground uppercase">
-              {activeProperty}
+            <p className="text-sm text-muted-foreground">
+              Showing values for{" "}
+              <span className="font-medium text-foreground">
+                {activeProperty}
+              </span>
             </p>
           ) : null}
           <MetricTable
@@ -414,20 +461,9 @@ export default function BehaviorsPanel({ initialData }: BehaviorsPanelProps) {
                   ? "conversionRate"
                   : tablePayload.metrics[0]
             }
-            onRowClick={(item) => {
-              if (mode === "props") {
-                updateQuery((current) => ({
-                  ...current,
-                  filters: { ...current.filters, prop: String(item.name) },
-                }))
-              } else {
-                updateQuery((current) => ({
-                  ...current,
-                  filters: { ...current.filters, goal: String(item.name) },
-                }))
-              }
-            }}
+            onRowClick={handleRowClick}
             displayBars={false}
+            revealSecondaryMetricsOnHover={false}
             firstColumnLabel={firstColumnLabel}
             barColorTheme="cyan"
           />
@@ -459,7 +495,7 @@ export default function BehaviorsPanel({ initialData }: BehaviorsPanelProps) {
           </div>
         </>
       ) : (
-        <p className="text-sm text-muted-foreground">No data available</p>
+        <PanelEmptyState>No data available</PanelEmptyState>
       )}
 
       {tablePayload ? (
@@ -492,26 +528,21 @@ export default function BehaviorsPanel({ initialData }: BehaviorsPanelProps) {
           }}
           title={activeTitle}
           endpoint="/admin/analytics/behaviors"
-          extras={{ mode, funnel: selectedFunnel }}
+          extras={{
+            mode,
+            funnel: selectedFunnel,
+            property:
+              mode === "props" ? (activeProperty ?? undefined) : undefined,
+          }}
           firstColumnLabel={firstColumnLabel}
-          initialSearch={mode === "props" ? (activeProperty ?? "") : ""}
+          initialSearch=""
           defaultSortKey={
             tablePayload.metrics.includes("conversionRate")
               ? ("conversionRate" as ListMetricKey)
               : (tablePayload.metrics[0] as ListMetricKey)
           }
           onRowClick={(item) => {
-            if (mode === "props") {
-              updateQuery((current) => ({
-                ...current,
-                filters: { ...current.filters, prop: String(item.name) },
-              }))
-            } else {
-              updateQuery((current) => ({
-                ...current,
-                filters: { ...current.filters, goal: String(item.name) },
-              }))
-            }
+            handleRowClick(item)
             closeDetailsDialog()
           }}
         />
@@ -525,100 +556,201 @@ type FunnelStepsProps = {
     BehaviorsPayload,
     { funnels: string[]; active: { steps: unknown[] } }
   >
-  selectedFunnel?: string
-  onSelectFunnel: (name: string) => void
 }
 
-function FunnelSteps({
-  data,
-  selectedFunnel,
-  onSelectFunnel,
-}: FunnelStepsProps) {
+function FunnelSteps({ data }: FunnelStepsProps) {
   const funnel = data.active
   if (!funnel) return null
 
   const steps = funnel.steps
+  const enteringVisitors = funnel.enteringVisitors ?? steps[0]?.visitors ?? 0
+  const neverEnteringVisitors = funnel.neverEnteringVisitors ?? 0
   const maxVisitors = Math.max(...steps.map((step) => step.visitors), 1)
-  const overallRate = steps[steps.length - 1]?.conversionRate ?? 0
+  const overallRate =
+    funnel.conversionRate ?? steps[steps.length - 1]?.conversionRate ?? 0
+
+  const enrichedSteps = steps.map((step) => {
+    const barPercent = maxVisitors > 0 ? (step.visitors / maxVisitors) * 100 : 0
+    return { ...step, barPercent }
+  })
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="space-y-1">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="text-lg font-semibold text-foreground">
-              {funnel.name}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {steps.length}-step funnel • {Math.round(overallRate * 1000) / 10}
-              % conversion rate
-            </p>
-          </div>
-          {!onSelectFunnel || data.funnels.length <= 1
-            ? null
-            : data.funnels.map((name) => (
-                <button
-                  key={name}
-                  type="button"
-                  onClick={() => onSelectFunnel(name)}
-                  className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-                    name === (selectedFunnel ?? funnel.name)
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  {name}
-                </button>
-              ))}
-        </div>
+        <p className="text-lg font-semibold text-foreground">{funnel.name}</p>
+        <p className="text-sm text-muted-foreground">
+          {steps.length}-step funnel • {percentageFormatter(overallRate)}{" "}
+          conversion rate
+        </p>
       </div>
 
-      <div className="flex items-end gap-6 overflow-x-auto pb-4">
-        {steps.map((step) => {
-          const heightPercent = Math.max(
-            (step.visitors / maxVisitors) * 100,
-            12
-          )
-          return (
-            <div
-              key={step.name}
-              className="flex w-20 flex-col items-center gap-3 text-center"
-            >
-              <div className="relative flex h-48 w-full items-end justify-center">
-                <div className="relative h-full w-12 rounded-xs bg-primary/15">
-                  <div
-                    className="absolute right-0 bottom-0 left-0 rounded-xs bg-primary"
-                    style={{ height: `${heightPercent}%` }}
-                  />
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(20rem,1fr)]">
+        <div className="rounded-md border border-border/70 bg-muted/10 p-4 sm:p-6">
+          <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+            {enrichedSteps.map((step, index) => (
+              <article
+                key={step.name}
+                className="flex min-h-72 flex-col rounded-md border border-border/70 bg-card p-4 shadow-xs"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">
+                      Step {index + 1}
+                    </p>
+                    <h3 className="mt-2 text-base/5 font-semibold text-foreground">
+                      {step.name}
+                    </h3>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xl font-semibold text-foreground">
+                      {compactNumberFormatter.format(step.visitors)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">visitors</p>
+                  </div>
                 </div>
-                <div className="absolute -top-12 w-24 rounded-xs bg-muted px-2 py-1 text-[11px] font-semibold text-foreground shadow-xs">
-                  {Math.round(step.conversionRate * 1000) / 10}%
-                  <span className="mt-1 block text-[10px] font-normal text-muted-foreground">
-                    {new Intl.NumberFormat("en-US").format(step.visitors)}{" "}
-                    visitors
-                  </span>
+
+                <div className="mt-6 flex flex-1 items-end justify-center">
+                  <div className="flex h-52 w-full max-w-28 items-end">
+                    <div
+                      className="relative w-full overflow-hidden rounded-t-xl rounded-b-md bg-primary/10"
+                      style={{
+                        height:
+                          step.visitors > 0
+                            ? `${Math.max(step.barPercent, 18)}%`
+                            : "0%",
+                      }}
+                    >
+                      <div
+                        className="absolute inset-x-0 bottom-0 bg-primary"
+                        style={{ height: `${step.conversionRateStep}%` }}
+                      />
+                      {step.dropoff > 0 ? (
+                        <div
+                          className="absolute inset-x-0 top-0 border-b border-primary/20 bg-[repeating-linear-gradient(-45deg,rgba(15,23,42,0.06),rgba(15,23,42,0.06)_6px,transparent_6px,transparent_12px)]"
+                          style={{
+                            height: `${100 - step.conversionRateStep}%`,
+                          }}
+                        />
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-5 space-y-2 border-t border-border/70 pt-4 text-sm">
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-muted-foreground">
+                      {index === 0 ? "Entered funnel" : "Reached step"}
+                    </span>
+                    <span className="font-medium text-foreground">
+                      {percentageFormatter(
+                        index === 0
+                          ? funnel.enteringVisitorsPercentage
+                          : step.conversionRate
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-muted-foreground">
+                      {index === 0 ? "Never entered" : "Dropped off"}
+                    </span>
+                    <span className="font-medium text-foreground">
+                      {compactNumberFormatter.format(step.dropoff)}
+                    </span>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <aside className="rounded-md border border-border/70 bg-card p-5 shadow-xs">
+          <p className="text-xs font-semibold tracking-[0.18em] text-muted-foreground uppercase">
+            Summary
+          </p>
+
+          <div className="mt-4 text-center">
+            <p className="text-4xl font-bold text-foreground tabular-nums">
+              {percentageFormatter(overallRate)}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              overall conversion
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {compactNumberFormatter.format(enteringVisitors)} entered
+              {" \u00B7 "}
+              {compactNumberFormatter.format(
+                steps[steps.length - 1]?.visitors ?? 0
+              )}{" "}
+              completed
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {compactNumberFormatter.format(neverEnteringVisitors)} never
+              entered
+            </p>
+          </div>
+
+          <div className="mt-6 border-t border-border/70 pt-4">
+            {enrichedSteps.map((step, index) => (
+              <div key={`${step.name}-summary`}>
+                {index > 0 ? (
+                  <div className="flex items-center gap-2 py-1.5 pl-1">
+                    <ArrowDown className="size-3 shrink-0 text-muted-foreground/50" />
+                    <span className="text-xs text-muted-foreground">
+                      {step.dropoff > 0
+                        ? `${compactNumberFormatter.format(step.dropoff)} dropped \u00B7 ${percentageFormatter(step.conversionRateStep)} converted`
+                        : "no drop-off"}
+                    </span>
+                  </div>
+                ) : null}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="truncate font-medium text-foreground">
+                      {step.name}
+                    </span>
+                    <span className="shrink-0 text-muted-foreground tabular-nums">
+                      {compactNumberFormatter.format(step.visitors)}
+                    </span>
+                  </div>
+                  <div className="h-2.5 overflow-hidden rounded-sm bg-muted">
+                    <div
+                      className="h-full rounded-sm bg-primary"
+                      style={{
+                        width:
+                          step.visitors > 0
+                            ? `${Math.max(4, step.barPercent)}%`
+                            : "0%",
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
-              <p className="text-sm font-medium text-foreground">{step.name}</p>
-            </div>
-          )
-        })}
+            ))}
+          </div>
+        </aside>
       </div>
     </div>
   )
 }
 
-function PropertyCombobox({
-  value,
+function SelectionTabDropdown({
+  active,
+  label,
   options,
-  onChange,
+  value,
+  searchPlaceholder,
+  onSelect,
 }: {
-  value?: string
+  active: boolean
+  label: string
   options: string[]
-  onChange: (next: string) => void
+  value?: string
+  searchPlaceholder: string
+  onSelect: (next: string) => void
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState("")
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  const rootRef = useRef<HTMLDivElement | null>(null)
 
   const filtered = useMemo(() => {
     if (!search) return options
@@ -627,48 +759,98 @@ function PropertyCombobox({
     )
   }, [options, search])
 
-  const label = value ?? "Select property"
+  useEffect(() => {
+    if (!open) return
+    const id = window.requestAnimationFrame(() => {
+      inputRef.current?.focus({ preventScroll: true })
+    })
+    return () => window.cancelAnimationFrame(id)
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false)
+        setSearch("")
+      }
+    }
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false)
+        setSearch("")
+      }
+    }
+    window.addEventListener("mousedown", handlePointerDown)
+    window.addEventListener("keydown", handleEscape)
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown)
+      window.removeEventListener("keydown", handleEscape)
+    }
+  }, [open])
 
   return (
-    <DropdownMenu
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next)
-        if (!next) setSearch("")
-      }}
-    >
-      <DropdownMenuTrigger className="inline-flex h-9 items-center justify-between gap-2 rounded-xs border px-3 text-sm font-medium text-foreground shadow-xs hover:bg-muted">
-        <span className="max-w-[10rem] truncate">{label}</span>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64 p-0">
-        <div className="border-b p-2">
-          <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            autoFocus
-            placeholder="Search properties"
-          />
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        onClick={() => {
+          setOpen((current) => {
+            const next = !current
+            if (!next) setSearch("")
+            return next
+          })
+        }}
+        className={[
+          "inline-flex items-center gap-1 border-b-2 pb-1 transition-colors",
+          active
+            ? "border-primary text-primary"
+            : "border-transparent text-muted-foreground hover:text-primary",
+        ].join(" ")}
+      >
+        {label}
+        <ChevronDown className="size-3.5" aria-hidden="true" />
+      </button>
+      {open ? (
+        <div className="absolute top-full right-0 z-30 mt-2 w-72 overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-xl ring-1 ring-foreground/10">
+          <div className="border-b p-2">
+            <Input
+              ref={inputRef}
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={searchPlaceholder}
+            />
+          </div>
+          <div className="max-h-72 overflow-y-auto py-1 text-sm">
+            {filtered.map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => {
+                  onSelect(option)
+                  setOpen(false)
+                  setSearch("")
+                }}
+                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-accent hover:text-accent-foreground"
+              >
+                <span className="truncate">{option}</span>
+                {option === value ? (
+                  <Check className="size-4 text-primary" aria-hidden="true" />
+                ) : null}
+              </button>
+            ))}
+            {filtered.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-muted-foreground">
+                No matches
+              </div>
+            ) : null}
+          </div>
         </div>
-        <div className="max-h-56 overflow-y-auto py-1">
-          {filtered.map((option) => (
-            <DropdownMenuItem
-              key={option}
-              onClick={() => {
-                onChange(option)
-                setOpen(false)
-              }}
-              className="cursor-pointer"
-            >
-              {option}
-            </DropdownMenuItem>
-          ))}
-          {filtered.length === 0 ? (
-            <div className="px-3 py-2 text-sm text-muted-foreground">
-              No matches
-            </div>
-          ) : null}
-        </div>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      ) : null}
+    </div>
   )
 }
+
+const compactNumberFormatter = new Intl.NumberFormat("en-US", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+})

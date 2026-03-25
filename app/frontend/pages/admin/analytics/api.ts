@@ -6,6 +6,7 @@ import type {
   ListPayload,
   MainGraphPayload,
   MapPayload,
+  SourceDebugPayload,
   TopStatsPayload,
 } from "./types"
 
@@ -423,6 +424,19 @@ export function fetchReferrers(
   )
 }
 
+export function fetchSourceDebug(
+  query: AnalyticsQuery,
+  extras: { source: string },
+  signal?: AbortSignal
+) {
+  return fetchJson<SourceDebugPayload>(
+    "/admin/analytics/source_debug",
+    query,
+    extras,
+    signal
+  )
+}
+
 export function fetchSearchTerms(
   query: AnalyticsQuery,
   extras: Record<string, unknown> = {},
@@ -472,7 +486,7 @@ export function fetchDevices(
 
 export function fetchBehaviors(
   query: AnalyticsQuery,
-  extras: { mode?: string; funnel?: string } = {},
+  extras: { mode?: string; funnel?: string; property?: string } = {},
   signal?: AbortSignal
 ) {
   return fetchJson<BehaviorsPayload>(
@@ -481,6 +495,53 @@ export function fetchBehaviors(
     extras,
     signal
   )
+}
+
+export async function fetchBehaviorPropertyKeys(
+  query: AnalyticsQuery,
+  signal?: AbortSignal
+) {
+  const payload = await fetchJson<BehaviorsPayload>(
+    "/admin/analytics/behaviors",
+    query,
+    {
+      mode: "props",
+      limit: "1",
+      page: "1",
+    },
+    signal
+  )
+
+  return "list" in payload && Array.isArray(payload.propertyKeys)
+    ? payload.propertyKeys
+    : []
+}
+
+export async function fetchBehaviorPropertyValues(
+  query: AnalyticsQuery,
+  property: string,
+  search = "",
+  signal?: AbortSignal
+) {
+  const payload = await fetchJson<BehaviorsPayload>(
+    "/admin/analytics/behaviors",
+    query,
+    {
+      mode: "props",
+      property,
+      limit: "20",
+      page: "1",
+      search,
+    },
+    signal
+  )
+
+  if (!("list" in payload)) return []
+
+  return payload.list.results.map((item) => ({
+    label: String(item.name),
+    value: String(item.name),
+  }))
 }
 
 // Generic paginated list fetcher for Details modals

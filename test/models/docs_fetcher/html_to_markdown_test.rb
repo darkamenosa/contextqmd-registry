@@ -247,13 +247,13 @@ class DocsFetcher::HtmlToMarkdownTest < ActiveSupport::TestCase
     assert_equal "Click here for info", cleaned
   end
 
-  test "removes decorative images and empty image links" do
+  test "removes clearly decorative images" do
     html = <<~HTML
       <html>
         <body>
           <article>
             <img src="data:image/svg+xml,abc" alt="">
-            <a href="https://example.com/image"><img src="https://cdn.example.com/photo.jpg" alt=""></a>
+            <img src="https://cdn.example.com/icon.png" alt="" width="24" height="24">
             <p>This is the actual content that should remain after decorative images are stripped from the page.</p>
           </article>
         </body>
@@ -264,8 +264,50 @@ class DocsFetcher::HtmlToMarkdownTest < ActiveSupport::TestCase
 
     assert_includes result[:content], "actual content"
     assert_not_includes result[:content], "data:image/svg+xml"
-    assert_not_includes result[:content], "cdn.example.com/photo.jpg"
+    assert_not_includes result[:content], "cdn.example.com/icon.png"
     refute_match(/\[\s*\]\(/, result[:content])
+  end
+
+  test "preserves large and linked content images even when alt text is empty" do
+    html = <<~HTML
+      <html>
+        <body>
+          <article>
+            <img src="https://cdn.example.com/hero.png" alt="" width="640" height="480">
+            <a href="https://example.com/fullsize">
+              <img src="https://cdn.example.com/linked.png" alt="" width="48" height="48">
+            </a>
+            <p>This page includes meaningful media that should remain in markdown output.</p>
+          </article>
+        </body>
+      </html>
+    HTML
+
+    result = DocsFetcher::HtmlToMarkdown.convert(html)
+
+    assert_includes result[:content], "![](https://cdn.example.com/hero.png)"
+    assert_match(/\[!\[\]\(https:\/\/cdn\.example\.com\/linked\.png\)\s*\]\(https:\/\/example\.com\/fullsize\)/, result[:content])
+  end
+
+  test "converts iframe and video embeds into markdown links" do
+    html = <<~HTML
+      <html>
+        <body>
+          <article>
+            <iframe src="https://www.youtube.com/embed/demo123"></iframe>
+            <video controls>
+              <source src="https://cdn.example.com/demo.mp4" type="video/mp4">
+            </video>
+            <p>This page contains embedded media that should degrade into links.</p>
+          </article>
+        </body>
+      </html>
+    HTML
+
+    result = DocsFetcher::HtmlToMarkdown.convert(html)
+
+    assert_includes result[:content], "[YouTube video](https://www.youtube.com/embed/demo123)"
+    assert_includes result[:content], "[Video](https://cdn.example.com/demo.mp4)"
   end
 
   test "unwraps facebook redirect links and strips tracking query params" do

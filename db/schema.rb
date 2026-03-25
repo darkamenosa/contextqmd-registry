@@ -348,7 +348,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_21_003000) do
     t.index ["website_crawl_id", "normalized_url"], name: "idx_on_website_crawl_id_normalized_url_929719a98d", unique: true
     t.index ["website_crawl_id", "status", "id"], name: "index_website_crawl_urls_on_website_crawl_id_and_status_and_id"
     t.index ["website_crawl_id"], name: "index_website_crawl_urls_on_website_crawl_id"
-    t.check_constraint "status::text = ANY (ARRAY['pending'::character varying, 'fetched'::character varying, 'skipped'::character varying, 'failed'::character varying]::text[])", name: "website_crawl_urls_status_check"
+    t.check_constraint "status::text = ANY (ARRAY['pending'::character varying::text, 'fetched'::character varying::text, 'skipped'::character varying::text, 'failed'::character varying::text])", name: "website_crawl_urls_status_check"
   end
 
   create_table "website_crawls", force: :cascade do |t|
@@ -363,7 +363,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_21_003000) do
     t.string "status", default: "pending", null: false
     t.datetime "updated_at", null: false
     t.index ["crawl_request_id"], name: "index_website_crawls_on_crawl_request_id", unique: true
-    t.check_constraint "status::text = ANY (ARRAY['pending'::character varying, 'processing'::character varying, 'completed'::character varying, 'failed'::character varying, 'cancelled'::character varying]::text[])", name: "website_crawls_status_check"
+    t.check_constraint "status::text = ANY (ARRAY['pending'::character varying::text, 'processing'::character varying::text, 'completed'::character varying::text, 'failed'::character varying::text, 'cancelled'::character varying::text])", name: "website_crawls_status_check"
   end
 
   add_foreign_key "access_tokens", "identities"

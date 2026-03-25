@@ -430,7 +430,7 @@ module DocsFetcher
         end
 
         def sitemap_probe_content(body)
-          doc = Nokogiri::XML(body)
+          doc = Nokogiri::XML(body) { |config| config.strict.nonet }
           doc.remove_namespaces!
           locations = doc.css("url > loc, sitemap > loc").map { |node| node.text.to_s.strip }.reject(&:blank?).first(1000)
           locations.join("\n")

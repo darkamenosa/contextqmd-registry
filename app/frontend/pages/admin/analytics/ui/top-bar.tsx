@@ -40,7 +40,16 @@ const FILTER_PICKER_COLUMNS = [
       { label: "Location", key: "location", value: "" },
       { label: "Screen size", key: "size", value: "" },
       { label: "Browser", key: "browser", value: "" },
+      { label: "Browser version", key: "browser_version", value: "" },
       { label: "Operating System", key: "os", value: "" },
+      { label: "OS version", key: "os_version", value: "" },
+    ],
+  },
+  {
+    title: "Behavior",
+    items: [
+      { label: "Goal", key: "goal", value: "" },
+      { label: "Property", key: "property", value: "" },
     ],
   },
 ]
@@ -82,7 +91,7 @@ export default function TopBar({ showCurrentVisitors }: TopBarProps) {
         className={[
           "relative z-10 flex flex-col gap-3 border-b border-transparent transition-colors",
           pinned
-            ? "sticky top-0 border-border bg-background/95 backdrop-blur-sm"
+            ? "sticky top-0 border-border bg-background/95 backdrop-blur-xs"
             : "",
         ].join(" ")}
       >
@@ -162,7 +171,9 @@ function FiltersBar() {
     "region",
     "city",
     "browser",
+    "browser_version",
     "os",
+    "os_version",
     "goal",
     "prop",
     "segment",
@@ -170,10 +181,17 @@ function FiltersBar() {
 
   const sortedEq = eqEntries
     .slice()
-    .sort(([a], [b]) => order.indexOf(a) - order.indexOf(b))
+    .sort(
+      ([a], [b]) =>
+        order.indexOf(filterOrderKey(a)) - order.indexOf(filterOrderKey(b))
+    )
   const sortedAdv = advEntries
     .slice()
-    .sort((a, b) => order.indexOf(a[1]) - order.indexOf(b[1]))
+    .sort(
+      (a, b) =>
+        order.indexOf(filterOrderKey(a[1])) -
+        order.indexOf(filterOrderKey(b[1]))
+    )
 
   if (sortedEq.length === 0 && sortedAdv.length === 0) {
     return null
@@ -269,6 +287,10 @@ function FiltersBar() {
 }
 
 function filterLabel(key: string) {
+  if (key.startsWith("prop:")) {
+    return `Property ${key.slice("prop:".length)}`
+  }
+
   switch (key) {
     case "hostname":
       return "Hostname"
@@ -292,8 +314,12 @@ function filterLabel(key: string) {
       return "Page"
     case "browser":
       return "Browser"
+    case "browser_version":
+      return "Browser Version"
     case "os":
       return "Operating System"
+    case "os_version":
+      return "OS Version"
     case "utm_source":
       return "UTM Source"
     case "utm_medium":
@@ -317,13 +343,27 @@ function filterLabel(key: string) {
   }
 }
 
+function filterOrderKey(key: string) {
+  return key.startsWith("prop:") ? "prop" : key
+}
+
 function FilterMenu() {
   const { updateQuery } = useQueryContext()
   const [open, setOpen] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const openDialogFrameRef = useRef<number | null>(null)
   const [dialogType, setDialogType] = useState<
-    "page" | "location" | "source" | "utm" | "browser" | "os" | "size" | "goal"
+    | "page"
+    | "location"
+    | "source"
+    | "utm"
+    | "browser"
+    | "browser_version"
+    | "os"
+    | "os_version"
+    | "size"
+    | "goal"
+    | "property"
   >("page")
 
   useEffect(() => {
@@ -348,9 +388,12 @@ function FilterMenu() {
       | "source"
       | "utm"
       | "browser"
+      | "browser_version"
       | "os"
+      | "os_version"
       | "size"
       | "goal"
+      | "property"
   ) => {
     setOpen(false)
 
@@ -399,10 +442,18 @@ function FilterMenu() {
                       openFilterDialog("utm")
                     } else if (item.key === "browser") {
                       openFilterDialog("browser")
+                    } else if (item.key === "browser_version") {
+                      openFilterDialog("browser_version")
                     } else if (item.key === "os") {
                       openFilterDialog("os")
+                    } else if (item.key === "os_version") {
+                      openFilterDialog("os_version")
                     } else if (item.key === "size") {
                       openFilterDialog("size")
+                    } else if (item.key === "goal") {
+                      openFilterDialog("goal")
+                    } else if (item.key === "property") {
+                      openFilterDialog("property")
                     } else {
                       setFilter(item.key, item.value)
                       setOpen(false)

@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input"
 import { fetchListPage } from "../api"
 import { useDebounce } from "../hooks/use-debounce"
 import { lockBodyScroll } from "../lib/body-scroll-lock"
+import { normalizeMetricKey } from "../lib/metric-key"
 import { useQueryContext } from "../query-context"
 import type {
   AnalyticsQuery,
@@ -298,14 +299,6 @@ export default function RemoteDetailsDialog({
   }, [])
 
   if (!mounted || !open) return null
-
-  function normalizeMetricKey(k: string): string {
-    if (k.includes("_")) {
-      return k.replace(/_([a-z])/g, (_, c) => c.toUpperCase())
-    }
-    return k
-  }
-
   // Ensure result item keys follow our camelCase convention
   function normalizeItemKeys(item: ListItem): ListItem {
     const out: Record<string, ListItem[keyof ListItem]> = { ...item }
@@ -322,7 +315,7 @@ export default function RemoteDetailsDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[60] flex items-start justify-center bg-background/80 p-4 pt-10 backdrop-blur-sm sm:pt-10 md:pt-12 lg:pt-16"
+      className="fixed inset-0 z-[60] flex items-start justify-center bg-background/80 p-4 pt-10 backdrop-blur-xs md:pt-12 lg:pt-16"
       onClick={handleClose}
     >
       <div
@@ -330,7 +323,7 @@ export default function RemoteDetailsDialog({
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
-        className="relative mx-auto flex h-[84vh] max-h-[84vh] w-full max-w-6xl flex-col rounded-xl border border-border bg-card shadow-xl outline-none"
+        className="relative mx-auto flex h-[84vh] max-h-[84vh] w-full max-w-6xl flex-col rounded-xl border border-border bg-card shadow-xl outline-hidden"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={onDialogKeyDown}
       >
@@ -369,7 +362,7 @@ export default function RemoteDetailsDialog({
                       onClick={() => toggleSort("name")}
                     >
                       {firstColumnLabel}
-                      <span className="text-[11px] leading-none text-muted-foreground">
+                      <span className="text-[11px]/3 text-muted-foreground">
                         {sort.key === "name"
                           ? sort.direction === "asc"
                             ? "▲"
@@ -397,7 +390,7 @@ export default function RemoteDetailsDialog({
                         {metricLabels[metric] ??
                           METRIC_LABELS[metric] ??
                           metric}
-                        <span className="text-[11px] leading-none text-muted-foreground">
+                        <span className="text-[11px]/3 text-muted-foreground">
                           {sort.key === metric
                             ? sort.direction === "asc"
                               ? "▲"

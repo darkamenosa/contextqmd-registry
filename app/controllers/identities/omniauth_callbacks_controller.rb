@@ -11,7 +11,13 @@ module Identities
       identity = find_or_create_identity(auth)
 
       if identity.active_for_authentication?
+        previous_identity_id = warden.user(:identity)&.id
         sign_in(:identity, identity)
+        AnalyticsVisitBoundary.mark_sign_in!(
+          session: session,
+          previous_identity_id: previous_identity_id,
+          next_identity_id: identity.id
+        )
         redirect_to after_authentication_path_for(identity), notice: "Signed in with Google."
       else
         redirect_to new_identity_session_path, alert: I18n.t("devise.failure.#{identity.inactive_message}")
