@@ -216,6 +216,32 @@ class Admin::AnalyticsReportsTest < ActionDispatch::IntegrationTest
     Current.reset
   end
 
+  test "reports shell includes initial analytics boot payload" do
+    staff_identity, = create_tenant(
+      email: "staff-reports-boot-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Reports Boot"
+    )
+    staff_identity.update!(staff: true)
+
+    sign_in(staff_identity)
+
+    get "/admin/analytics/reports", headers: INERTIA_HEADERS
+
+    assert_response :success
+
+    payload = JSON.parse(response.body).fetch("props")
+    boot = payload.fetch("boot")
+
+    assert boot.key?("topStats")
+    assert boot.key?("mainGraph")
+    assert boot.key?("sources")
+    assert boot.key?("pages")
+    assert boot.key?("locations")
+    assert boot.key?("devices")
+  ensure
+    Current.reset
+  end
+
   test "reports shell ignores namespaced dashboard url params" do
     staff_identity, = create_tenant(
       email: "staff-reports-ui-params-#{SecureRandom.hex(4)}@example.com",

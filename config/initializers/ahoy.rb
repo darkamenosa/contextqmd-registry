@@ -70,88 +70,12 @@ class Ahoy::Store < Ahoy::DatabaseStore
   end
 
   def track_visit(data)
-    data = data.with_indifferent_access
-    attrs = data.dup
+    attrs = normalize_visit_attrs(data)
 
-    req = Current.request
-    if req
-      attrs[:visitor_token] = AnalyticsAnonymousIdentity.current(req) || attrs[:visitor_token]
-      attrs[:hostname] ||= req.host
-
-      # Prefer the real landing page, not the Ahoy API endpoint
-      begin
-        lp = attrs[:landing_page].to_s
-        if lp.blank? || internal_path?(lp)
-          attrs[:landing_page] = req.referer if req.referer.present?
-        end
-      rescue StandardError
-        # never block tracking
-      end
-
-      # Best-effort referrer domain
-      if req.referer.present?
-        begin
-          ref_host = URI.parse(req.referer).host
-          host = attrs[:hostname].presence || req.host
-          if local_host?(ref_host) || same_site_host?(ref_host, host)
-            attrs[:referrer] = nil if attrs[:referrer].to_s == req.referer
-            attrs[:referring_domain] = nil
-          else
-            attrs[:referring_domain] ||= ref_host
-          end
-        rescue URI::InvalidURIError
-          # ignore
-        end
-      end
-
-      if defined?(MaxmindGeo) && MaxmindGeo.available?
-        if (record = lookup_maxmind_record(req, data))
-          attrs[:country] ||= record[:country_iso]
-          attrs[:region] ||= record[:subdivisions]&.first
-          attrs[:city] ||= record[:city]
-          attrs[:latitude] ||= record[:latitude]
-          attrs[:longitude] ||= record[:longitude]
-        end
-      end
-
-      # Cloudflare country fallback
-      cc = ClientIp.country_hint(req)
-      attrs[:country] ||= cc if cc
-    else
-      begin
-        lp = (attrs[:landing_page] || data[:landing_page]).to_s
-        if lp.present?
-          attrs[:hostname] ||= URI.parse(lp).host
-        end
-      rescue URI::InvalidURIError
-        # ignore
-      end
-    end
-
-    result = super(attrs)
-    AnalyticsVisitBoundary.consume_force_new_visit!(req) if req
-
-    # Post-create cleanup
-    begin
-      token = data[:visit_token]
-      v = token.present? ? ::Ahoy::Visit.find_by(visit_token: token) : nil
-      if v
-        req_host = Current.request&.host
-        if v.hostname.blank? && req_host.present?
-          v.update_column(:hostname, req_host)
-        end
-        site_host = v.hostname.presence || req_host
-        if local_host?(v.referring_domain) || same_site_host?(v.referring_domain, site_host)
-          v.update_columns(referrer: nil, referring_domain: nil)
-        end
-        v.reload
-        v.refresh_source_dimensions!
-      end
-    rescue StandardError
-      # never block tracking
-    end
-
-    result
+    visit = super(attrs)
+    AnalyticsVisitBoundary.consume_force_new_visit!(Current.request) if Current.request
+    repair_existing_visit_after_conflict!(visit, attrs)
+    visit
   end
 
   def track_event(data)
@@ -161,51 +85,177 @@ class Ahoy::Store < Ahoy::DatabaseStore
     # open a brand new visit on its own after the session window has expired.
     return nil if data[:name].to_s == "engagement" && visit.nil?
 
-    result = super(data)
-
-    # Extract screen_size from viewport string
-    props = data[:properties].to_h.with_indifferent_access
-    raw_size = props[:screen_size]
-    if raw_size.present?
-      token = data[:visit_token]
-      if token.present?
-        if (v = ::Ahoy::Visit.find_by(visit_token: token)) && v.screen_size.blank?
-          bucket = classify_viewport(raw_size)
-          v.update_column(:screen_size, bucket) if bucket.present?
-        end
-      end
+    visit = visit_or_create(started_at: data[:time])
+    unless visit
+      Ahoy.log "Event excluded since visit not created: #{data[:visit_token]}"
+      return nil
     end
 
-    # Correct landing_page when visit was created with API path
+    event = event_model.new(slice_data(event_model, data))
+    event.visit = visit
+    event.time = visit.started_at if event.time < visit.started_at
+
     begin
-      event = result.is_a?(::Ahoy::Event) ? result : nil
-      event_props = event&.properties.to_h.with_indifferent_access
-      data_props = data[:properties].to_h.with_indifferent_access
-      url = event_props[:url] || data_props[:url]
+      event.save!
+    rescue => e
+      raise e unless unique_exception?(e)
+      return nil
+    end
 
-      visit = event&.visit
-      if visit.nil?
-        token = data[:visit_token]
-        visit = ::Ahoy::Visit.find_by(visit_token: token) if token.present?
+    repair_visit_from_event!(visit, event)
+    event
+  end
+
+  private
+    def normalize_visit_attrs(data)
+      attrs = data.with_indifferent_access.dup
+      req = Current.request
+
+      if req
+        attrs[:visitor_token] = AnalyticsAnonymousIdentity.current(req) || attrs[:visitor_token]
+        attrs[:hostname] ||= req.host
+        normalize_request_landing_page!(attrs, req)
+        normalize_referrer!(attrs, req.referer, site_host: attrs[:hostname].presence || req.host)
+        enrich_visit_location!(attrs, req, data)
+
+        cc = ClientIp.country_hint(req)
+        attrs[:country] ||= cc if cc
+      else
+        attrs[:hostname] ||= host_from_url(attrs[:landing_page] || data[:landing_page])
       end
 
-      if visit && url.present?
-        lp = visit.landing_page.to_s
-        needs_fix = lp.blank? || internal_path?(lp)
-        if needs_fix
-          visit.update_column(:landing_page, url)
-          visit.reload
-          visit.refresh_source_dimensions!
-        end
+      attrs
+    rescue StandardError
+      attrs
+    end
+
+    def repair_existing_visit_after_conflict!(visit, attrs)
+      return if visit.is_a?(::Ahoy::Visit)
+
+      existing_visit = visit_for_token(attrs[:visit_token])
+      return unless existing_visit
+
+      updates = {}
+      updates[:hostname] = attrs[:hostname] if existing_visit.hostname.blank? && attrs[:hostname].present?
+      if normalized_internal_referrer?(existing_visit.referring_domain, updates[:hostname] || existing_visit.hostname)
+        updates[:referrer] = nil if existing_visit.referrer.present?
+        updates[:referring_domain] = nil if existing_visit.referring_domain.present?
       end
+
+      persist_visit_repairs!(
+        existing_visit,
+        updates,
+        refresh_source_dimensions: updates.key?(:hostname) || updates.key?(:referrer) || updates.key?(:referring_domain) || source_dimensions_missing?(existing_visit)
+      )
+    rescue StandardError
+      # never block tracking
+    end
+
+    def repair_visit_from_event!(visit, event)
+      props = event.properties.to_h.with_indifferent_access
+      updates = {}
+
+      if visit.screen_size.blank?
+        screen_size = normalized_screen_size(props[:screen_size])
+        updates[:screen_size] = screen_size if screen_size.present?
+      end
+
+      url = props[:url]
+      if url.present? && visit_needs_landing_page_fix?(visit)
+        updates[:landing_page] = url
+        updates[:hostname] = host_from_url(url) if visit.hostname.blank?
+      end
+
+      persist_visit_repairs!(
+        visit,
+        updates,
+        refresh_source_dimensions: updates.key?(:landing_page) || updates.key?(:hostname)
+      )
     rescue StandardError
       # never block ingestion
     end
 
-    result
-  end
+    def persist_visit_repairs!(visit, updates, refresh_source_dimensions: false)
+      return if updates.empty? && !refresh_source_dimensions
 
-  private
+      visit.assign_attributes(updates)
+      columns = updates.dup
+      if refresh_source_dimensions
+        visit.assign_source_dimensions
+        columns.merge!(visit.source_dimension_attributes)
+      end
+
+      visit.update_columns(columns) if columns.present?
+    end
+
+    def normalize_request_landing_page!(attrs, req)
+      landing_page = attrs[:landing_page].to_s
+      return unless landing_page.blank? || internal_path?(landing_page)
+      return if req.referer.blank?
+
+      attrs[:landing_page] = req.referer
+    end
+
+    def normalize_referrer!(attrs, referrer, site_host:)
+      return if referrer.blank?
+
+      ref_host = host_from_url(referrer)
+      return unless ref_host.present?
+
+      if normalized_internal_referrer?(ref_host, site_host)
+        attrs[:referrer] = nil if attrs[:referrer].to_s == referrer
+        attrs[:referring_domain] = nil
+      else
+        attrs[:referring_domain] ||= ref_host
+      end
+    end
+
+    def enrich_visit_location!(attrs, req, data)
+      if defined?(MaxmindGeo) && MaxmindGeo.available?
+        if (record = lookup_maxmind_record(req, data))
+          attrs[:country] ||= record[:country_iso]
+          attrs[:region] ||= record[:subdivisions]&.first
+          attrs[:city] ||= record[:city]
+          attrs[:latitude] ||= record[:latitude]
+          attrs[:longitude] ||= record[:longitude]
+        end
+      end
+    end
+
+    def visit_for_token(token)
+      return nil if token.blank?
+
+      ::Ahoy::Visit.find_by(visit_token: token)
+    end
+
+    def visit_needs_landing_page_fix?(visit)
+      landing_page = visit.landing_page.to_s
+      landing_page.blank? || internal_path?(landing_page)
+    end
+
+    def source_dimensions_missing?(visit)
+      visit.source_label.blank? || visit.source_kind.blank? || visit.source_channel.blank?
+    end
+
+    def normalized_internal_referrer?(ref_host, site_host)
+      local_host?(ref_host) || same_site_host?(ref_host, site_host)
+    end
+
+    def host_from_url(value)
+      return nil if value.blank?
+
+      URI.parse(value.to_s).host
+    rescue URI::InvalidURIError
+      nil
+    end
+
+    def normalized_screen_size(raw_size)
+      size = Ahoy::Visit.categorize_screen_size(raw_size)
+      return nil if size.blank? || size == "(not set)" || size == raw_size.to_s
+
+      size
+    end
+
     def internal_path?(value)
       return false if value.blank?
       path = begin
@@ -232,23 +282,6 @@ class Ahoy::Store < Ahoy::DatabaseStore
       rescue StandardError
       end
       false
-    end
-
-    def classify_viewport(raw_size)
-      return nil if raw_size.blank?
-      parts = raw_size.to_s.split("x")
-      return nil unless parts.size == 2
-      width = parts[0].to_i
-      return nil if width <= 0
-      if width < 576
-        "Mobile"
-      elsif width < 992
-        "Tablet"
-      elsif width < 1440
-        "Laptop"
-      else
-        "Desktop"
-      end
     end
 
     def lookup_maxmind_record(req, data)

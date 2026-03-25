@@ -19,13 +19,9 @@ import {
   locationsSegmentForMode,
   parseDialogFromPath,
 } from "../lib/dialog-path"
+import { navigateAnalytics } from "../lib/location-store"
 import { numberShortFormatter } from "../lib/number-formatter"
-import {
-  getLocationsModeAfterFilterChange,
-  getLocationsModeFromSearch,
-  LOCATIONS_MODES,
-  readStoredMode,
-} from "../lib/panel-mode"
+import { getLocationsModeAfterFilterChange } from "../lib/panel-mode"
 import { useScopedQuery } from "../lib/query-scope"
 import { useQueryContext } from "../query-context"
 import { useSiteContext } from "../site-context"
@@ -71,6 +67,7 @@ const MAP_ACTIVE_STROKE = "#6ec2e6"
 
 type LocationsPanelProps = {
   initialData: MapPayload | ListPayload
+  initialMode: string
 }
 
 type PanelData =
@@ -83,13 +80,12 @@ type PanelData =
       payload: ListPayload
     }
 
-export default function LocationsPanel({ initialData }: LocationsPanelProps) {
-  const { query, pathname, search, updateQuery } = useQueryContext()
+export default function LocationsPanel({
+  initialData,
+  initialMode,
+}: LocationsPanelProps) {
+  const { query, pathname, updateQuery } = useQueryContext()
   const site = useSiteContext()
-  const initialMode =
-    getLocationsModeFromSearch(search, query.mode) ??
-    readStoredMode(`${STORAGE_PREFIX}.${site.domain}`, LOCATIONS_MODES) ??
-    "map"
 
   const [preferredMode, setPreferredMode] = useState(() => initialMode)
   const [data, setData] = useState<PanelData>(() =>
@@ -126,7 +122,7 @@ export default function LocationsPanel({ initialData }: LocationsPanelProps) {
     try {
       const sp = new URLSearchParams(window.location.search)
       sp.delete("dialog")
-      window.history.pushState({}, "", baseAnalyticsPath(sp.toString()))
+      navigateAnalytics(baseAnalyticsPath(sp.toString()))
     } catch {
       // Ignore history errors; local dialog state still works.
     }
@@ -316,10 +312,12 @@ export default function LocationsPanel({ initialData }: LocationsPanelProps) {
               active={mode === tab.value}
               onClick={() => {
                 setPreferredMode(tab.value)
-                localStorage.setItem(
-                  `${STORAGE_PREFIX}.${site.domain}`,
-                  tab.value
-                )
+                if (typeof window !== "undefined") {
+                  localStorage.setItem(
+                    `${STORAGE_PREFIX}.${site.domain}`,
+                    tab.value
+                  )
+                }
               }}
             >
               {tab.label}
@@ -345,11 +343,7 @@ export default function LocationsPanel({ initialData }: LocationsPanelProps) {
                   const seg = locationsSegmentForMode(
                     mode as "map" | "countries" | "regions" | "cities"
                   )
-                  window.history.pushState(
-                    {},
-                    "",
-                    buildDialogPath(seg, sp.toString())
-                  )
+                  navigateAnalytics(buildDialogPath(seg, sp.toString()))
                 } catch {
                   // Ignore history errors when opening details.
                 }
@@ -413,11 +407,7 @@ export default function LocationsPanel({ initialData }: LocationsPanelProps) {
                   const seg = locationsSegmentForMode(
                     mode as "map" | "countries" | "regions" | "cities"
                   )
-                  window.history.pushState(
-                    {},
-                    "",
-                    buildDialogPath(seg, sp.toString())
-                  )
+                  navigateAnalytics(buildDialogPath(seg, sp.toString()))
                 } catch {
                   // Ignore history errors when opening details.
                 }
@@ -441,9 +431,9 @@ export default function LocationsPanel({ initialData }: LocationsPanelProps) {
                 const seg = locationsSegmentForMode(
                   mode as "map" | "countries" | "regions" | "cities"
                 )
-                window.history.pushState({}, "", buildDialogPath(seg, qs))
+                navigateAnalytics(buildDialogPath(seg, qs))
               } else {
-                window.history.pushState({}, "", baseAnalyticsPath(qs))
+                navigateAnalytics(baseAnalyticsPath(qs))
               }
             } catch {
               // Ignore history errors when syncing modal state.

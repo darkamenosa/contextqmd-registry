@@ -218,9 +218,32 @@ export type BehaviorsPayload =
     }
   | ListPayload
 
+export type AnalyticsDashboardBoot = {
+  topStats: TopStatsPayload
+  mainGraph: MainGraphPayload
+  sources: ListPayload
+  pages: ListPayload
+  locations: MapPayload | ListPayload
+  devices: DevicesPayload
+  behaviors: BehaviorsPayload | null
+  ui: {
+    graphMetric: string
+    graphInterval: string
+    sourcesMode: string
+    pagesMode: string
+    locationsMode: string
+    devicesBaseMode: string
+    devicesMode: string
+    behaviorsMode?: string | null
+    behaviorsFunnel?: string | null
+    behaviorsProperty?: string | null
+  }
+}
+
 export type AnalyticsPageProps = {
   site: SiteContextValue
   user: UserContextValue
   query: AnalyticsQuery
   defaultQuery: AnalyticsQuery
+  boot: AnalyticsDashboardBoot
 }

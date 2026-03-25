@@ -20,12 +20,8 @@ import {
   devicesSegmentForMode,
   parseDialogFromPath,
 } from "../lib/dialog-path"
-import {
-  DEVICES_MODES,
-  getDevicesModeFromSearch,
-  inferDevicesModeFromFilters,
-  readStoredMode,
-} from "../lib/panel-mode"
+import { navigateAnalytics } from "../lib/location-store"
+import { inferDevicesModeFromFilters } from "../lib/panel-mode"
 import { useScopedQuery } from "../lib/query-scope"
 import { useQueryContext } from "../query-context"
 import { useSiteContext } from "../site-context"
@@ -60,19 +56,17 @@ const STORAGE_PREFIX = "admin.analytics.devices"
 
 type DevicesPanelProps = {
   initialData: DevicesPayload
+  initialBaseMode: string
+  initialMode: string
 }
 
-export default function DevicesPanel({ initialData }: DevicesPanelProps) {
-  const { query, pathname, search, updateQuery } = useQueryContext()
+export default function DevicesPanel({
+  initialData,
+  initialBaseMode,
+  initialMode,
+}: DevicesPanelProps) {
+  const { query, pathname, updateQuery } = useQueryContext()
   const site = useSiteContext()
-  const initialBaseMode =
-    getDevicesModeFromSearch(search, query.mode) ??
-    readStoredMode(`${STORAGE_PREFIX}.${site.domain}`, DEVICES_MODES) ??
-    "browsers"
-  const initialMode = inferDevicesModeFromFilters(
-    initialBaseMode,
-    query.filters
-  )
 
   const [preferredMode, setPreferredMode] = useState(() => initialBaseMode)
   const [data, setData] = useState<DevicesPayload>(initialData)
@@ -107,7 +101,7 @@ export default function DevicesPanel({ initialData }: DevicesPanelProps) {
     try {
       const sp = new URLSearchParams(window.location.search)
       sp.delete("dialog")
-      window.history.pushState({}, "", baseAnalyticsPath(sp.toString()))
+      navigateAnalytics(baseAnalyticsPath(sp.toString()))
     } catch {
       // Ignore history errors; local dialog state remains authoritative.
     }
@@ -265,11 +259,7 @@ export default function DevicesPanel({ initialData }: DevicesPanelProps) {
                       | "operating-systems"
                       | "screen-sizes"
                   )
-                  window.history.pushState(
-                    {},
-                    "",
-                    buildDialogPath(seg, sp.toString())
-                  )
+                  navigateAnalytics(buildDialogPath(seg, sp.toString()))
                 } catch {
                   // Ignore history errors when opening the details modal.
                 }
@@ -295,9 +285,9 @@ export default function DevicesPanel({ initialData }: DevicesPanelProps) {
                   | "operating-systems"
                   | "screen-sizes"
               )
-              window.history.pushState({}, "", buildDialogPath(seg, qs))
+              navigateAnalytics(buildDialogPath(seg, qs))
             } else {
-              window.history.pushState({}, "", baseAnalyticsPath(qs))
+              navigateAnalytics(baseAnalyticsPath(qs))
             }
           } catch {
             // Ignore history errors when syncing modal state.

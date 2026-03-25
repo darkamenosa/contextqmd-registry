@@ -59,6 +59,53 @@ module Admin
           }
         end
 
+        def dashboard_boot_payload(query, site: site_context)
+          top_stats = top_stats_payload(query)
+          graph_metric = requested_graph_metric(top_stats)
+          graph_interval = requested_graph_interval(top_stats)
+          sources_mode = requested_sources_mode(query)
+          pages_mode = requested_pages_mode(query)
+          locations_mode = requested_locations_mode(query)
+          devices_base_mode = requested_devices_base_mode
+          devices_mode = requested_devices_mode(query, base_mode: devices_base_mode)
+          behaviors_mode = behaviors_available?(site) ? requested_behaviors_mode(site) : nil
+
+          payload = {
+            top_stats: top_stats,
+            main_graph: main_graph_payload(query.merge(metric: graph_metric, interval: graph_interval)),
+            sources: sources_payload(query.merge(mode: sources_mode)),
+            pages: pages_payload(query.merge(mode: pages_mode)),
+            locations: locations_payload(query.merge(mode: locations_mode)),
+            devices: devices_payload(query.merge(mode: devices_mode)),
+            ui: {
+              graph_metric: graph_metric,
+              graph_interval: graph_interval,
+              sources_mode: sources_mode,
+              pages_mode: pages_mode,
+              locations_mode: locations_mode,
+              devices_base_mode: devices_base_mode,
+              devices_mode: devices_mode,
+              behaviors_mode: behaviors_mode,
+              behaviors_funnel: requested_behaviors_funnel,
+              behaviors_property: requested_behaviors_property
+            }
+          }
+
+          if behaviors_mode.present?
+            payload[:behaviors] = behaviors_payload(
+              query.merge(
+                mode: behaviors_mode,
+                funnel: requested_behaviors_funnel,
+                property: behaviors_mode == "props" ? requested_behaviors_property : nil
+              ).compact
+            )
+          else
+            payload[:behaviors] = nil
+          end
+
+          payload
+        end
+
         def prepare_query
           @query = default_query.merge(prepared_params(params))
         end
@@ -430,6 +477,159 @@ module Admin
         SEGMENTS = [
           { id: "all", name: "All visitors" }
         ].freeze
+
+        def normalized_ui_param(key)
+          value = params[key].to_s.strip
+          return nil if value.blank? || %w[undefined null].include?(value)
+
+          value
+        end
+
+        def requested_graph_metric(top_stats)
+          requested = normalized_ui_param(:graph_metric) || normalized_ui_param(:metric)
+          return requested if top_stats[:graphable_metrics].include?(requested)
+
+          top_stats[:graphable_metrics].first || "visitors"
+        end
+
+        def requested_graph_interval(top_stats)
+          normalized_ui_param(:graph_interval) || normalized_ui_param(:interval) || top_stats[:interval]
+        end
+
+        def requested_sources_mode(query)
+          requested = normalized_ui_param(:sources_mode) || normalized_ui_param(:mode)
+          return requested if requested.in?(%w[channels all utm-medium utm-source utm-campaign utm-content utm-term])
+
+          case normalized_dialog_segment
+          when "referrers"
+            "all"
+          when "channels"
+            "channels"
+          when "utm-mediums"
+            "utm-medium"
+          when "utm-sources"
+            "utm-source"
+          when "utm-campaigns"
+            "utm-campaign"
+          when "utm-contents"
+            "utm-content"
+          when "utm-terms"
+            "utm-term"
+          else
+            filters = query[:filters] || {}
+            return "utm-medium" if filters["utm_medium"].present?
+            return "utm-source" if filters["utm_source"].present?
+            return "utm-campaign" if filters["utm_campaign"].present?
+            return "utm-content" if filters["utm_content"].present?
+            return "utm-term" if filters["utm_term"].present?
+
+            "all"
+          end
+        end
+
+        def requested_pages_mode(query)
+          requested = normalized_ui_param(:pages_mode) || normalized_ui_param(:mode)
+          return requested if requested.in?(%w[pages entry exit])
+
+          case normalized_dialog_segment
+          when "entry-pages"
+            "entry"
+          when "exit-pages"
+            "exit"
+          else
+            "pages"
+          end
+        end
+
+        def requested_locations_mode(query)
+          requested = normalized_ui_param(:locations_mode) || normalized_ui_param(:mode)
+          return requested if requested.in?(%w[map countries regions cities])
+
+          case normalized_dialog_segment
+          when "countries", "regions", "cities"
+            normalized_dialog_segment
+          else
+            "map"
+          end
+        end
+
+        def requested_devices_base_mode
+          requested = normalized_ui_param(:devices_mode) || normalized_ui_param(:mode)
+          return requested if requested.in?(%w[browsers operating-systems screen-sizes])
+
+          case normalized_dialog_segment
+          when "operating-systems"
+            "operating-systems"
+          when "screen-sizes"
+            "screen-sizes"
+          else
+            "browsers"
+          end
+        end
+
+        def requested_devices_mode(query, base_mode: requested_devices_base_mode)
+          filters = query[:filters] || {}
+          if base_mode == "browsers" && filters["browser"].present?
+            "browser-versions"
+          elsif base_mode == "operating-systems" && filters["os"].present?
+            "operating-system-versions"
+          else
+            base_mode
+          end
+        end
+
+        def requested_behaviors_mode(site)
+          requested = normalized_ui_param(:behaviors_mode) || normalized_ui_param(:mode)
+          allowed =
+            if site[:has_goals]
+              %w[conversions props funnels]
+            else
+              %w[props funnels]
+            end
+
+          return requested if allowed.include?(requested)
+          return "conversions" if site[:has_goals]
+          return "props" if site[:props_available]
+          return "funnels" if site[:funnels_available]
+
+          nil
+        end
+
+        def requested_behaviors_funnel
+          normalized_ui_param(:behaviors_funnel) || normalized_ui_param(:funnel)
+        end
+
+        def requested_behaviors_property
+          normalized_ui_param(:behaviors_property) || normalized_ui_param(:property)
+        end
+
+        def normalized_dialog_segment
+          raw = request.path.to_s[%r{/admin/analytics(?:/reports)?/_/([^/?#]+)}, 1]
+          return nil if raw.blank?
+
+          case raw
+          when "utm_mediums", "utm-mediums", "utm-medium"
+            "utm-mediums"
+          when "utm_sources", "utm-sources", "utm-source"
+            "utm-sources"
+          when "utm_campaigns", "utm-campaigns", "utm-campaign"
+            "utm-campaigns"
+          when "utm_contents", "utm-contents", "utm-content"
+            "utm-contents"
+          when "utm_terms", "utm-terms", "utm-term"
+            "utm-terms"
+          when "entry_pages", "entry-pages", "entry"
+            "entry-pages"
+          when "exit_pages", "exit-pages", "exit"
+            "exit-pages"
+          when "operating_systems", "operating-systems"
+            "operating-systems"
+          when "screen_sizes", "screen-sizes"
+            "screen-sizes"
+          else
+            raw.tr("_", "-")
+          end
+        end
     end
   end
 end

@@ -54,6 +54,18 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     assert_equal visit.id, Ahoy::Visit.order(:id).last.id
   end
 
+  test "server-side visit stores request host and drops same-site referrers" do
+    get root_path, headers: BROWSER_HEADERS.merge("HTTP_REFERER" => root_url)
+
+    assert_response :success
+
+    visit = Ahoy::Visit.order(:id).last
+    assert_not_nil visit
+    assert_equal URI.parse(root_url).host, visit.hostname
+    assert_nil visit.referrer
+    assert_nil visit.referring_domain
+  end
+
   test "cookieless event ingestion ignores spoofed client tokens" do
     get root_path, headers: BROWSER_HEADERS
     visit = Ahoy::Visit.order(:id).last
@@ -85,6 +97,39 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_equal visit.id, Ahoy::Event.order(:id).last.visit_id
+  end
+
+  test "non-engagement event creates a visit and backfills landing page and screen size" do
+    assert_difference -> { Ahoy::Visit.count }, +1 do
+      assert_difference -> { Ahoy::Event.count }, +1 do
+        post "/ahoy/events",
+          params: {
+            events: [
+              {
+                name: "Signup",
+                properties: {
+                  page: "/about",
+                  url: about_url,
+                  title: "About",
+                  referrer: "",
+                  screen_size: "1440x900"
+                },
+                time: Time.current.iso8601
+              }
+            ]
+          },
+          as: :json,
+          headers: BROWSER_HEADERS
+      end
+    end
+
+    assert_response :success
+
+    visit = Ahoy::Visit.order(:id).last
+    assert_not_nil visit
+    assert_equal about_url, visit.landing_page
+    assert_equal URI.parse(about_url).host, visit.hostname
+    assert_equal "Desktop", visit.screen_size
   end
 
   test "cookieless event ingestion reuses the recent visit across daily rotation" do

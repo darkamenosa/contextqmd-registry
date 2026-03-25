@@ -13,6 +13,7 @@ CI.run do
 
   step "Build: Vite test assets", "RAILS_ENV=test bin/vite build --clear"
 
+  step "Tests: Node", "node --test test/frontend/*.test.mjs"
   step "Tests: Rails", "bin/rails test"
   # step "Tests: System", "bin/rails test:system"  # Rails 8.1+ no longer generates system tests by default
   step "Tests: Seeds", "env RAILS_ENV=test bin/rails db:seed:replant"

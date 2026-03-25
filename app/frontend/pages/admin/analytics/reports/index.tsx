@@ -10,7 +10,7 @@ import AnalyticsDashboard from "../ui/analytics-dashboard"
 import { UserProvider } from "../user-context"
 
 export default function AdminAnalyticsReports(props: AnalyticsPageProps) {
-  const { site, user, query, defaultQuery } = props
+  const { site, user, query, defaultQuery, boot } = props
   const { url } = usePage()
 
   return (
@@ -22,7 +22,7 @@ export default function AdminAnalyticsReports(props: AnalyticsPageProps) {
           <UserProvider value={user}>
             <QueryProvider initialQuery={query} defaultQuery={defaultQuery}>
               <LastLoadProvider>
-                <AnalyticsDashboard />
+                <AnalyticsDashboard initialBoot={boot} />
                 {site.flags.dbip ? (
                   <div className="mt-6 border-t border-border pt-4 text-xs text-muted-foreground">
                     This product includes GeoLite2 data created by MaxMind,

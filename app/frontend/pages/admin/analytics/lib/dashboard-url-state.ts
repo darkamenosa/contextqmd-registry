@@ -1,3 +1,5 @@
+import { navigateAnalytics } from "./location-store"
+
 const BEHAVIORS_SEARCH_PARAMS = {
   funnel: "behaviors_funnel",
   property: "behaviors_property",
@@ -116,11 +118,7 @@ export function updateDashboardSearchParams(
   const pathname = options?.pathname ?? window.location.pathname
   const url = qs ? `${pathname}?${qs}` : pathname
 
-  if (options?.history === "replace") {
-    window.history.replaceState({}, "", url)
-  } else {
-    window.history.pushState({}, "", url)
-  }
+  navigateAnalytics(url, { history: options?.history })
 }
 
 export function getBehaviorsFunnelFromSearch(

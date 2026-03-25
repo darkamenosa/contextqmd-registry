@@ -162,7 +162,11 @@ class Ahoy::Visit < AnalyticsRecord
 
   def refresh_source_dimensions!
     assign_source_dimensions
-    update_columns(
+    update_columns(source_dimension_attributes)
+  end
+
+  def source_dimension_attributes
+    {
       source_label: source_label,
       source_kind: source_kind,
       source_channel: source_channel,
@@ -171,6 +175,6 @@ class Ahoy::Visit < AnalyticsRecord
       source_rule_id: source_rule_id,
       source_rule_version: source_rule_version,
       source_match_strategy: source_match_strategy
-    )
+    }
   end
 end

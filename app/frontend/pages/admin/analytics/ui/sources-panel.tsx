@@ -27,12 +27,11 @@ import {
   parseDialogFromPath,
   type SourcesMode,
 } from "../lib/dialog-path"
+import { navigateAnalytics } from "../lib/location-store"
 import {
   getSourcesModeFromSearch,
   hasPanelModeSearchParam,
   inferSourcesModeFromFilters,
-  readStoredMode,
-  SOURCES_MODES,
 } from "../lib/panel-mode"
 import { useScopedQuery } from "../lib/query-scope"
 import {
@@ -71,27 +70,24 @@ const STORAGE_PREFIX = "admin.analytics.sources"
 
 type SourcesPanelProps = {
   initialData: ListPayload
+  initialMode: string
 }
 
-export default function SourcesPanel({ initialData }: SourcesPanelProps) {
+export default function SourcesPanel({
+  initialData,
+  initialMode,
+}: SourcesPanelProps) {
   const { query, pathname, search, updateQuery } = useQueryContext()
   const site = useSiteContext()
-  const storedMode =
-    readStoredMode(`${STORAGE_PREFIX}.${site.domain}`, SOURCES_MODES) ?? "all"
   const explicitSearchMode = hasPanelModeSearchParam(search, "sources")
     ? getSourcesModeFromSearch(search, query)
     : null
-  const initialMode =
-    explicitSearchMode ??
-    inferSourcesModeFromFilters(query.filters) ??
-    storedMode ??
-    "all"
 
   const [data, setData] = useState<ListPayload>(initialData)
   const [loading, setLoading] = useState(false)
   const [debugOpen, setDebugOpen] = useState(false)
   const [preferredMode, setPreferredMode] = useState(
-    () => explicitSearchMode ?? storedMode
+    () => explicitSearchMode ?? initialMode
   )
   const { value: baseQuery } = useScopedQuery(query, {
     omitMode: true,
@@ -129,7 +125,7 @@ export default function SourcesPanel({ initialData }: SourcesPanelProps) {
     try {
       const sp = new URLSearchParams(window.location.search)
       sp.delete("dialog")
-      window.history.pushState({}, "", baseAnalyticsPath(sp.toString()))
+      navigateAnalytics(baseAnalyticsPath(sp.toString()))
     } catch {
       // Ignore history errors; local dialog state remains usable.
     }
@@ -375,11 +371,7 @@ export default function SourcesPanel({ initialData }: SourcesPanelProps) {
                     sp.delete("dialog")
                     const qs = sp.toString()
                     if (activeSource) {
-                      window.history.pushState(
-                        {},
-                        "",
-                        buildReferrersPath(activeSource, qs)
-                      )
+                      navigateAnalytics(buildReferrersPath(activeSource, qs))
                     }
                   } catch {
                     // Ignore history errors when opening the details route.
@@ -411,11 +403,7 @@ export default function SourcesPanel({ initialData }: SourcesPanelProps) {
                     sp.delete("dialog")
                     const qs = sp.toString()
                     // For Google Search Terms, mirror Plausible route
-                    window.history.pushState(
-                      {},
-                      "",
-                      buildReferrersPath("Google", qs)
-                    )
+                    navigateAnalytics(buildReferrersPath("Google", qs))
                   } catch {
                     // Ignore history errors when opening the details route.
                   }
@@ -500,9 +488,7 @@ export default function SourcesPanel({ initialData }: SourcesPanelProps) {
                         sp.delete("dialog")
                         const qs = sp.toString()
                         if (activeSource) {
-                          window.history.pushState(
-                            {},
-                            "",
+                          navigateAnalytics(
                             buildReferrersPath(String(activeSource), qs)
                           )
                         }
@@ -515,11 +501,7 @@ export default function SourcesPanel({ initialData }: SourcesPanelProps) {
                         sp.delete("dialog")
                         const qs = sp.toString()
                         const seg = dialogSegmentForMode(mode as SourcesMode)
-                        window.history.pushState(
-                          {},
-                          "",
-                          buildDialogPath(seg, qs)
-                        )
+                        navigateAnalytics(buildDialogPath(seg, qs))
                       } catch {
                         // Ignore history errors when opening source details.
                       }
@@ -547,17 +529,13 @@ export default function SourcesPanel({ initialData }: SourcesPanelProps) {
             if (open) {
               if (isGoogleActive) {
                 // Keep Google keywords route when Search Terms modal is open
-                window.history.pushState(
-                  {},
-                  "",
-                  buildReferrersPath("Google", qs)
-                )
+                navigateAnalytics(buildReferrersPath("Google", qs))
               } else {
                 const seg = dialogSegmentForMode(mode as SourcesMode)
-                window.history.pushState({}, "", buildDialogPath(seg, qs))
+                navigateAnalytics(buildDialogPath(seg, qs))
               }
             } else {
-              window.history.pushState({}, "", baseAnalyticsPath(qs))
+              navigateAnalytics(baseAnalyticsPath(qs))
             }
           } catch {
             // Ignore history errors when syncing modal state.
@@ -597,13 +575,9 @@ export default function SourcesPanel({ initialData }: SourcesPanelProps) {
               sp.delete("dialog")
               const qs = sp.toString()
               if (open && activeSource) {
-                window.history.pushState(
-                  {},
-                  "",
-                  buildReferrersPath(String(activeSource), qs)
-                )
+                navigateAnalytics(buildReferrersPath(String(activeSource), qs))
               } else if (!open) {
-                window.history.pushState({}, "", baseAnalyticsPath(qs))
+                navigateAnalytics(baseAnalyticsPath(qs))
               }
             } catch (e) {
               console.warn("Failed to push dialog path", e)

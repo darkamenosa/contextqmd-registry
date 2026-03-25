@@ -15,11 +15,7 @@ import {
   pagesSegmentForMode,
   parseDialogFromPath,
 } from "../lib/dialog-path"
-import {
-  getPagesModeFromSearch,
-  PAGES_MODES,
-  readStoredMode,
-} from "../lib/panel-mode"
+import { navigateAnalytics } from "../lib/location-store"
 import { useScopedQuery } from "../lib/query-scope"
 import { useQueryContext } from "../query-context"
 import { useSiteContext } from "../site-context"
@@ -45,15 +41,15 @@ const STORAGE_PREFIX = "admin.analytics.pages"
 
 type PagesPanelProps = {
   initialData: ListPayload
+  initialMode: string
 }
 
-export default function PagesPanel({ initialData }: PagesPanelProps) {
-  const { query, pathname, search, updateQuery } = useQueryContext()
+export default function PagesPanel({
+  initialData,
+  initialMode,
+}: PagesPanelProps) {
+  const { query, pathname, updateQuery } = useQueryContext()
   const site = useSiteContext()
-  const initialMode =
-    getPagesModeFromSearch(search, query.mode) ??
-    readStoredMode(`${STORAGE_PREFIX}.${site.domain}`, PAGES_MODES) ??
-    "pages"
 
   const [data, setData] = useState<ListPayload>(initialData)
   const [preferredMode, setPreferredMode] = useState(() => initialMode)
@@ -84,7 +80,7 @@ export default function PagesPanel({ initialData }: PagesPanelProps) {
     try {
       const sp = new URLSearchParams(window.location.search)
       sp.delete("dialog")
-      window.history.pushState({}, "", baseAnalyticsPath(sp.toString()))
+      navigateAnalytics(baseAnalyticsPath(sp.toString()))
     } catch {
       // Ignore history errors; local modal state can still close cleanly.
     }
@@ -176,10 +172,12 @@ export default function PagesPanel({ initialData }: PagesPanelProps) {
               active={mode === tab.value}
               onClick={() => {
                 setPreferredMode(tab.value)
-                localStorage.setItem(
-                  `${STORAGE_PREFIX}.${site.domain}`,
-                  tab.value
-                )
+                if (typeof window !== "undefined") {
+                  localStorage.setItem(
+                    `${STORAGE_PREFIX}.${site.domain}`,
+                    tab.value
+                  )
+                }
               }}
             >
               {tab.short}
@@ -229,11 +227,7 @@ export default function PagesPanel({ initialData }: PagesPanelProps) {
                   const seg = pagesSegmentForMode(
                     mode as "pages" | "entry" | "exit"
                   )
-                  window.history.pushState(
-                    {},
-                    "",
-                    buildDialogPath(seg, sp.toString())
-                  )
+                  navigateAnalytics(buildDialogPath(seg, sp.toString()))
                 } catch {
                   // Ignore history errors when opening the details modal.
                 }
@@ -256,9 +250,9 @@ export default function PagesPanel({ initialData }: PagesPanelProps) {
               const seg = pagesSegmentForMode(
                 mode as "pages" | "entry" | "exit"
               )
-              window.history.pushState({}, "", buildDialogPath(seg, qs))
+              navigateAnalytics(buildDialogPath(seg, qs))
             } else {
-              window.history.pushState({}, "", baseAnalyticsPath(qs))
+              navigateAnalytics(baseAnalyticsPath(qs))
             }
           } catch {
             // Ignore history errors when syncing the modal route.

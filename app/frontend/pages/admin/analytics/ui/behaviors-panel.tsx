@@ -22,11 +22,10 @@ import {
   buildDialogPath,
   parseDialogFromPath,
 } from "../lib/dialog-path"
+import { navigateAnalytics } from "../lib/location-store"
 import { percentageFormatter } from "../lib/number-formatter"
 import {
-  BEHAVIORS_MODES,
   getBehaviorsModeFromSearch,
-  readStoredMode,
   setPanelModeSearchParam,
 } from "../lib/panel-mode"
 import { useScopedQuery } from "../lib/query-scope"
@@ -53,9 +52,17 @@ const STORAGE_PREFIX = "admin.analytics.behaviors"
 
 type BehaviorsPanelProps = {
   initialData: BehaviorsPayload
+  initialMode?: string | null
+  initialFunnel?: string | null
+  initialProperty?: string | null
 }
 
-export default function BehaviorsPanel({ initialData }: BehaviorsPanelProps) {
+export default function BehaviorsPanel({
+  initialData,
+  initialMode,
+  initialFunnel,
+  initialProperty,
+}: BehaviorsPanelProps) {
   const { query, pathname, search, updateQuery } = useQueryContext()
   const site = useSiteContext()
 
@@ -74,16 +81,9 @@ export default function BehaviorsPanel({ initialData }: BehaviorsPanelProps) {
     site.hasGoals
   )
 
-  const [preferredMode, setPreferredMode] = useState(() => {
-    return readStoredMode(
-      `${STORAGE_PREFIX}.${site.domain}`,
-      site.hasGoals
-        ? BEHAVIORS_MODES
-        : BEHAVIORS_MODES.filter((value) => value !== "conversions")
-    )
-  })
+  const [preferredMode, setPreferredMode] = useState<string | null>(null)
   const [modeState, setModeState] = useState(
-    queryMode ?? preferredMode ?? defaultMode
+    initialMode ?? queryMode ?? defaultMode
   )
   const [data, setData] = useState<BehaviorsPayload>(initialData)
   const [loading, setLoading] = useState(false)
@@ -93,10 +93,10 @@ export default function BehaviorsPanel({ initialData }: BehaviorsPanelProps) {
   )
   const selectedPropertyFromSearch = getBehaviorsPropertyFromSearch(search)
   const [selectedFunnelState, setSelectedFunnelState] = useState(
-    selectedFunnelFromSearch
+    initialFunnel ?? selectedFunnelFromSearch
   )
   const [selectedPropertyState, setSelectedPropertyState] = useState(
-    selectedPropertyFromSearch
+    initialProperty ?? selectedPropertyFromSearch
   )
   const { value: baseQuery } = useScopedQuery(query, {
     omitMode: true,
@@ -158,13 +158,15 @@ export default function BehaviorsPanel({ initialData }: BehaviorsPanelProps) {
     routeSelectedProperty,
     selectedPropertyState,
   ])
-  const initialRequestMode = queryMode ?? defaultMode
+  const initialRequestMode = initialMode ?? queryMode ?? defaultMode
   const initialRequestFunnel =
+    initialFunnel ??
     selectedFunnelFromSearch ??
     ("funnels" in initialData
       ? (initialData.active?.name ?? initialData.funnels[0])
       : undefined)
   const initialRequestProperty =
+    initialProperty ??
     selectedPropertyState ??
     ("list" in initialData ? (initialData.activeProperty ?? null) : null)
   const initialRequestKey = useMemo(
@@ -316,7 +318,7 @@ export default function BehaviorsPanel({ initialData }: BehaviorsPanelProps) {
       if (activeProperty) {
         setBehaviorsPropertySearchParam(sp, activeProperty)
       }
-      window.history.pushState({}, "", baseAnalyticsPath(sp.toString()))
+      navigateAnalytics(baseAnalyticsPath(sp.toString()))
     } catch {
       // Ignore history errors; the modal can still close locally.
     }
@@ -480,11 +482,7 @@ export default function BehaviorsPanel({ initialData }: BehaviorsPanelProps) {
                   if (activeProperty) {
                     setBehaviorsPropertySearchParam(sp, activeProperty)
                   }
-                  window.history.pushState(
-                    {},
-                    "",
-                    buildDialogPath("behaviors", sp.toString())
-                  )
+                  navigateAnalytics(buildDialogPath("behaviors", sp.toString()))
                 } catch {
                   // Ignore history errors; the dialog can still open from local state.
                 }
@@ -514,13 +512,9 @@ export default function BehaviorsPanel({ initialData }: BehaviorsPanelProps) {
               }
               const qs = sp.toString()
               if (open) {
-                window.history.pushState(
-                  {},
-                  "",
-                  buildDialogPath("behaviors", qs)
-                )
+                navigateAnalytics(buildDialogPath("behaviors", qs))
               } else {
-                window.history.pushState({}, "", baseAnalyticsPath(qs))
+                navigateAnalytics(baseAnalyticsPath(qs))
               }
             } catch {
               // Ignore history errors; keep the current dialog state.
