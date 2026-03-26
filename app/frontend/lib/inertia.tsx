@@ -30,7 +30,9 @@ export const resolvePage = (name: string) => {
       console.error(error.message)
       return Promise.reject(error)
     }
-    return loadPage().then((pageModule) => applyPersistentLayout(pageModule.default))
+    return loadPage().then((pageModule) =>
+      applyPersistentLayout(pageModule.default)
+    )
   }
 
   if (name.startsWith("app/")) {
@@ -40,7 +42,9 @@ export const resolvePage = (name: string) => {
       console.error(error.message)
       return Promise.reject(error)
     }
-    return loadPage().then((pageModule) => applyPersistentLayout(pageModule.default))
+    return loadPage().then((pageModule) =>
+      applyPersistentLayout(pageModule.default)
+    )
   }
 
   const page = publicPages[pagePath]
