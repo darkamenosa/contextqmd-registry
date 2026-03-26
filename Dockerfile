@@ -64,7 +64,7 @@ COPY Gemfile Gemfile.lock ./
 COPY package.json package-lock.json ./
 
 RUN bundle install && \
-    npm ci && \
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci && \
     rm -rf ~/.bundle/ "${BUNDLE_PATH}"/ruby/*/cache "${BUNDLE_PATH}"/ruby/*/bundler/gems/*/.git && \
     # -j 1 disable parallel compilation to avoid a QEMU bug: https://github.com/rails/bootsnap/issues/495
     bundle exec bootsnap precompile -j 1 --gemfile
@@ -76,14 +76,24 @@ COPY . .
 # -j 1 disable parallel compilation to avoid a QEMU bug: https://github.com/rails/bootsnap/issues/495
 RUN bundle exec bootsnap precompile -j 1 app/ lib/
 
-# Precompiling assets for production without requiring secret RAILS_MASTER_KEY
-RUN SECRET_KEY_BASE_DUMMY=1 ./bin/rails assets:precompile
+# Precompiling assets for production without requiring secret RAILS_MASTER_KEY.
+# JS dependencies were already installed above, so skip Vite Ruby's extra npm ci.
+RUN VITE_RUBY_SKIP_ASSETS_PRECOMPILE_INSTALL=true \
+    SECRET_KEY_BASE_DUMMY=1 ./bin/rails assets:precompile
 
 
+# Install Playwright and its OS/runtime dependencies in a layer that changes only
+# when package manifests change, not on every application code change.
+FROM base AS runtime-base
+
+COPY package.json package-lock.json ./
+RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci --omit=dev && \
+    npx playwright install --with-deps chromium && \
+    rm -rf node_modules package.json package-lock.json /var/lib/apt/lists /var/cache/apt/archives
 
 
 # Final stage for app image
-FROM base
+FROM runtime-base
 
 # Run and own only the runtime files as a non-root user for security
 RUN groupadd --system --gid 1000 rails && \
@@ -93,12 +103,7 @@ RUN groupadd --system --gid 1000 rails && \
 COPY --chown=rails:rails --from=build "${BUNDLE_PATH}" "${BUNDLE_PATH}"
 COPY --chown=rails:rails --from=build /rails /rails
 
-# Install the Playwright browser runtime and required OS packages in the image
-# that will execute the crawler.
-RUN cd /rails && \
-    npx playwright install --with-deps chromium && \
-    chown -R rails:rails /ms-playwright && \
-    rm -rf /var/lib/apt/lists /var/cache/apt/archives
+RUN chown -R rails:rails /ms-playwright
 
 USER 1000:1000
 

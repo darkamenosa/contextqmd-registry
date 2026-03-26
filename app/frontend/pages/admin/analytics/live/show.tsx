@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Head } from "@inertiajs/react"
 import {
   Eye,
@@ -14,40 +14,22 @@ import {
 
 import { getConsumer, type Subscription } from "@/lib/cable"
 import { geocodeOsm } from "@/lib/geocode"
+import { useClientComponent } from "@/hooks/use-client-component"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { MetricCard } from "@/components/analytics/metric-card"
 import { SessionsByLocation } from "@/components/analytics/sessions-by-location"
+import type {
+  VisitorGlobeHandle,
+  VisitorGlobeZoomState,
+} from "@/components/analytics/visitor-globe"
 import AdminLayout from "@/layouts/admin-layout"
 
-// Avoid importing the VisitorGlobe module at SSR time. It pulls in browser-only
-// three.js/H3 dependencies. Use React.lazy so SSR renders a fallback and the
-// heavy code loads only on the client.
-const VisitorGlobe = lazy(() =>
-  import("@/components/analytics/visitor-globe").then((m) => ({
-    default: m.VisitorGlobe,
-  }))
-)
+const loadVisitorGlobeComponent = () =>
+  import("@/components/analytics/visitor-globe").then(
+    ({ VisitorGlobe: component }) => component
+  )
 
-// Lightweight local types and constants to avoid touching the heavy module during SSR
-type VisitorGlobeZoomState = {
-  distance: number
-  minDistance: number
-  maxDistance: number
-}
-type VisitorGlobeHandle = {
-  zoomIn: () => void
-  zoomOut: () => void
-  getDistance: () => number
-  focusOn: (lat: number, lng: number, distance?: number) => void
-  flyTo: (
-    lat: number,
-    lng: number,
-    distance?: number,
-    durationMs?: number
-  ) => void
-  getView: () => { lat: number; lng: number; distance: number }
-}
 const VISITOR_GLOBE_MIN_DISTANCE = 1.8
 const VISITOR_GLOBE_MAX_DISTANCE = 3.2
 
@@ -106,6 +88,10 @@ export default function LiveAnalytics({
 }) {
   const resolvedInitialStats = initialStats ?? initial_stats ?? EMPTY_STATS
   const [stats, setStats] = useState(resolvedInitialStats)
+  const { Component: VisitorGlobeComponent } = useClientComponent(
+    loadVisitorGlobeComponent,
+    { preload: true }
+  )
   const mobileGlobeRef = useRef<VisitorGlobeHandle>(null)
   const desktopGlobeRef = useRef<VisitorGlobeHandle>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -361,17 +347,15 @@ export default function LiveAnalytics({
 
               {/* Globe */}
               <div className="w/full aspect-square">
-                <Suspense
-                  fallback={
-                    <div className="h-full w-full rounded-lg bg-muted/10" />
-                  }
-                >
-                  <VisitorGlobe
+                {VisitorGlobeComponent ? (
+                  <VisitorGlobeComponent
                     ref={mobileGlobeRef}
                     visitors={stats.visitorDots}
                     onViewChange={setView}
                   />
-                </Suspense>
+                ) : (
+                  <VisitorGlobeFallback />
+                )}
               </div>
 
               {/* Metrics Grid */}
@@ -407,18 +391,16 @@ export default function LiveAnalytics({
                 className="h-full w-full transition-transform duration-500 ease-out"
                 style={{ transform: `translateX(${globeTranslateX}px)` }}
               >
-                <Suspense
-                  fallback={
-                    <div className="h-full w-full rounded-lg bg-muted/10" />
-                  }
-                >
-                  <VisitorGlobe
+                {VisitorGlobeComponent ? (
+                  <VisitorGlobeComponent
                     ref={desktopGlobeRef}
                     visitors={stats.visitorDots}
                     onZoomChange={setGlobeZoomState}
                     onViewChange={setView}
                   />
-                </Suspense>
+                ) : (
+                  <VisitorGlobeFallback />
+                )}
               </div>
             </div>
 
@@ -660,4 +642,8 @@ export default function LiveAnalytics({
       </div>
     </AdminLayout>
   )
+}
+
+function VisitorGlobeFallback() {
+  return <div className="h-full w-full rounded-lg bg-muted/10" />
 }

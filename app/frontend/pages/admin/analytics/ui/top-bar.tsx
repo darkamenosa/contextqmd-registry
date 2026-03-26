@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Calendar, Filter, Layers, Shuffle, X } from "lucide-react"
 
+import { useClientComponent } from "@/hooks/use-client-component"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -17,8 +18,6 @@ import { useQueryContext } from "../query-context"
 import { useSiteContext } from "../site-context"
 import { useTopStatsContext } from "../top-stats-context"
 import type { AnalyticsQuery } from "../types"
-import DateRangePicker from "./date-range-dialog"
-import FilterDialog from "./filter-dialog"
 
 // No PERIOD_OPTIONS: menu rendered manually into Plausible-like groups
 
@@ -53,6 +52,12 @@ const FILTER_PICKER_COLUMNS = [
     ],
   },
 ]
+
+const loadFilterDialogComponent = () =>
+  import("./filter-dialog").then(({ default: component }) => component)
+
+const loadDateRangePickerComponent = () =>
+  import("./date-range-dialog").then(({ default: component }) => component)
 
 type TopBarProps = {
   showCurrentVisitors: boolean
@@ -352,6 +357,8 @@ function FilterMenu() {
   const [open, setOpen] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const openDialogFrameRef = useRef<number | null>(null)
+  const { Component: FilterDialogComponent, load: loadFilterDialog } =
+    useClientComponent(loadFilterDialogComponent)
   const [dialogType, setDialogType] = useState<
     | "page"
     | "location"
@@ -403,9 +410,17 @@ function FilterMenu() {
 
     openDialogFrameRef.current = window.requestAnimationFrame(() => {
       openDialogFrameRef.current = window.requestAnimationFrame(() => {
-        setDialogType(nextType)
-        setDialogOpen(true)
-        openDialogFrameRef.current = null
+        void loadFilterDialog()
+          .then(() => {
+            setDialogType(nextType)
+            setDialogOpen(true)
+          })
+          .catch((error) => {
+            console.error("Failed to load filter dialog", error)
+          })
+          .finally(() => {
+            openDialogFrameRef.current = null
+          })
       })
     })
   }
@@ -470,11 +485,13 @@ function FilterMenu() {
           </div>
         ))}
       </DropdownMenuContent>
-      <FilterDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        type={dialogType}
-      />
+      {FilterDialogComponent ? (
+        <FilterDialogComponent
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          type={dialogType}
+        />
+      ) : null}
     </DropdownMenu>
   )
 }
@@ -544,6 +561,8 @@ function QueryPeriodsPicker() {
   const compareCalendarButtonRef = useRef<HTMLButtonElement>(null)
   const [customOpen, setCustomOpen] = useState(false)
   const [compareOpen, setCompareOpen] = useState(false)
+  const { Component: DateRangePickerComponent, load: loadDateRangePicker } =
+    useClientComponent(loadDateRangePickerComponent)
 
   useEffect(() => {
     function onKeydown(e: KeyboardEvent) {
@@ -580,7 +599,11 @@ function QueryPeriodsPicker() {
       if (!action) return
       e.preventDefault()
       if (action === "custom") {
-        setCustomOpen(true)
+        void loadDateRangePicker()
+          .then(() => setCustomOpen(true))
+          .catch((error) => {
+            console.error("Failed to load date range picker", error)
+          })
         return
       }
       if (action === "toggle-compare") {
@@ -802,7 +825,13 @@ function QueryPeriodsPicker() {
           <DropdownMenuItem
             onClick={() => {
               setDropdownOpen(false)
-              setTimeout(() => setCustomOpen(true), 0)
+              void loadDateRangePicker()
+                .then(() => {
+                  setTimeout(() => setCustomOpen(true), 0)
+                })
+                .catch((error) => {
+                  console.error("Failed to load date range picker", error)
+                })
             }}
             className="hover:bg-accent data-[selected=true]:bg-primary/10"
           >
@@ -904,7 +933,13 @@ function QueryPeriodsPicker() {
               <DropdownMenuItem
                 onClick={() => {
                   setDropdownOpen(false)
-                  setTimeout(() => setCompareOpen(true), 0)
+                  void loadDateRangePicker()
+                    .then(() => {
+                      setTimeout(() => setCompareOpen(true), 0)
+                    })
+                    .catch((error) => {
+                      console.error("Failed to load date range picker", error)
+                    })
                 }}
                 className="hover:bg-accent data-[selected=true]:bg-primary/10"
               >
@@ -942,45 +977,51 @@ function QueryPeriodsPicker() {
       )}
 
       {/* Custom Range Calendar Picker */}
-      <DateRangePicker
-        buttonRef={customCalendarButtonRef}
-        open={customOpen}
-        onOpenChange={setCustomOpen}
-        initialFrom={query.period === "custom" ? query.from : undefined}
-        initialTo={query.period === "custom" ? query.to : undefined}
-        onApply={(fromISO, toISO) => {
-          setCustomOpen(false)
-          updateQuery((current) => ({
-            ...current,
-            period: "custom",
-            from: fromISO,
-            to: toISO,
-          }))
-        }}
-      />
+      {DateRangePickerComponent ? (
+        <DateRangePickerComponent
+          buttonRef={customCalendarButtonRef}
+          open={customOpen}
+          onOpenChange={setCustomOpen}
+          initialFrom={query.period === "custom" ? query.from : undefined}
+          initialTo={query.period === "custom" ? query.to : undefined}
+          onApply={(fromISO, toISO) => {
+            setCustomOpen(false)
+            updateQuery((current) => ({
+              ...current,
+              period: "custom",
+              from: fromISO,
+              to: toISO,
+            }))
+          }}
+        />
+      ) : null}
 
       {/* Comparison Custom Range Calendar Picker */}
-      <DateRangePicker
-        buttonRef={compareCalendarButtonRef}
-        open={compareOpen}
-        onOpenChange={setCompareOpen}
-        initialFrom={
-          query.comparison === "custom" ? query.compareFrom : undefined
-        }
-        initialTo={query.comparison === "custom" ? query.compareTo : undefined}
-        onApply={(fromISO, toISO) => {
-          setCompareOpen(false)
-          updateQuery(
-            (current) =>
-              ({
-                ...current,
-                comparison: "custom",
-                compareFrom: fromISO,
-                compareTo: toISO,
-              }) as AnalyticsQuery
-          )
-        }}
-      />
+      {DateRangePickerComponent ? (
+        <DateRangePickerComponent
+          buttonRef={compareCalendarButtonRef}
+          open={compareOpen}
+          onOpenChange={setCompareOpen}
+          initialFrom={
+            query.comparison === "custom" ? query.compareFrom : undefined
+          }
+          initialTo={
+            query.comparison === "custom" ? query.compareTo : undefined
+          }
+          onApply={(fromISO, toISO) => {
+            setCompareOpen(false)
+            updateQuery(
+              (current) =>
+                ({
+                  ...current,
+                  comparison: "custom",
+                  compareFrom: fromISO,
+                  compareTo: toISO,
+                }) as AnalyticsQuery
+            )
+          }}
+        />
+      ) : null}
     </div>
   )
 }
