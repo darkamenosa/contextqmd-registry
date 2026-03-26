@@ -13,11 +13,11 @@ const publicPages = import.meta.glob<PageModule>(
 const adminPages = import.meta.glob<PageModule>("../pages/admin/**/*.tsx")
 const appPages = import.meta.glob<PageModule>("../pages/app/**/*.tsx")
 
-const applyPersistentLayout = (pageModule: PageModule) => {
-  pageModule.default.layout ||= (pageNode: ReactNode) => (
+const applyPersistentLayout = (pageComponent: ResolvedComponent) => {
+  pageComponent.layout ||= (pageNode: ReactNode) => (
     <PersistentLayout>{pageNode}</PersistentLayout>
   )
-  return pageModule
+  return pageComponent
 }
 
 export const resolvePage = (name: string) => {
@@ -30,7 +30,7 @@ export const resolvePage = (name: string) => {
       console.error(error.message)
       return Promise.reject(error)
     }
-    return loadPage().then(applyPersistentLayout)
+    return loadPage().then((pageModule) => applyPersistentLayout(pageModule.default))
   }
 
   if (name.startsWith("app/")) {
@@ -40,7 +40,7 @@ export const resolvePage = (name: string) => {
       console.error(error.message)
       return Promise.reject(error)
     }
-    return loadPage().then(applyPersistentLayout)
+    return loadPage().then((pageModule) => applyPersistentLayout(pageModule.default))
   }
 
   const page = publicPages[pagePath]
@@ -49,7 +49,7 @@ export const resolvePage = (name: string) => {
     console.error(error.message)
     throw error
   }
-  return applyPersistentLayout(page)
+  return applyPersistentLayout(page.default)
 }
 
 export const titleTemplate = (title: string) =>
@@ -60,11 +60,5 @@ export const titleTemplate = (title: string) =>
 export const inertiaDefaults = {
   form: {
     forceIndicesArrayFormatInFormData: false,
-  },
-  future: {
-    useScriptElementForInitialPage: true,
-    useDataInertiaHeadAttribute: true,
-    useDialogForErrorModal: true,
-    preserveEqualProps: true,
   },
 } as const

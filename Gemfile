@@ -67,7 +67,7 @@ group :test do
   gem "webrick"
 end
 
-gem "inertia_rails", "~> 3.17"
+gem "inertia_rails", "~> 3.19"
 
 gem "vite_rails", "~> 3.0"
 

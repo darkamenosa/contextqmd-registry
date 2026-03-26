@@ -10,14 +10,16 @@ void createInertiaApp({
   resolve: resolvePage,
   setup({ el, App, props }) {
     if (el) {
-      if (import.meta.env.MODE === "production") {
-        hydrateRoot(el, <App {...props} />)
+      const app = (
+        <StrictMode>
+          <App {...props} />
+        </StrictMode>
+      )
+
+      if (el.hasAttribute("data-server-rendered")) {
+        hydrateRoot(el, app)
       } else {
-        createRoot(el).render(
-          <StrictMode>
-            <App {...props} />
-          </StrictMode>
-        )
+        createRoot(el).render(app)
       }
     } else {
       console.error("Missing root element.")
