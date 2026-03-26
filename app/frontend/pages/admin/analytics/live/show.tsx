@@ -15,6 +15,7 @@ import {
 import { getConsumer, type Subscription } from "@/lib/cable"
 import { geocodeOsm } from "@/lib/geocode"
 import { useClientComponent } from "@/hooks/use-client-component"
+import { useHydrated } from "@/hooks/use-hydrated"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { MetricCard } from "@/components/analytics/metric-card"
@@ -86,6 +87,7 @@ export default function LiveAnalytics({
   initialStats?: LiveStats
   initial_stats?: LiveStats
 }) {
+  const hydrated = useHydrated()
   const resolvedInitialStats = initialStats ?? initial_stats ?? EMPTY_STATS
   const [stats, setStats] = useState(resolvedInitialStats)
   const { Component: VisitorGlobeComponent } = useClientComponent(
@@ -218,14 +220,16 @@ export default function LiveAnalytics({
   const globeTranslateX = areCardsVisible
     ? (DESKTOP_CARD_WIDTH + DESKTOP_GAP) / 2
     : 0
-  const formattedTimestamp = new Date().toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZoneName: "short",
-  })
+  const formattedTimestamp = hydrated
+    ? new Date().toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZoneName: "short",
+      })
+    : ""
 
   // Geocode search (OSS: Nominatim) – shared for mobile + desktop
   useEffect(() => {

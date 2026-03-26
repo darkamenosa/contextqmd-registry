@@ -15,7 +15,6 @@ import {
   XCircle,
 } from "lucide-react"
 
-import { formatDateTime } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -41,6 +40,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { StatusBadge } from "@/components/admin/ui/status-badge"
+import { HydratedDateTime } from "@/components/shared/hydrated-date-time"
 import { SourceTypeIcon } from "@/components/shared/source-type-icon"
 import AdminLayout from "@/layouts/admin-layout"
 
@@ -105,7 +105,7 @@ function Timeline({ steps }: { steps: TimelineStep[] }) {
           <div className="pb-4">
             <div className="text-sm font-medium">{step.label}</div>
             <div className="text-xs text-muted-foreground">
-              {step.time ? formatDateTime(step.time) : "—"}
+              {step.time ? <HydratedDateTime iso={step.time} /> : "—"}
             </div>
           </div>
         </div>
@@ -483,18 +483,24 @@ export default function AdminCrawlRequestShow({ crawlRequest: cr }: Props) {
                 <dl className="mt-2 grid grid-cols-1 gap-y-2 border-t pt-3 text-xs text-muted-foreground">
                   <div className="flex justify-between">
                     <dt>Created</dt>
-                    <dd>{formatDateTime(cr.createdAt)}</dd>
+                    <dd>
+                      <HydratedDateTime iso={cr.createdAt} />
+                    </dd>
                   </div>
                   {cr.startedAt && (
                     <div className="flex justify-between">
                       <dt>Started</dt>
-                      <dd>{formatDateTime(cr.startedAt)}</dd>
+                      <dd>
+                        <HydratedDateTime iso={cr.startedAt} />
+                      </dd>
                     </div>
                   )}
                   {cr.completedAt && (
                     <div className="flex justify-between">
                       <dt>Finished</dt>
-                      <dd>{formatDateTime(cr.completedAt)}</dd>
+                      <dd>
+                        <HydratedDateTime iso={cr.completedAt} />
+                      </dd>
                     </div>
                   )}
                 </dl>

@@ -3,7 +3,6 @@ import { Head, Link, router } from "@inertiajs/react"
 import type { AdminLibrary, PaginationData } from "@/types"
 import { Plus } from "lucide-react"
 
-import { formatDateTime } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -22,6 +21,7 @@ import {
   type IndexTableSort,
 } from "@/components/admin/ui/index-table"
 import { useSetIndexFiltersMode } from "@/components/admin/ui/use-index-filters-mode"
+import { HydratedDateTime } from "@/components/shared/hydrated-date-time"
 import AdminLayout from "@/layouts/admin-layout"
 
 interface Filters {
@@ -211,7 +211,7 @@ export default function AdminLibrariesIndex({
               lib.accountName,
               lib.versionCount,
               lib.pageCount,
-              formatDateTime(lib.updatedAt),
+              <HydratedDateTime key="updated_at" iso={lib.updatedAt} />,
             ]}
             renderMobileCard={(lib) => (
               <article className="space-y-3 px-4 py-4 text-sm">
@@ -243,7 +243,7 @@ export default function AdminLibrariesIndex({
                   <div>
                     <p className="uppercase">Updated</p>
                     <p className="mt-1 text-sm text-foreground">
-                      {formatDateTime(lib.updatedAt)}
+                      <HydratedDateTime iso={lib.updatedAt} />
                     </p>
                   </div>
                 </div>

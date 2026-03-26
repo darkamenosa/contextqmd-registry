@@ -8,11 +8,11 @@ import {
   Plus,
 } from "lucide-react"
 
-import { formatTimeAgo } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { StatusBadge } from "@/components/admin/ui/status-badge"
+import { HydratedTimeAgo } from "@/components/shared/hydrated-date-time"
 import AppLayout from "@/layouts/app-layout"
 
 interface Stats {
@@ -181,7 +181,8 @@ export default function AppDashboard({
                         <p className="truncate text-sm font-medium">{cr.url}</p>
                       )}
                       <p className="truncate text-xs text-muted-foreground">
-                        {cr.url} · {formatTimeAgo(cr.createdAt, true)}
+                        {cr.url} ·{" "}
+                        <HydratedTimeAgo iso={cr.createdAt} includeMinutes />
                       </p>
                     </div>
                     <StatusBadge status={cr.status} showDot={false} />

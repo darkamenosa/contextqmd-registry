@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { Head, Link, router } from "@inertiajs/react"
 import type { AdminUser, PaginationData } from "@/types"
 
-import { formatDateTime } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -22,6 +21,7 @@ import {
 } from "@/components/admin/ui/index-table"
 import { StatusBadge } from "@/components/admin/ui/status-badge"
 import { useSetIndexFiltersMode } from "@/components/admin/ui/use-index-filters-mode"
+import { HydratedDateTime } from "@/components/shared/hydrated-date-time"
 import AdminLayout from "@/layouts/admin-layout"
 
 interface Counts {
@@ -227,7 +227,7 @@ export default function AdminUsersIndex({
               ) : null,
               <StatusBadge key="status" status={user.status} />,
               user.accountsCount,
-              formatDateTime(user.createdAt),
+              <HydratedDateTime key="created_at" iso={user.createdAt} />,
             ]}
             renderMobileCard={(user) => (
               <article className="space-y-3 px-4 py-4 text-sm">
@@ -265,7 +265,7 @@ export default function AdminUsersIndex({
                   <div>
                     <p className="uppercase">Joined</p>
                     <p className="mt-1 text-sm text-foreground">
-                      {formatDateTime(user.createdAt)}
+                      <HydratedDateTime iso={user.createdAt} />
                     </p>
                   </div>
                 </div>

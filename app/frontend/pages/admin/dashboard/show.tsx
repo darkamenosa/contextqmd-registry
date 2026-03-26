@@ -12,7 +12,6 @@ import {
   XCircle,
 } from "lucide-react"
 
-import { formatDateTime } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -25,6 +24,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { StatusBadge } from "@/components/admin/ui/status-badge"
+import { HydratedDateTime } from "@/components/shared/hydrated-date-time"
 import { PaginationFooter } from "@/components/shared/pagination-footer"
 import AdminLayout from "@/layouts/admin-layout"
 
@@ -131,7 +131,7 @@ function RecentCrawlCards({ crawls }: { crawls: CrawlItem[] }) {
             <div>
               <p className="uppercase">When</p>
               <p className="mt-1 text-foreground">
-                {formatDateTime(cr.createdAt)}
+                <HydratedDateTime iso={cr.createdAt} />
               </p>
             </div>
           </div>
@@ -371,7 +371,7 @@ export default function AdminDashboard({
                           <CrawlStatusBadge status={cr.status} />
                         </TableCell>
                         <TableCell className="hidden pr-4 text-right text-sm text-muted-foreground sm:table-cell">
-                          {formatDateTime(cr.createdAt)}
+                          <HydratedDateTime iso={cr.createdAt} />
                         </TableCell>
                       </TableRow>
                     ))}

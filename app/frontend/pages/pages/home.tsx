@@ -14,7 +14,7 @@ import {
   TrendingUp,
 } from "lucide-react"
 
-import { formatCount, formatTimeAgo } from "@/lib/format-date"
+import { formatCount } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -27,6 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { HydratedTimeAgo } from "@/components/shared/hydrated-date-time"
 import { SourceTypeIcon } from "@/components/shared/source-type-icon"
 import PublicLayout from "@/layouts/public-layout"
 
@@ -180,7 +181,7 @@ function LibraryTable({ libraries }: { libraries: LibraryItem[] }) {
               {formatCount(lib.pageCount)}
             </TableCell>
             <TableCell className="hidden py-2 pr-4 text-right text-sm text-muted-foreground sm:table-cell">
-              {formatTimeAgo(lib.updatedAt)}
+              <HydratedTimeAgo iso={lib.updatedAt} />
             </TableCell>
           </TableRow>
         ))}
@@ -224,7 +225,7 @@ function LibraryCards({ libraries }: { libraries: LibraryItem[] }) {
             </Badge>
           </div>
           <p className="text-xs tracking-wide text-muted-foreground uppercase">
-            Updated {formatTimeAgo(lib.updatedAt)}
+            Updated <HydratedTimeAgo iso={lib.updatedAt} />
           </p>
         </article>
       ))}
@@ -235,7 +236,7 @@ function LibraryCards({ libraries }: { libraries: LibraryItem[] }) {
 function TableFooter({ libraryCount }: { libraryCount: number }) {
   return (
     <div className="flex flex-col gap-2 border-t px-4 py-3 text-center text-xs tracking-wide text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:text-left">
-      <span>{libraryCount.toLocaleString()} LIBRARIES</span>
+      <span>{libraryCount.toLocaleString("en-US")} LIBRARIES</span>
       <Link
         href="/crawl"
         className="inline-flex items-center justify-center gap-1 uppercase hover:text-foreground sm:justify-start"

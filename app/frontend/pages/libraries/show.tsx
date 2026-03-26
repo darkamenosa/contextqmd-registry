@@ -16,7 +16,7 @@ import {
   X,
 } from "lucide-react"
 
-import { formatBytes, formatDateShort } from "@/lib/format-date"
+import { formatBytes } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -37,6 +37,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { HydratedDateShort } from "@/components/shared/hydrated-date-time"
 import { LicenseBadge } from "@/components/shared/license-badge"
 import { MarkdownContent } from "@/components/shared/markdown-content"
 import { SourceTypeIcon } from "@/components/shared/source-type-icon"
@@ -718,7 +719,11 @@ get_doc({ library: "${slug}", version: "${sampleVersion}", doc_path: "${samplePa
                         </div>
                         <p className="text-xs text-muted-foreground">
                           Generated{" "}
-                          {v.generatedAt ? formatDateShort(v.generatedAt) : "-"}
+                          {v.generatedAt ? (
+                            <HydratedDateShort iso={v.generatedAt} />
+                          ) : (
+                            "-"
+                          )}
                         </p>
                         {v.version !== selectedVersion && (
                           <Button
@@ -771,9 +776,11 @@ get_doc({ library: "${slug}", version: "${sampleVersion}", doc_path: "${samplePa
                             <ChannelBadge channel={v.channel} />
                           </TableCell>
                           <TableCell className="hidden sm:table-cell">
-                            {v.generatedAt
-                              ? formatDateShort(v.generatedAt)
-                              : "-"}
+                            {v.generatedAt ? (
+                              <HydratedDateShort iso={v.generatedAt} />
+                            ) : (
+                              "-"
+                            )}
                           </TableCell>
                           <TableCell className="text-right">
                             {v.pageCount}

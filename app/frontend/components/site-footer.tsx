@@ -1,6 +1,8 @@
 import { Link } from "@inertiajs/react"
 import { Command } from "lucide-react"
 
+import { HydratedCurrentYear } from "@/components/shared/hydrated-date-time"
+
 export function SiteFooter() {
   return (
     <footer className="border-t bg-background">
@@ -96,7 +98,7 @@ export function SiteFooter() {
             <span className="font-semibold tracking-tight">ContextQMD</span>
           </Link>
           <span>
-            &copy; {new Date().getFullYear()} ContextQMD. All rights reserved.
+            &copy; <HydratedCurrentYear /> ContextQMD. All rights reserved.
           </span>
         </div>
       </div>

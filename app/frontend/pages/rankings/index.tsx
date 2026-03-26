@@ -10,7 +10,6 @@ import {
   Trophy,
 } from "lucide-react"
 
-import { formatTimeAgo } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import {
@@ -21,6 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { HydratedTimeAgo } from "@/components/shared/hydrated-date-time"
 import { PaginationFooter } from "@/components/shared/pagination-footer"
 import PublicLayout from "@/layouts/public-layout"
 
@@ -148,7 +148,7 @@ function RankingsCards({ libraries }: { libraries: RankedLibrary[] }) {
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Updated {formatTimeAgo(lib.updatedAt)}
+              Updated <HydratedTimeAgo iso={lib.updatedAt} />
             </p>
           </CardContent>
         </Card>
@@ -283,7 +283,7 @@ export default function RankingsIndex({
                         <FreshnessBar pct={lib.freshnessPct} />
                       </TableCell>
                       <TableCell className="hidden pr-4 text-right text-sm text-muted-foreground sm:table-cell">
-                        {formatTimeAgo(lib.updatedAt)}
+                        <HydratedTimeAgo iso={lib.updatedAt} />
                       </TableCell>
                     </TableRow>
                   ))}

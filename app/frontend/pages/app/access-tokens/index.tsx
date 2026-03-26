@@ -4,7 +4,6 @@ import type { AccessToken, PaginationData } from "@/types"
 import { Check, Copy, KeyRound, Plus, Trash2 } from "lucide-react"
 
 import { withCurrentAccountScope } from "@/lib/account-scope"
-import { formatDateShort } from "@/lib/format-date"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -32,6 +31,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { HydratedDateShort } from "@/components/shared/hydrated-date-time"
 import { PaginationFooter } from "@/components/shared/pagination-footer"
 import AppLayout from "@/layouts/app-layout"
 
@@ -278,15 +278,17 @@ function TokensTable({ tokens }: { tokens: AccessToken[] }) {
                       <div>
                         <p className="uppercase">Created</p>
                         <p className="mt-1 text-foreground">
-                          {formatDateShort(token.createdAt)}
+                          <HydratedDateShort iso={token.createdAt} />
                         </p>
                       </div>
                       <div>
                         <p className="uppercase">Last used</p>
                         <p className="mt-1 text-foreground">
-                          {token.lastUsedAt
-                            ? formatDateShort(token.lastUsedAt)
-                            : "Never"}
+                          {token.lastUsedAt ? (
+                            <HydratedDateShort iso={token.lastUsedAt} />
+                          ) : (
+                            "Never"
+                          )}
                         </p>
                       </div>
                     </div>
@@ -350,12 +352,14 @@ function TokensTable({ tokens }: { tokens: AccessToken[] }) {
                           </Badge>
                         </td>
                         <td className="hidden px-4 py-3 text-sm sm:table-cell">
-                          {formatDateShort(token.createdAt)}
+                          <HydratedDateShort iso={token.createdAt} />
                         </td>
                         <td className="hidden px-4 py-3 text-sm text-muted-foreground sm:table-cell">
-                          {token.lastUsedAt
-                            ? formatDateShort(token.lastUsedAt)
-                            : "Never"}
+                          {token.lastUsedAt ? (
+                            <HydratedDateShort iso={token.lastUsedAt} />
+                          ) : (
+                            "Never"
+                          )}
                         </td>
                         <td className="px-4 py-3 text-right">
                           <Button

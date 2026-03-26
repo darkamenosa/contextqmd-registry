@@ -3,7 +3,6 @@ import { Head, Link, router } from "@inertiajs/react"
 import type { AdminUserDetail, AdminUserMembership } from "@/types"
 import { ChevronLeft } from "lucide-react"
 
-import { formatDateTime } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -22,6 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { StatusBadge } from "@/components/admin/ui/status-badge"
+import { HydratedDateTime } from "@/components/shared/hydrated-date-time"
 import AdminLayout from "@/layouts/admin-layout"
 
 interface Props {
@@ -56,7 +56,7 @@ function OverviewCard({ user }: { user: AdminUserDetail }) {
           <div>
             <dt className="text-muted-foreground">Joined</dt>
             <dd className="mt-0.5 font-medium">
-              {formatDateTime(user.createdAt)}
+              <HydratedDateTime iso={user.createdAt} />
             </dd>
           </div>
           <div>
@@ -114,7 +114,7 @@ function MembershipRow({
         )}
       </td>
       <td className="hidden px-4 py-3 text-sm sm:table-cell">
-        {formatDateTime(m.createdAt)}
+        <HydratedDateTime iso={m.createdAt} />
       </td>
     </tr>
   )
@@ -188,7 +188,7 @@ function MembershipsCard({
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Joined {formatDateTime(m.createdAt)}
+                    Joined <HydratedDateTime iso={m.createdAt} />
                   </p>
                 </article>
               ))}
@@ -273,7 +273,7 @@ function IdentityCard({
             <StatusBadge status={user.status} />
             {isSuspended && user.suspendedAt && (
               <span className="text-xs text-muted-foreground">
-                since {formatDateTime(user.suspendedAt)}
+                since <HydratedDateTime iso={user.suspendedAt} />
               </span>
             )}
           </div>

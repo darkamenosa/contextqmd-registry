@@ -16,7 +16,7 @@ import {
   Zap,
 } from "lucide-react"
 
-import { formatDateTime } from "@/lib/format-date"
+import { useHydrated } from "@/hooks/use-hydrated"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -43,6 +43,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { StatusBadge } from "@/components/admin/ui/status-badge"
+import { HydratedDateTime } from "@/components/shared/hydrated-date-time"
 import AdminLayout from "@/layouts/admin-layout"
 
 interface Props {
@@ -51,6 +52,8 @@ interface Props {
 }
 
 function HealthStatus({ config }: { config: AdminProxyConfigDetail }) {
+  const hydrated = useHydrated()
+
   if (!config.active) {
     return (
       <div className="flex items-center gap-2">
@@ -63,12 +66,16 @@ function HealthStatus({ config }: { config: AdminProxyConfigDetail }) {
       </div>
     )
   }
-  if (config.cooldownUntil && new Date(config.cooldownUntil) > new Date()) {
+  if (
+    hydrated &&
+    config.cooldownUntil &&
+    new Date(config.cooldownUntil) > new Date()
+  ) {
     return (
       <div className="flex items-center gap-2">
         <StatusBadge status="suspended">Cooldown</StatusBadge>
         <span className="text-xs text-muted-foreground">
-          until {formatDateTime(config.cooldownUntil)}
+          until <HydratedDateTime iso={config.cooldownUntil} />
         </span>
       </div>
     )
@@ -379,7 +386,7 @@ export default function AdminProxyConfigShow({
                       <dt className="text-muted-foreground">Last Success</dt>
                       <dd className="mt-0.5 text-sm">
                         {config.lastSuccessAt ? (
-                          formatDateTime(config.lastSuccessAt)
+                          <HydratedDateTime iso={config.lastSuccessAt} />
                         ) : (
                           <span className="text-muted-foreground">Never</span>
                         )}
@@ -389,7 +396,7 @@ export default function AdminProxyConfigShow({
                       <dt className="text-muted-foreground">Last Failure</dt>
                       <dd className="mt-0.5 text-sm">
                         {config.lastFailureAt ? (
-                          formatDateTime(config.lastFailureAt)
+                          <HydratedDateTime iso={config.lastFailureAt} />
                         ) : (
                           <span className="text-muted-foreground">Never</span>
                         )}
@@ -406,7 +413,7 @@ export default function AdminProxyConfigShow({
                     <div>
                       <dt className="text-muted-foreground">Created</dt>
                       <dd className="mt-0.5 text-sm">
-                        {formatDateTime(config.createdAt)}
+                        <HydratedDateTime iso={config.createdAt} />
                       </dd>
                     </div>
                   </dl>
@@ -471,7 +478,7 @@ export default function AdminProxyConfigShow({
                             <div>
                               <p className="uppercase">Last seen</p>
                               <p className="mt-1 text-foreground">
-                                {formatDateTime(lease.lastSeenAt)}
+                                <HydratedDateTime iso={lease.lastSeenAt} />
                               </p>
                             </div>
                           </div>
@@ -534,7 +541,7 @@ export default function AdminProxyConfigShow({
                                 )}
                               </TableCell>
                               <TableCell className="hidden pr-4 text-right text-xs text-muted-foreground sm:table-cell">
-                                {formatDateTime(lease.lastSeenAt)}
+                                <HydratedDateTime iso={lease.lastSeenAt} />
                               </TableCell>
                             </TableRow>
                           ))}

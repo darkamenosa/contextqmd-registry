@@ -1,10 +1,11 @@
 import { Head, Link } from "@inertiajs/react"
 import { ChevronLeft, ExternalLink, FileText, Hash, Pencil } from "lucide-react"
 
-import { formatBytes, formatDateTime } from "@/lib/format-date"
+import { formatBytes } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { HydratedDateTime } from "@/components/shared/hydrated-date-time"
 import AdminLayout from "@/layouts/admin-layout"
 
 interface PageDetail {
@@ -154,11 +155,15 @@ export default function AdminPageShow({ page, version, library }: Props) {
                   )}
                   <div>
                     <dt className="text-muted-foreground">Created</dt>
-                    <dd className="mt-0.5">{formatDateTime(page.createdAt)}</dd>
+                    <dd className="mt-0.5">
+                      <HydratedDateTime iso={page.createdAt} />
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-muted-foreground">Updated</dt>
-                    <dd className="mt-0.5">{formatDateTime(page.updatedAt)}</dd>
+                    <dd className="mt-0.5">
+                      <HydratedDateTime iso={page.updatedAt} />
+                    </dd>
                   </div>
                 </dl>
               </CardContent>

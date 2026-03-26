@@ -3,7 +3,7 @@ import { Head, Link, router } from "@inertiajs/react"
 import type { AdminProxyConfig, PaginationData } from "@/types"
 import { Plus } from "lucide-react"
 
-import { formatDateTime } from "@/lib/format-date"
+import { useHydrated } from "@/hooks/use-hydrated"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -23,6 +23,7 @@ import {
 } from "@/components/admin/ui/index-table"
 import { StatusBadge } from "@/components/admin/ui/status-badge"
 import { useSetIndexFiltersMode } from "@/components/admin/ui/use-index-filters-mode"
+import { HydratedDateTime } from "@/components/shared/hydrated-date-time"
 import AdminLayout from "@/layouts/admin-layout"
 
 interface Filters {
@@ -52,10 +53,16 @@ function buildParams(filters: Filters, page?: number) {
 }
 
 function ProxyHealthIndicator({ config }: { config: AdminProxyConfig }) {
+  const hydrated = useHydrated()
+
   if (!config.active) {
     return <StatusBadge status="inactive" />
   }
-  if (config.cooldownUntil && new Date(config.cooldownUntil) > new Date()) {
+  if (
+    hydrated &&
+    config.cooldownUntil &&
+    new Date(config.cooldownUntil) > new Date()
+  ) {
     return <StatusBadge status="suspended">Cooldown</StatusBadge>
   }
   if (config.consecutiveFailures > 0) {
@@ -294,7 +301,11 @@ export default function AdminProxyConfigsIndex({
                 key="last_activity"
                 className="text-xs text-muted-foreground"
               >
-                {c.lastSuccessAt ? formatDateTime(c.lastSuccessAt) : "Never"}
+                {c.lastSuccessAt ? (
+                  <HydratedDateTime iso={c.lastSuccessAt} />
+                ) : (
+                  "Never"
+                )}
               </span>,
             ]}
             renderMobileCard={(c) => (
@@ -347,9 +358,11 @@ export default function AdminProxyConfigsIndex({
                   <div className="col-span-2">
                     <p className="uppercase">Last Activity</p>
                     <p className="mt-1 text-sm text-foreground">
-                      {c.lastSuccessAt
-                        ? formatDateTime(c.lastSuccessAt)
-                        : "Never"}
+                      {c.lastSuccessAt ? (
+                        <HydratedDateTime iso={c.lastSuccessAt} />
+                      ) : (
+                        "Never"
+                      )}
                     </p>
                   </div>
                 </div>

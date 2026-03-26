@@ -27,7 +27,6 @@ import {
   XCircle,
 } from "lucide-react"
 
-import { formatDateTime } from "@/lib/format-date"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -62,6 +61,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { StatusBadge } from "@/components/admin/ui/status-badge"
+import { HydratedDateTime } from "@/components/shared/hydrated-date-time"
 import { SourceTypeIcon } from "@/components/shared/source-type-icon"
 import AdminLayout from "@/layouts/admin-layout"
 
@@ -188,7 +188,7 @@ function VersionRow({
         </TableCell>
         <TableCell className="text-right">{v.pageCount}</TableCell>
         <TableCell className="hidden text-right text-sm text-muted-foreground sm:table-cell">
-          {formatDateTime(v.createdAt)}
+          <HydratedDateTime iso={v.createdAt} />
         </TableCell>
         <TableCell className="pr-4 text-right">
           <div className="flex items-center justify-end gap-1">
@@ -707,7 +707,7 @@ export default function AdminLibraryShow({
                   <div>
                     <dt className="text-muted-foreground">Created</dt>
                     <dd className="mt-0.5 font-medium">
-                      {formatDateTime(library.createdAt)}
+                      <HydratedDateTime iso={library.createdAt} />
                     </dd>
                   </div>
                   {library.aliases.length > 0 && (
@@ -769,7 +769,7 @@ export default function AdminLibraryShow({
                             </p>
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            Created {formatDateTime(v.createdAt)}
+                            Created <HydratedDateTime iso={v.createdAt} />
                           </p>
                           <div className="flex gap-2">
                             <Button
@@ -862,7 +862,7 @@ export default function AdminLibraryShow({
                             <CrawlStatusBadge status={cr.status} />
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            {formatDateTime(cr.createdAt)}
+                            <HydratedDateTime iso={cr.createdAt} />
                           </p>
                           {cr.errorMessage && (
                             <p className="text-xs text-destructive">
@@ -919,7 +919,7 @@ export default function AdminLibraryShow({
                                 <CrawlStatusBadge status={cr.status} />
                               </TableCell>
                               <TableCell className="hidden pr-4 text-right text-sm text-muted-foreground sm:table-cell">
-                                {formatDateTime(cr.createdAt)}
+                                <HydratedDateTime iso={cr.createdAt} />
                               </TableCell>
                             </TableRow>
                           ))}

@@ -3,7 +3,6 @@ import { Head, Link, router } from "@inertiajs/react"
 import type { AdminCrawlRequest, PaginationData } from "@/types"
 import { Loader2 } from "lucide-react"
 
-import { formatDateTime } from "@/lib/format-date"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -22,6 +21,7 @@ import {
 } from "@/components/admin/ui/index-table"
 import { StatusBadge } from "@/components/admin/ui/status-badge"
 import { useSetIndexFiltersMode } from "@/components/admin/ui/use-index-filters-mode"
+import { HydratedDateTime } from "@/components/shared/hydrated-date-time"
 import { SourceTypeIcon } from "@/components/shared/source-type-icon"
 import AdminLayout from "@/layouts/admin-layout"
 
@@ -271,7 +271,7 @@ export default function AdminCrawlRequestsIndex({
                 {formatDuration(cr.durationSeconds)}
               </span>,
               <span key="created_at" className="text-xs text-muted-foreground">
-                {formatDateTime(cr.createdAt)}
+                <HydratedDateTime iso={cr.createdAt} />
               </span>,
             ]}
             renderMobileCard={(cr) => (
@@ -327,7 +327,7 @@ export default function AdminCrawlRequestsIndex({
                   <div>
                     <p className="uppercase">Created</p>
                     <p className="mt-1 text-sm text-foreground">
-                      {formatDateTime(cr.createdAt)}
+                      <HydratedDateTime iso={cr.createdAt} />
                     </p>
                   </div>
                 </div>

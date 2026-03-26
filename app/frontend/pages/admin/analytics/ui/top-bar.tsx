@@ -618,7 +618,7 @@ function QueryPeriodsPicker() {
     }
     window.addEventListener("keydown", onKeydown)
     return () => window.removeEventListener("keydown", onKeydown)
-  }, [updateQuery, customCalendarButtonRef])
+  }, [updateQuery, customCalendarButtonRef, loadDateRangePicker])
 
   const compareEnabled = Boolean(query.comparison)
   const compareLabel = (() => {

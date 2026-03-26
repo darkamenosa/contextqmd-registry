@@ -12,7 +12,6 @@ import {
   XCircle,
 } from "lucide-react"
 
-import { formatTimeAgo } from "@/lib/format-date"
 import { Button } from "@/components/ui/button"
 import {
   Table,
@@ -23,6 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { HydratedTimeAgo } from "@/components/shared/hydrated-date-time"
 import { PaginationFooter } from "@/components/shared/pagination-footer"
 import { getSourceTypeConfig } from "@/components/shared/source-type-icon"
 import PublicLayout from "@/layouts/public-layout"
@@ -131,10 +131,16 @@ function shortenUrl(url: string): string {
   }
 }
 
-function taskTimeLabel(cr: CrawlRequestItem): string {
-  return cr.status === "completed" || cr.status === "failed"
-    ? formatTimeAgo(cr.updatedAt, true)
-    : formatTimeAgo(cr.createdAt, true)
+function TaskTimeLabel({
+  crawlRequest: cr,
+}: {
+  crawlRequest: CrawlRequestItem
+}) {
+  return cr.status === "completed" || cr.status === "failed" ? (
+    <HydratedTimeAgo iso={cr.updatedAt} includeMinutes />
+  ) : (
+    <HydratedTimeAgo iso={cr.createdAt} includeMinutes />
+  )
 }
 
 // --- Task Table ---
@@ -237,7 +243,7 @@ function TaskTable({
                   </a>
                 </div>
                 <p className="shrink-0 text-xs text-muted-foreground">
-                  {taskTimeLabel(cr)}
+                  <TaskTimeLabel crawlRequest={cr} />
                 </p>
               </div>
               <div>{stateDisplay(cr)}</div>
@@ -301,7 +307,7 @@ function TaskTable({
                     {stateDisplay(cr)}
                   </TableCell>
                   <TableCell className="hidden pr-4 text-right text-sm text-muted-foreground sm:table-cell">
-                    {taskTimeLabel(cr)}
+                    <TaskTimeLabel crawlRequest={cr} />
                   </TableCell>
                 </TableRow>
               )
