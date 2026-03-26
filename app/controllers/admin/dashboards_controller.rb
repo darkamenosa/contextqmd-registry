@@ -33,7 +33,7 @@ module Admin
           source_type: cr.source_type,
           status: cr.status,
           error_message: cr.error_message,
-          submitted_by: cr.creator&.email || "unknown",
+          submitted_by: cr.creator&.name || "System",
           library_name: cr.library&.display_name,
           library_slug: cr.library&.slug,
           created_at: cr.created_at.iso8601
