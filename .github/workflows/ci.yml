@@ -108,6 +108,15 @@ jobs:
       - name: Install JS dependencies
         run: npm ci
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
       - name: Build Vite test assets
         run: RAILS_ENV=test bin/vite build --clear
 
