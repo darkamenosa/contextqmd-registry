@@ -12,14 +12,16 @@ class WebsiteCrawlPageCollection
 
     relation.order(:id).in_batches(of: 1000, load: true) do |batch|
       batch.each do |page|
-        yield(
+        # Yield an explicit hash so Enumerable consumers like each_with_index
+        # always receive the page payload as a single object.
+        yield({
           page_uid: page.page_uid,
           path: page.path,
           title: page.title,
           url: page.url,
           content: page.content,
           headings: page.headings
-        )
+        })
       end
     end
   end
