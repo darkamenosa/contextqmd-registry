@@ -16,7 +16,7 @@ import {
   Zap,
 } from "lucide-react"
 
-import { formatDateTime } from "@/lib/format-date"
+import { formatCalendarDay, formatDateTime } from "@/lib/format-date"
 import {
   Dialog,
   DialogContent,
@@ -143,6 +143,10 @@ export default function ProfileJourneySheet({
   const [data, setData] = useState<ProfileJourneyPayload | null>(null)
   const [loading, setLoading] = useState(false)
   const [sortOldest, setSortOldest] = useState(false)
+  const [selectedActivityDay, setSelectedActivityDay] = useState<{
+    date: string
+    count: number
+  } | null>(null)
   const [expandedSessionId, setExpandedSessionId] = useState<number | null>(
     null
   )
@@ -157,6 +161,8 @@ export default function ProfileJourneySheet({
   const [sessionsHasMore, setSessionsHasMore] = useState(false)
   const [sessionsLoading, setSessionsLoading] = useState(false)
   const requestIdRef = useRef(0)
+  const sessionsRequestIdRef = useRef(0)
+  const sessionsAbortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     if (!open || !profile) return
@@ -167,25 +173,17 @@ export default function ProfileJourneySheet({
     startTransition(() => {
       setLoading(true)
       setExpandedSessionId(null)
+      setSelectedActivityDay(null)
       setSessionPayloads({})
       setSessions([])
       setSessionsPage(1)
       setSessionsHasMore(false)
     })
 
-    Promise.all([
-      fetchProfileJourney(profile.id, query, controller.signal),
-      fetchProfileSessions(
-        profile.id,
-        { limit: PAGE_SIZE, page: 1 },
-        controller.signal
-      ),
-    ])
-      .then(([journeyData, sessionsData]) => {
+    Promise.all([fetchProfileJourney(profile.id, query, controller.signal)])
+      .then(([journeyData]) => {
         if (requestIdRef.current !== nextRequestId) return
         setData(journeyData)
-        setSessions(sessionsData.sessions)
-        setSessionsHasMore(sessionsData.hasMore)
       })
       .catch((error: Error) => {
         if (error.name !== "AbortError") console.error(error)
@@ -198,14 +196,69 @@ export default function ProfileJourneySheet({
     return () => controller.abort()
   }, [open, profile, query])
 
+  const selectedActivityDateParam = selectedActivityDay?.date
+
+  useEffect(() => {
+    if (!open || !profile) return
+
+    sessionsAbortRef.current?.abort()
+    const controller = new AbortController()
+    sessionsAbortRef.current = controller
+    const nextSessionsRequestId = sessionsRequestIdRef.current + 1
+    sessionsRequestIdRef.current = nextSessionsRequestId
+
+    startTransition(() => {
+      setSessionsLoading(true)
+      setExpandedSessionId(null)
+      setSessionLoadingId(null)
+      setSessions([])
+      setSessionsPage(1)
+      setSessionsHasMore(false)
+    })
+
+    fetchProfileSessions(
+      profile.id,
+      {
+        limit: PAGE_SIZE,
+        page: 1,
+        date: selectedActivityDateParam,
+      },
+      controller.signal
+    )
+      .then((result) => {
+        if (sessionsRequestIdRef.current !== nextSessionsRequestId) return
+        setSessions(result.sessions)
+        setSessionsHasMore(result.hasMore)
+      })
+      .catch((error: Error) => {
+        if (error.name !== "AbortError") console.error(error)
+      })
+      .finally(() => {
+        if (sessionsRequestIdRef.current !== nextSessionsRequestId) return
+        setSessionsLoading(false)
+      })
+
+    return () => controller.abort()
+  }, [open, profile, selectedActivityDateParam])
+
   const loadMoreSessions = () => {
     if (!profile || sessionsLoading || !sessionsHasMore) return
 
+    sessionsAbortRef.current?.abort()
+    const controller = new AbortController()
+    sessionsAbortRef.current = controller
     const nextPage = sessionsPage + 1
+    const nextSessionsRequestId = sessionsRequestIdRef.current + 1
+    sessionsRequestIdRef.current = nextSessionsRequestId
     setSessionsLoading(true)
 
-    fetchProfileSessions(profile.id, { limit: PAGE_SIZE, page: nextPage })
+    fetchProfileSessions(
+      profile.id,
+      { limit: PAGE_SIZE, page: nextPage, date: selectedActivityDateParam },
+      controller.signal
+    )
       .then((result) => {
+        if (sessionsRequestIdRef.current !== nextSessionsRequestId) return
         setSessions((prev) => [...prev, ...result.sessions])
         setSessionsHasMore(result.hasMore)
         setSessionsPage(nextPage)
@@ -213,7 +266,10 @@ export default function ProfileJourneySheet({
       .catch((error: Error) => {
         if (error.name !== "AbortError") console.error(error)
       })
-      .finally(() => setSessionsLoading(false))
+      .finally(() => {
+        if (sessionsRequestIdRef.current !== nextSessionsRequestId) return
+        setSessionsLoading(false)
+      })
   }
 
   const resolvedProfile = data?.profile || profile
@@ -281,11 +337,14 @@ export default function ProfileJourneySheet({
       country: resolvedProfile?.country,
     })
   }, [resolvedProfile])
+  const selectedActivityDayLabel = selectedActivityDay
+    ? formatCalendarDay(selectedActivityDay.date)
+    : null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[88vh] w-full overflow-hidden p-0 sm:max-w-7xl"
+        className="inset-0 max-h-none max-w-none translate-x-0 translate-y-0 rounded-none p-0 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:max-h-[88vh] sm:max-w-7xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl"
         showCloseButton
       >
         <div className="sr-only">
@@ -300,8 +359,8 @@ export default function ProfileJourneySheet({
             <Loader2 className="size-6 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <div className="grid h-[84vh] max-h-[84vh] grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)_320px]">
-            <aside className="overflow-y-auto border-b border-border px-4 py-5 lg:border-r lg:border-b-0">
+          <div className="h-dvh overflow-y-auto sm:h-[84vh] lg:grid lg:h-[84vh] lg:max-h-[84vh] lg:grid-cols-[260px_minmax(0,1fr)_320px] lg:overflow-hidden">
+            <aside className="border-b border-border px-4 py-5 lg:overflow-y-auto lg:border-r lg:border-b-0">
               <div className="flex flex-col items-center text-center">
                 <VisitorAvatar name={resolvedProfile?.name || "?"} size={72} />
                 <div className="mt-2.5 flex items-center gap-1.5">
@@ -421,7 +480,7 @@ export default function ProfileJourneySheet({
               </section>
             </aside>
 
-            <section className="flex min-h-0 flex-col overflow-hidden border-b border-border lg:border-b-0">
+            <section className="border-b border-border lg:flex lg:min-h-0 lg:flex-col lg:overflow-hidden lg:border-b-0">
               <div className="flex items-center justify-between border-b border-border px-5 py-3">
                 <div className="space-y-1.5">
                   <h3 className="text-sm font-medium text-foreground">
@@ -437,6 +496,20 @@ export default function ProfileJourneySheet({
                     <span className="rounded-full border border-border bg-muted/30 px-2 py-0.5 text-muted-foreground">
                       {data?.summary.events ?? 0} events
                     </span>
+                    {selectedActivityDayLabel ? (
+                      <>
+                        <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-blue-700">
+                          Showing {selectedActivityDayLabel}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedActivityDay(null)}
+                          className="rounded-full border border-border px-2 py-0.5 text-muted-foreground transition-colors hover:text-foreground"
+                        >
+                          Clear
+                        </button>
+                      </>
+                    ) : null}
                   </div>
                 </div>
                 <button
@@ -448,8 +521,13 @@ export default function ProfileJourneySheet({
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto px-4 py-4">
-                {orderedSessions.length > 0 ? (
+              <div className="px-4 py-4 lg:flex-1 lg:overflow-y-auto">
+                {sessionsLoading && orderedSessions.length === 0 ? (
+                  <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                    <Loader2 className="mr-2 size-3.5 animate-spin" />
+                    Loading sessions...
+                  </div>
+                ) : orderedSessions.length > 0 ? (
                   <div className="space-y-2.5">
                     {orderedSessions.map((session) => {
                       const sessionPayload = sessionPayloads[session.visitId]
@@ -669,6 +747,10 @@ export default function ProfileJourneySheet({
                       </button>
                     ) : null}
                   </div>
+                ) : selectedActivityDay ? (
+                  <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                    No sessions on {selectedActivityDayLabel}.
+                  </div>
                 ) : (
                   <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
                     No sessions for this visitor.
@@ -677,14 +759,18 @@ export default function ProfileJourneySheet({
               </div>
             </section>
 
-            <aside className="overflow-y-auto border-t border-border px-4 py-5 lg:border-t-0 lg:border-l">
+            <aside className="border-t border-border px-4 py-5 lg:overflow-y-auto lg:border-t-0 lg:border-l">
               <div className="space-y-4">
                 <section className="space-y-1.5">
                   <h3 className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
                     <Activity className="size-3" />
                     Activity
                   </h3>
-                  <ActivityHeatmap sessionEvents={activityDataset} />
+                  <ActivityHeatmap
+                    sessionEvents={activityDataset}
+                    selectedDay={selectedActivityDay}
+                    onSelectDay={setSelectedActivityDay}
+                  />
                 </section>
 
                 <SectionChips

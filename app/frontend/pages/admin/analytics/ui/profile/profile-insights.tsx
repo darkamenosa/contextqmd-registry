@@ -1,12 +1,24 @@
-import { useMemo, type ComponentType, type ReactNode } from "react"
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentType,
+  type ReactNode,
+} from "react"
 import HeatMap from "@uiw/react-heat-map"
 import { FileText, Link2, MapPin, Search } from "lucide-react"
 
-import { formatDateTime } from "@/lib/format-date"
+import { formatCalendarDay, formatDateTime } from "@/lib/format-date"
 
 import { flagFromIso2 } from "../../lib/country-flag"
 import type { ProfileListItem, ProfileSessionPayload } from "../../types"
 import { ProfileSourceInline } from "./primitives"
+
+function normalizeHeatmapDate(date: string): string {
+  const [year = "", month = "", day = ""] = date.split(/[/-]/)
+  return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`
+}
 
 type SectionChipsProps = {
   title: string
@@ -155,9 +167,28 @@ export function TopPagesList({
 
 export function ActivityHeatmap({
   sessionEvents,
+  selectedDay,
+  onSelectDay,
 }: {
   sessionEvents: Array<{ startedAt?: string | null; count: number }>
+  selectedDay?: { date: string; count: number } | null
+  onSelectDay?: (day: { date: string; count: number } | null) => void
 }) {
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const [rectSize, setRectSize] = useState(8)
+  const [containerWidth, setContainerWidth] = useState(300)
+  const [tooltip, setTooltip] = useState<{
+    date: string
+    count: number
+    x: number
+    y: number
+  } | null>(null)
+  const [hasHover] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(hover: hover)").matches
+  )
+
   const { heatmapData, startDate } = useMemo(() => {
     const dayCounts = new Map<string, number>()
     for (const session of sessionEvents) {
@@ -178,6 +209,33 @@ export function ActivityHeatmap({
     }
   }, [sessionEvents])
 
+  const numWeeks = useMemo(() => {
+    const ms = new Date().getTime() - startDate.getTime()
+    return Math.ceil(ms / (7 * 24 * 60 * 60 * 1000)) + 1
+  }, [startDate])
+
+  useEffect(() => {
+    const el = wrapperRef.current
+    if (!el) return
+
+    const syncWidth = () => {
+      const width = el.clientWidth
+      setContainerWidth(width)
+      const available = Math.max(width - 5, 0)
+      const size = Math.floor(available / numWeeks) - 2
+      setRectSize(Math.max(6, Math.min(size, 14)))
+    }
+
+    syncWidth()
+
+    if (typeof ResizeObserver === "undefined") return
+
+    const observer = new ResizeObserver(() => syncWidth())
+    observer.observe(el)
+
+    return () => observer.disconnect()
+  }, [numWeeks])
+
   if (heatmapData.length === 0) {
     return (
       <p className="text-xs text-muted-foreground">No activity heatmap yet</p>
@@ -185,12 +243,12 @@ export function ActivityHeatmap({
   }
 
   return (
-    <div className="overflow-hidden">
+    <div ref={wrapperRef} className="relative">
       <HeatMap
         value={heatmapData}
         startDate={startDate}
         endDate={new Date()}
-        rectSize={8}
+        rectSize={rectSize}
         space={2}
         legendCellSize={0}
         weekLabels={false}
@@ -202,7 +260,68 @@ export function ActivityHeatmap({
           6: "#636363",
           10: "#2b2b2b",
         }}
+        rectRender={(props, data) => {
+          const normalizedDate = normalizeHeatmapDate(data.date)
+
+          return (
+            <rect
+              {...props}
+              rx={1.5}
+              onMouseEnter={(e) => {
+                if (!hasHover) return
+                const cell = e.currentTarget.getBoundingClientRect()
+                const container = wrapperRef.current?.getBoundingClientRect()
+                if (!container) return
+
+                setTooltip({
+                  date: normalizedDate,
+                  count: data.count || 0,
+                  x: cell.left - container.left + cell.width / 2,
+                  y: cell.top - container.top,
+                })
+              }}
+              onMouseLeave={() => setTooltip(null)}
+              onClick={() =>
+                onSelectDay?.(
+                  selectedDay?.date === normalizedDate
+                    ? null
+                    : { date: normalizedDate, count: data.count || 0 }
+                )
+              }
+              style={{
+                cursor: "pointer",
+                opacity:
+                  selectedDay && selectedDay.date !== normalizedDate ? 0.35 : 1,
+              }}
+              stroke={selectedDay?.date === normalizedDate ? "#2563eb" : "none"}
+              strokeWidth={selectedDay?.date === normalizedDate ? 1.5 : 0}
+            />
+          )
+        }}
       />
+      {tooltip ? (
+        <div
+          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-md bg-[#1f2328] px-2 py-1 text-[10px] font-medium whitespace-nowrap text-white shadow-sm"
+          style={{
+            left: Math.max(60, Math.min(tooltip.x, containerWidth - 60)),
+            top: tooltip.y - 4,
+          }}
+        >
+          {tooltip.count} {tooltip.count === 1 ? "event" : "events"} on{" "}
+          {formatCalendarDay(tooltip.date)}
+        </div>
+      ) : null}
+      {selectedDay ? (
+        <p className="mt-1.5 text-[11px] text-muted-foreground sm:hidden">
+          <span className="font-medium text-foreground">
+            {selectedDay.count}
+          </span>{" "}
+          {selectedDay.count === 1 ? "event" : "events"} on{" "}
+          <span className="font-medium text-foreground">
+            {formatCalendarDay(selectedDay.date)}
+          </span>
+        </p>
+      ) : null}
     </div>
   )
 }
