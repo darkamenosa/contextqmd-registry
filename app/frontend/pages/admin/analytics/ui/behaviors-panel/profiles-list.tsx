@@ -19,7 +19,7 @@ export default function ProfilesList({
 }) {
   return (
     <div className="overflow-hidden rounded-md border border-border">
-      <div className="grid grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)_10rem] gap-3 border-b border-border px-4 py-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+      <div className="hidden gap-3 border-b border-border px-4 py-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase sm:grid sm:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)_10rem]">
         <span>Visitor</span>
         <span>Source</span>
         <span className="text-right">Last seen</span>
@@ -29,7 +29,7 @@ export default function ProfilesList({
           <button
             key={profile.id}
             type="button"
-            className="grid w-full grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)_10rem] items-center gap-3 px-4 py-2 text-left transition hover:bg-muted/30"
+            className="flex w-full flex-col gap-1 px-4 py-2.5 text-left transition hover:bg-muted/30 sm:grid sm:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)_10rem] sm:items-center sm:gap-3"
             onClick={() => onSelect(profile)}
           >
             <div className="flex min-w-0 items-center gap-2.5">
@@ -45,16 +45,17 @@ export default function ProfilesList({
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                   <ProfileLocationText
                     city={profile.city}
                     region={profile.region}
                     country={profile.country}
                     countryCode={profile.countryCode}
+                    className="hidden sm:inline"
                   />
                   {profile.deviceType ? (
                     <>
-                      <span className="text-border">·</span>
+                      <span className="hidden text-border sm:inline">·</span>
                       <ProfileDeviceInline
                         deviceType={profile.deviceType}
                         iconClassName="size-3.5"
@@ -80,12 +81,21 @@ export default function ProfilesList({
                     </>
                   ) : null}
                 </div>
+                <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground sm:hidden">
+                  <ProfileSourceInline source={profile.source} />
+                  <span className="text-border">·</span>
+                  <span>
+                    {profile.lastSeenAt
+                      ? formatDateTime(profile.lastSeenAt)
+                      : "—"}
+                  </span>
+                </div>
               </div>
             </div>
-            <div className="min-w-0 text-sm text-foreground">
+            <div className="hidden min-w-0 text-sm text-foreground sm:block">
               <ProfileSourceInline source={profile.source} />
             </div>
-            <div className="text-right text-sm text-muted-foreground">
+            <div className="hidden text-right text-sm text-muted-foreground sm:block">
               {profile.lastSeenAt ? formatDateTime(profile.lastSeenAt) : "—"}
             </div>
           </button>

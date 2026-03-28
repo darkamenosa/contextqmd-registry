@@ -91,3 +91,33 @@ test("SessionsByLocation keeps unknown-only rows visible", async () => {
   assert.match(markup, />Unknown</)
   assert.match(markup, />4</)
 })
+
+test("SessionsByLocation renders compact labels for known locations", async () => {
+  const markup = await renderSessionsByLocation([
+    {
+      country: "United States",
+      city: "San Francisco",
+      region: "California",
+      countryCode: "US",
+      visitors: 6,
+    },
+  ])
+
+  assert.match(markup, />San Francisco, CA</)
+  assert.doesNotMatch(markup, /California/)
+  assert.doesNotMatch(markup, /United States/)
+})
+
+test("SessionsByLocation preserves compact region disambiguation", async () => {
+  const markup = await renderSessionsByLocation([
+    {
+      country: "United States",
+      city: "Portland",
+      region: "Oregon",
+      countryCode: "US",
+      visitors: 3,
+    },
+  ])
+
+  assert.match(markup, />Portland, OR</)
+})

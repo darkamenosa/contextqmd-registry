@@ -41,10 +41,19 @@ module Analytics::Realtime
 
       visits.map do |visit|
         last_activity = event_times[visit.id] || visit.started_at || now
+        city = visit.city.to_s.presence
+        region = visit.region.to_s.presence
+        country = visit.country.to_s.presence
+        country_code = Ahoy::Visit.normalize_country_code(visit.try(:country_code))
+
         {
           lat: visit.latitude.to_f,
           lng: visit.longitude.to_f,
-          city: visit.city.to_s.presence,
+          label: Analytics::Locations.location_label(city:, region:, country:),
+          city: city,
+          region: region,
+          country: country,
+          country_code: country_code,
           type: "visitor",
           ts: (last_activity.to_f * 1000.0).to_i
         }

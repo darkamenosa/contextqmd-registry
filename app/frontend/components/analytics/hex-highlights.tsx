@@ -9,6 +9,7 @@ type Dot = {
   lat: number
   lng: number
   type: "visitor" | "order"
+  label?: string | null
   city?: string | null
 }
 
@@ -54,7 +55,9 @@ export default function HexHighlights({
       try {
         const cell = latLngToCell(d.lat, d.lng, resolution)
         v.add(cell)
-        if (!labels.has(cell)) labels.set(cell, (d.city || "Unknown") as string)
+        if (!labels.has(cell)) {
+          labels.set(cell, d.label?.trim() || d.city?.trim() || "Unknown")
+        }
       } catch {
         // Ignore invalid coordinates; they simply do not render on the globe.
       }

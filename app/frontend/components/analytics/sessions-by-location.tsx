@@ -1,3 +1,5 @@
+import { formatCompactLocation } from "@/pages/admin/analytics/ui/profile/formatters"
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 type LocationSession = {
@@ -41,25 +43,21 @@ export function SessionsByLocation({
       </CardHeader>
       <CardContent className="space-y-2.5 px-4 pt-2 pb-4">
         {sessions.map((session, i) => {
-          const country =
-            session.country && session.country !== "Unknown"
-              ? session.country
-              : null
-          const locationParts = [
-            session.city,
-            session.region && session.region !== session.city
-              ? session.region
-              : null,
-            country,
-          ].filter(Boolean)
+          const locationLabel = formatCompactLocation({
+            city: session.city,
+            region: session.region,
+            country:
+              session.country && session.country !== "Unknown"
+                ? session.country
+                : null,
+            countryCode: session.countryCode,
+          })
 
           return (
             <div key={i} className="space-y-2">
               <div className="flex items-center justify-between text-[12px] text-muted-foreground">
                 <span className="truncate font-medium text-foreground">
-                  {locationParts.length > 0
-                    ? locationParts.join(" - ")
-                    : "Unknown"}
+                  {locationLabel || "Unknown"}
                 </span>
                 <span className="ml-2 flex-shrink-0 text-muted-foreground">
                   {session.visitors}

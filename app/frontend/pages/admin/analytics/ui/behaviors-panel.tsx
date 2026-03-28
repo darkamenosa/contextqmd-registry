@@ -64,7 +64,7 @@ export default function BehaviorsPanel({
 
   return (
     <section className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
+      <header className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <h2 className="text-base font-medium">{activeTitle}</h2>
         <PanelTabs>
           {behaviourTabs
@@ -129,7 +129,7 @@ export default function BehaviorsPanel({
       {mode === "visitors" ? (
         <div className="space-y-4">
           <div className="flex items-center justify-end">
-            <div className="relative w-full max-w-xs">
+            <div className="relative w-full sm:max-w-xs">
               <Input
                 placeholder="Search visitors"
                 value={profilesSearch}

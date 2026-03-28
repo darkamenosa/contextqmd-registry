@@ -2,6 +2,19 @@
 
 module Analytics::Locations
   class << self
+    def location_label(city: nil, region: nil, country: nil, order: :city_first, fallback: nil)
+      parts =
+        case order
+        when :country_first
+          [ country, region, city ]
+        else
+          [ city, region, country ]
+        end
+
+      label = unique_location_parts(parts).join(", ")
+      label.presence || fallback.to_s.presence
+    end
+
     def map_from_counts(counts)
       total = counts.values.sum
       results = counts
@@ -132,5 +145,16 @@ module Analytics::Locations
       grouped_visit_ids.select! { |key, _| matcher.call(key) }
       counts.select! { |key, _| matcher.call(key) }
     end
+
+    private
+      def unique_location_parts(parts)
+        parts.each_with_object([]) do |part, values|
+          normalized = part.to_s.squish
+          next if normalized.blank?
+          next if values.any? { |existing| existing.casecmp?(normalized) }
+
+          values << normalized
+        end
+      end
   end
 end

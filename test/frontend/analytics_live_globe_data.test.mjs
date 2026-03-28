@@ -43,6 +43,7 @@ test("live globe dots prefer live profile locations over raw visit dots", async 
         lat: 10.5,
         lng: 106.7,
         city: "Ho Chi Minh City",
+        country: "Vietnam",
         lastSeenAt: "2026-03-27T12:34:56.000Z",
       },
     ],
@@ -60,6 +61,7 @@ test("live globe dots prefer live profile locations over raw visit dots", async 
   assert.equal(dots.length, 1)
   assert.equal(dots[0].lat, 10.5)
   assert.equal(dots[0].lng, 106.7)
+  assert.equal(dots[0].label, "Ho Chi Minh City, Vietnam")
   assert.equal(dots[0].city, "Ho Chi Minh City")
   assert.equal(dots[0].type, "visitor")
   assert.equal(dots[0].ts, Date.parse("2026-03-27T12:34:56.000Z"))
@@ -86,5 +88,29 @@ test("live globe dots fall back to visitor dots when live profiles lack coordina
     fallback
   )
 
-  assert.deepEqual(dots, fallback)
+  assert.deepEqual(dots, [{ ...fallback[0], label: "London" }])
+})
+
+test("live globe dots fall back to region or country when city is unavailable", async () => {
+  const globeData = await loadModule(
+    "app/frontend/pages/admin/analytics/live/lib/globe-dots.ts",
+    "globe-dots.cjs"
+  )
+
+  const dots = globeData.buildLiveGlobeDots(
+    [
+      {
+        lat: 48.8566,
+        lng: 2.3522,
+        city: null,
+        region: null,
+        country: "France",
+        lastSeenAt: "2026-03-27T12:34:56.000Z",
+      },
+    ],
+    []
+  )
+
+  assert.equal(dots.length, 1)
+  assert.equal(dots[0].label, "France")
 })

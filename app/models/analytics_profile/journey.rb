@@ -8,8 +8,8 @@ class AnalyticsProfile::Journey
       new(public_id:, query:).payload
     end
 
-    def sessions_list_payload(public_id:, limit:, page:)
-      new(public_id:).sessions_list_payload(limit:, page:)
+    def sessions_list_payload(public_id:, limit:, page:, date: nil)
+      new(public_id:, date:).sessions_list_payload(limit:, page:)
     end
 
     def session_payload(public_id:, visit_id:, query: nil)
@@ -17,9 +17,10 @@ class AnalyticsProfile::Journey
     end
   end
 
-  def initialize(public_id:, query: nil)
+  def initialize(public_id:, query: nil, date: nil)
     @public_id = public_id
     @query = Analytics::Query.wrap(query)
+    @date = date
   end
 
   def payload
@@ -54,7 +55,12 @@ class AnalyticsProfile::Journey
 
     return fallback_sessions_list_payload(limit:, page:) unless projected?
 
-    dataset_query = Analytics::ProfileSessionsDatasetQuery.new(profile:, limit:, page:)
+    dataset_query = Analytics::ProfileSessionsDatasetQuery.new(
+      profile:,
+      limit:,
+      page:,
+      date: date
+    )
     sessions = dataset_query.page_records
 
     {
@@ -84,13 +90,18 @@ class AnalyticsProfile::Journey
 
   private
     attr_reader :public_id, :query
+    attr_reader :date
 
     def profile
       @profile ||= AnalyticsProfile.find_by!(public_id: public_id)
     end
 
     def visits_scope
-      @visits_scope ||= Ahoy::Visit.where(analytics_profile_id: profile.id).order(started_at: :desc, id: :desc)
+      @visits_scope ||= begin
+        scope = Ahoy::Visit.where(analytics_profile_id: profile.id)
+        scope = scope.where(started_at: date.beginning_of_day..date.end_of_day) if date
+        scope.order(started_at: :desc, id: :desc)
+      end
     end
 
     def latest_visit
@@ -107,9 +118,11 @@ class AnalyticsProfile::Journey
     end
 
     def sessions_scope
-      @sessions_scope ||= AnalyticsProfileSession
-        .where(analytics_profile_id: profile.id)
-        .order(started_at: :desc, id: :desc)
+      @sessions_scope ||= begin
+        scope = AnalyticsProfileSession.where(analytics_profile_id: profile.id)
+        scope = scope.where(started_at: date.beginning_of_day..date.end_of_day) if date
+        scope.order(started_at: :desc, id: :desc)
+      end
     end
 
     def ensure_projection!

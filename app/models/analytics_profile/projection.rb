@@ -52,7 +52,10 @@ class AnalyticsProfile::Projection
       summary = AnalyticsProfileSummary.find_by(analytics_profile_id: profile.id)
       session_count = AnalyticsProfileSession.where(analytics_profile_id: profile.id).count
 
-      if summary.nil? || summary.total_sessions != session_count
+      if summary.nil? ||
+          summary.total_sessions != session_count ||
+          summary.display_name.blank? ||
+          summary.search_text.blank?
         rebuild(profile)
       end
     end
@@ -140,7 +143,7 @@ class AnalyticsProfile::Projection
         summary.total_pageviews = sessions.sum(&:pageviews_count)
         summary.total_events = sessions.sum(&:events_count)
         summary.latest_context = build_latest_context(latest_session)
-        summary.display_name = trait_value(profile, "display_name")
+        summary.display_name = resolved_display_name(profile, latest_session)
         summary.email = trait_value(profile, "email")
         summary.latest_country_name = latest_country_name(latest_session)
         summary.latest_country_code = latest_session.respond_to?(:country_code) ? latest_session.country_code : nil
@@ -228,6 +231,29 @@ class AnalyticsProfile::Projection
 
       def trait_value(profile, key)
         profile.traits.to_h[key].to_s.presence
+      rescue StandardError
+        nil
+      end
+
+      def resolved_display_name(profile, latest_session)
+        trait_value(profile, "display_name").presence ||
+          resolved_identity_display_name(profile, latest_session).presence ||
+          profile.display_name
+      end
+
+      def resolved_identity_display_name(profile, latest_session)
+        identity =
+          if latest_session&.visit_id.present?
+            visit_user_id = Ahoy::Visit.where(id: latest_session.visit_id).pick(:user_id)
+            visit_user_id.present? ? Identity.find_by(id: visit_user_id) : nil
+          end
+
+        if identity.blank?
+          identity_key = profile.profile_keys.find { |key| key.kind == "identity_id" }
+          identity = Identity.find_by(id: identity_key.value) if identity_key&.value.present?
+        end
+
+        identity&.display_name.to_s.presence
       rescue StandardError
         nil
       end

@@ -28,7 +28,7 @@ import AdminLayout from "@/layouts/admin-layout"
 
 import { useLiveLocationSearch } from "./hooks/use-live-location-search"
 import { useLiveStats } from "./hooks/use-live-stats"
-import { buildLiveGlobeDots } from "./lib/globe-dots"
+import { buildLiveGlobeDots, resolveLiveGlobeLabel } from "./lib/globe-dots"
 import { getSessionCardAnchorStyle } from "./lib/live-utils"
 import type { LiveEvent, LiveSession, LiveStats } from "./types"
 import { EMPTY_STATS } from "./types"
@@ -272,7 +272,7 @@ export default function LiveAnalytics({
         sessionId: event.sessionId,
         lat: event.lat,
         lng: event.lng,
-        label: event.city ?? event.name,
+        label: resolveLiveGlobeLabel(event),
         globeRef: mobileGlobeRef,
         setAnchor: setMobileSessionAnchor,
       }),
@@ -285,7 +285,7 @@ export default function LiveAnalytics({
         sessionId: event.sessionId,
         lat: event.lat,
         lng: event.lng,
-        label: event.city ?? event.name,
+        label: resolveLiveGlobeLabel(event),
         globeRef: desktopGlobeRef,
         setAnchor: setDesktopSessionAnchor,
       }),
@@ -421,10 +421,10 @@ export default function LiveAnalytics({
       <div className="-m-4 flex h-[calc(100%+2rem)] flex-1 flex-col overflow-hidden md:-m-6 md:h-[calc(100%+3rem)]">
         <div className="flex flex-1 flex-col overflow-hidden lg:overflow-visible">
           {/* Mobile Layout */}
-          <div className="flex-1 overflow-auto p-4 lg:hidden">
-            <div className="flex flex-col gap-6">
+          <div className="flex-1 overflow-auto px-4 pt-2 pb-4 lg:hidden">
+            <div className="flex flex-col gap-4">
               {/* Legend and Search */}
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4 text-sm">
                     <div className="flex items-center gap-2">

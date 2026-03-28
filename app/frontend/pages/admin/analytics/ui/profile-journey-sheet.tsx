@@ -51,6 +51,7 @@ import {
   ProfileDeviceInline,
   ProfileLocationText,
   ProfileOSInline,
+  ProfileSourceInline,
 } from "./profile/primitives"
 import {
   ActivityHeatmap,
@@ -473,7 +474,10 @@ export default function ProfileJourneySheet({
                                 </span>
                                 {session.source ? (
                                   <span className="rounded-full border border-border px-2.5 py-0.5 text-[11px] text-muted-foreground">
-                                    {session.source}
+                                    <ProfileSourceInline
+                                      source={session.source}
+                                      iconClassName="size-3.5"
+                                    />
                                   </span>
                                 ) : null}
                               </div>

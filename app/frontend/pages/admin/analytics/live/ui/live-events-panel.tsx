@@ -135,7 +135,18 @@ export default function LiveEventsPanel({
 
   return (
     <section className={sectionClassName}>
-      <div className="flex items-center gap-2.5 border-b border-border/50 px-3.5 py-2.5">
+      <button
+        type="button"
+        onClick={() => {
+          setIsCollapsed((collapsed) => !collapsed)
+          if (hasNewEvents) setHasNewEvents(false)
+        }}
+        className="flex w-full cursor-pointer items-center gap-2.5 border-b border-border/50 px-3.5 py-2.5 transition-colors hover:bg-muted/30"
+        aria-expanded={!isCollapsed}
+        aria-label={
+          isCollapsed ? "Expand activity feed" : "Collapse activity feed"
+        }
+      >
         <div className="relative flex size-2 items-center justify-center">
           {active ? (
             <>
@@ -146,7 +157,7 @@ export default function LiveEventsPanel({
             <span className="relative inline-flex size-2 rounded-full bg-muted-foreground/40" />
           )}
         </div>
-        <span className="flex-1 truncate text-xs font-semibold tracking-wide text-foreground/90">
+        <span className="flex-1 truncate text-left text-xs font-semibold tracking-wide text-foreground/90">
           {title || "Live activity"}
         </span>
         {displayEvents.length > 0 && (
@@ -154,22 +165,10 @@ export default function LiveEventsPanel({
             {displayEvents.length}
           </span>
         )}
-        <button
-          type="button"
-          onClick={() => {
-            setIsCollapsed((collapsed) => !collapsed)
-            if (hasNewEvents) setHasNewEvents(false)
-          }}
-          className="rounded-md p-0.5 text-muted-foreground/60 transition hover:bg-muted/40 hover:text-foreground"
-          aria-label={
-            isCollapsed ? "Expand activity feed" : "Collapse activity feed"
-          }
-        >
-          <ChevronDown
-            className={`size-3.5 transition-transform duration-200 ${isCollapsed ? "rotate-180" : ""}`}
-          />
-        </button>
-      </div>
+        <ChevronDown
+          className={`size-3.5 text-muted-foreground/60 transition-transform duration-200 ${isCollapsed ? "rotate-180" : ""}`}
+        />
+      </button>
 
       <div
         className={`grid transition-[grid-template-rows] duration-300 ease-out ${isCollapsed ? "grid-rows-[0fr]" : "grid-rows-[1fr]"}`}
@@ -178,7 +177,7 @@ export default function LiveEventsPanel({
           <div
             ref={scrollRef}
             onScroll={handleScroll}
-            className={`overflow-y-auto px-2 py-1 ${isOverlay ? "max-h-[14rem] min-h-[6rem]" : "max-h-[16rem] min-h-[6rem]"}`}
+            className={`overflow-y-auto px-2 py-1 ${isOverlay ? "max-h-[14rem] min-h-[6rem]" : "max-h-[16rem] min-h-[3rem]"}`}
           >
             <div className="flex min-h-full flex-col justify-end">
               {displayEvents.length > 0 ? (
@@ -216,7 +215,7 @@ export default function LiveEventsPanel({
                             {location && (
                               <span className="shrink-0 text-xs text-muted-foreground/60">
                                 from{" "}
-                                {flag && location !== "unknown location" && (
+                                {flag && (
                                   <span className="text-xs leading-none">
                                     {flag}
                                   </span>

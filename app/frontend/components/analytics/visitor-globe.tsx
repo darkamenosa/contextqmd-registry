@@ -33,6 +33,10 @@ type VisitorDot = {
   lng: number
   type: "visitor" | "order"
   ts?: number // epoch ms; used for fading
+  label?: string | null
+  region?: string | null
+  country?: string | null
+  city?: string | null
 }
 
 type VisitorGlobeProps = {

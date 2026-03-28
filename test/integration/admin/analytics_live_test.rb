@@ -115,11 +115,13 @@ class Admin::AnalyticsLiveTest < ActionDispatch::IntegrationTest
     assert_equal "turquoise scorpion", live_session.fetch("name")
     assert_equal "Spain", live_session.fetch("country")
     assert_equal "ES", live_session.fetch("countryCode")
+    assert_equal "Barcelona, Spain", live_session.fetch("locationLabel")
     assert_equal "indiehackers.com", live_session.fetch("source")
     assert_equal true, live_session.fetch("active")
     assert_equal "turquoise scorpion", recent_event.fetch("name")
     assert_equal "Viewed page /", recent_event.fetch("label")
     assert_equal "ES", recent_event.fetch("countryCode")
+    assert_equal "Barcelona, Spain", recent_event.fetch("locationLabel")
     assert_equal live_session.fetch("sessionId"), recent_event.fetch("sessionId")
     assert_equal 1, stats.fetch("recentEvents").count { |event| event.fetch("label") == "Viewed page /" }
     assert_equal 1, live_session.fetch("recentEvents").count { |event| event.fetch("label") == "Viewed page /" }

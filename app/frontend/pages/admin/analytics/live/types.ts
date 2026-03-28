@@ -3,7 +3,10 @@ export type VisitorDot = {
   lng: number
   type: "visitor"
   ts?: number
+  label?: string | null
   city?: string | null
+  region?: string | null
+  country?: string | null
 }
 
 export type LocationSession = {
@@ -28,6 +31,7 @@ export type LiveSessionSnapshot = {
   countryCode?: string | null
   city?: string | null
   region?: string | null
+  locationLabel?: string | null
   deviceType?: string | null
   os?: string | null
   browser?: string | null

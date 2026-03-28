@@ -60,8 +60,13 @@ module AnalyticsProfile::Querying
       AnalyticsProfile::Journey.payload(public_id:, query:)
     end
 
-    def sessions_list_payload(public_id, limit:, page:)
-      AnalyticsProfile::Journey.sessions_list_payload(public_id:, limit:, page:)
+    def sessions_list_payload(public_id, limit:, page:, date: nil)
+      AnalyticsProfile::Journey.sessions_list_payload(
+        public_id:,
+        limit:,
+        page:,
+        date:
+      )
     end
 
     def session_payload(public_id, visit_id, query = nil)

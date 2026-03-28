@@ -256,12 +256,13 @@ export function fetchProfileJourney(
 
 export async function fetchProfileSessions(
   profileId: string,
-  extras: { limit?: number; page?: number } = {},
+  extras: { limit?: number; page?: number; date?: string } = {},
   signal?: AbortSignal
 ) {
   const params = new URLSearchParams()
   if (extras.limit) params.set("limit", String(extras.limit))
   if (extras.page) params.set("page", String(extras.page))
+  if (extras.date) params.set("date", extras.date)
   const url = `/admin/analytics/profiles/${encodeURIComponent(profileId)}/sessions?${params}`
   const response = await fetch(url, {
     headers: { Accept: "application/json" },

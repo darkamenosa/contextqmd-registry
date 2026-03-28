@@ -3,9 +3,10 @@
 class Analytics::ProfileSessionsDatasetQuery < Analytics::DatasetQuery
   include Analytics::StorageBacked
 
-  def initialize(profile:, limit:, page:)
+  def initialize(profile:, limit:, page:, date: nil)
     super(query: Analytics::Query.new, limit:, page:)
     @profile = profile
+    @date = date
   end
 
   def page_records
@@ -17,9 +18,9 @@ class Analytics::ProfileSessionsDatasetQuery < Analytics::DatasetQuery
   end
 
   private
-    attr_reader :profile
+    attr_reader :profile, :date
 
     def adapter_arguments
-      { profile: profile, limit: limit, page: page }
+      { profile: profile, limit: limit, page: page, date: date }
     end
 end

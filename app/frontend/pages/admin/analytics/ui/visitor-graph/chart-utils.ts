@@ -288,8 +288,10 @@ export function createChartData(graph: MainGraphPayload) {
 export function createChartOptions(
   graph: MainGraphPayload,
   period: string,
-  tz: string
+  tz: string,
+  options: { hoverCapable?: boolean } = {}
 ): ChartOptions<"line"> {
+  const { hoverCapable = true } = options
   const METRIC_LABELS: Record<string, string> = {
     visitors: "Visitors",
     visits: "Visits",
@@ -343,6 +345,13 @@ export function createChartOptions(
 
     if (!element) return
     if (tooltip.opacity === 0) {
+      const tooltipElement = element as HTMLDivElement & {
+        __hideTimer?: number
+      }
+      if (tooltipElement.__hideTimer) {
+        window.clearTimeout(tooltipElement.__hideTimer)
+        tooltipElement.__hideTimer = undefined
+      }
       element.style.opacity = "0"
       return
     }
@@ -451,14 +460,27 @@ export function createChartOptions(
     if (top > maxY) top = maxY
     element.style.left = `${left}px`
     element.style.top = `${top}px`
+
+    if (!hoverCapable) {
+      const tooltipElement = element as HTMLDivElement & {
+        __hideTimer?: number
+      }
+      if (tooltipElement.__hideTimer) {
+        window.clearTimeout(tooltipElement.__hideTimer)
+      }
+      tooltipElement.__hideTimer = window.setTimeout(() => {
+        tooltipElement.style.opacity = "0"
+      }, 1400)
+    }
   }
 
   return {
     responsive: true,
     maintainAspectRatio: false,
     onHover: (_event, _activeElements, chart) => {
-      chart.canvas.style.cursor = "pointer"
+      chart.canvas.style.cursor = hoverCapable ? "pointer" : "default"
     },
+    events: ["mousemove", "mouseout", "click", "touchstart", "touchmove"],
     interaction: {
       mode: "index",
       intersect: false,

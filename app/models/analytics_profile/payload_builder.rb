@@ -40,6 +40,9 @@ module AnalyticsProfile::PayloadBuilder
         country: summary&.latest_country_name.presence || latest_context["country"].presence || latest_visit&.country,
         country_code: summary&.latest_country_code.presence || latest_context["country_code"].presence || latest_visit&.try(:country_code)
       )
+      city = summary&.latest_city.presence || latest_context["city"].presence || latest_visit&.city.to_s.presence
+      region = summary&.latest_region.presence || latest_context["region"].presence || latest_visit&.region.to_s.presence
+      country = resolved_country.name
       serialized_locations_used = Array(summary&.locations_used).map { |item| serialize_location(item.to_h) }
 
       {
@@ -50,10 +53,11 @@ module AnalyticsProfile::PayloadBuilder
         identified: profile.status == AnalyticsProfile::STATUS_IDENTIFIED,
         email: summary&.email.presence || email_for(profile, identity_snapshot),
         first_seen_at: (summary&.first_seen_at || profile.first_seen_at)&.iso8601,
-        country: resolved_country.name,
+        country: country,
         country_code: resolved_country.code,
-        city: summary&.latest_city.presence || latest_context["city"].presence || latest_visit&.city.to_s.presence,
-        region: summary&.latest_region.presence || latest_context["region"].presence || latest_visit&.region.to_s.presence,
+        city: city,
+        region: region,
+        location_label: Analytics::Locations.location_label(city:, region:, country:),
         device_type: summary&.latest_device_type.presence || latest_context["device_type"].presence || latest_visit&.device_type.to_s.presence || "Desktop",
         os: summary&.latest_os.presence || latest_context["os"].presence || latest_visit&.os.to_s.presence,
         browser: summary&.latest_browser.presence || latest_context["browser"].presence || latest_visit&.browser.to_s.presence,
@@ -233,16 +237,20 @@ module AnalyticsProfile::PayloadBuilder
         country: session.country,
         country_code: session.respond_to?(:country_code) ? session.country_code : nil
       )
+      country = resolved_country.name
+      city = session.city
+      region = session.region
 
       {
         id: session.visit_id,
         visit_id: session.visit_id,
         started_at: session.started_at&.iso8601,
         last_event_at: session.last_event_at&.iso8601,
-        country: resolved_country.name,
+        country: country,
         country_code: resolved_country.code,
-        region: session.region,
-        city: session.city,
+        region: region,
+        city: city,
+        location_label: Analytics::Locations.location_label(city:, region:, country:),
         device_type: session.device_type,
         os: session.os,
         browser: session.browser,
@@ -268,7 +276,11 @@ module AnalyticsProfile::PayloadBuilder
       country_name = resolved_country.name
 
       {
-        "label" => [ city, region != city ? region : nil, country_name ].compact.join(", "),
+        "label" => Analytics::Locations.location_label(
+          city: city,
+          region: region,
+          country: country_name
+        ),
         "count" => location["count"].to_i,
         "country" => country_name,
         "country_code" => resolved_country.code,

@@ -161,4 +161,61 @@ class Analytics::LiveStateTest < ActiveSupport::TestCase
       end
     end
   end
+
+  test "visitor dots expose a non-city location label when coordinates are present" do
+    travel_to Time.utc(2026, 3, 28, 10, 0, 0) do
+      Time.use_zone("UTC") do
+        visit = Ahoy::Visit.create!(
+          visit_token: SecureRandom.hex(16),
+          visitor_token: SecureRandom.hex(16),
+          started_at: 2.minutes.ago,
+          latitude: 48.8566,
+          longitude: 2.3522,
+          city: nil,
+          region: nil,
+          country: "France"
+        )
+
+        Ahoy::Event.create!(
+          visit: visit,
+          name: "pageview",
+          properties: { page: "/pricing" },
+          time: 30.seconds.ago
+        )
+
+        stats = Analytics::LiveState.build(now: Time.zone.parse("2026-03-28 10:00:00"), camelize: false)
+
+        assert_equal "France", stats.fetch(:visitor_dots).first.fetch(:label)
+      end
+    end
+  end
+
+  test "visitor dots combine city and country in their canonical label" do
+    travel_to Time.utc(2026, 3, 28, 10, 0, 0) do
+      Time.use_zone("UTC") do
+        visit = Ahoy::Visit.create!(
+          visit_token: SecureRandom.hex(16),
+          visitor_token: SecureRandom.hex(16),
+          started_at: 2.minutes.ago,
+          latitude: 41.3874,
+          longitude: 2.1686,
+          city: "Barcelona",
+          region: nil,
+          country: "Spain"
+        )
+
+        Ahoy::Event.create!(
+          visit: visit,
+          name: "pageview",
+          properties: { page: "/pricing" },
+          time: 30.seconds.ago
+        )
+
+        stats = Analytics::LiveState.build(now: Time.zone.parse("2026-03-28 10:00:00"), camelize: false)
+
+        assert_equal "Barcelona, Spain", stats.fetch(:visitor_dots).first.fetch(:label)
+        assert_equal "ES", stats.fetch(:visitor_dots).first.fetch(:country_code)
+      end
+    end
+  end
 end

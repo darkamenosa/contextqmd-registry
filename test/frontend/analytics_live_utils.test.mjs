@@ -72,3 +72,37 @@ test("liveSessionDurationSeconds freezes inactive sessions at their last activit
     28
   )
 })
+
+test("liveEventLocation returns a compact live label", async () => {
+  const liveUtils = await loadModule(
+    "app/frontend/pages/admin/analytics/live/lib/live-utils.ts",
+    "live-utils.cjs"
+  )
+
+  assert.equal(
+    liveUtils.liveEventLocation({
+      city: "San Francisco",
+      region: "California",
+      country: "United States",
+      countryCode: "US",
+    }),
+    "San Francisco, CA"
+  )
+})
+
+test("liveEventLocation keeps region abbreviations to disambiguate repeated city names", async () => {
+  const liveUtils = await loadModule(
+    "app/frontend/pages/admin/analytics/live/lib/live-utils.ts",
+    "live-utils.cjs"
+  )
+
+  assert.equal(
+    liveUtils.liveEventLocation({
+      city: "Portland",
+      region: "Oregon",
+      country: "United States",
+      countryCode: "US",
+    }),
+    "Portland, OR"
+  )
+})

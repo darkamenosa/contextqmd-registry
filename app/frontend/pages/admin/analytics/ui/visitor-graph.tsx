@@ -95,6 +95,7 @@ export default function VisitorGraph({ initialGraph }: VisitorGraphProps) {
   const { payload, update } = useTopStatsContext()
   const { touch } = useLastLoadContext()
   const site = useSiteContext()
+  const [hoverCapable, setHoverCapable] = useState(true)
 
   const [graph, setGraph] = useState<MainGraphPayload>(initialGraph)
   const [loading, setLoading] = useState(false)
@@ -133,6 +134,18 @@ export default function VisitorGraph({ initialGraph }: VisitorGraphProps) {
       requestedInterval
     )
   )
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const media = window.matchMedia("(hover: hover)")
+    const syncHoverMode = () => setHoverCapable(media.matches)
+
+    syncHoverMode()
+    media.addEventListener("change", syncHoverMode)
+
+    return () => media.removeEventListener("change", syncHoverMode)
+  }, [])
 
   const effectiveMetric = useMemo(() => {
     if (graphableMetrics.includes(selectedMetric)) return selectedMetric
@@ -260,8 +273,11 @@ export default function VisitorGraph({ initialGraph }: VisitorGraphProps) {
 
   const chartData = useMemo(() => createChartData(graph), [graph])
   const chartOptions = useMemo(
-    () => createChartOptions(graph, query.period, site.timezone),
-    [graph, query.period, site.timezone]
+    () =>
+      createChartOptions(graph, query.period, site.timezone, {
+        hoverCapable,
+      }),
+    [graph, hoverCapable, query.period, site.timezone]
   )
 
   return (

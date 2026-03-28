@@ -6,6 +6,17 @@ export function formatDateShort(iso: string): string {
   })
 }
 
+export function formatCalendarDay(day: string): string {
+  const [year, month, date] = day.split("-").map(Number)
+  if (!year || !month || !date) return day
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, month - 1, date, 12)))
+}
+
 export function formatDateShortUTC(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", {
     month: "short",

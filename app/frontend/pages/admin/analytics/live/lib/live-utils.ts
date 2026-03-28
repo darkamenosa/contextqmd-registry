@@ -1,5 +1,6 @@
 import type { HexHighlightSelection } from "@/components/analytics/hex-highlights"
 
+import { formatCompactLocation } from "../../ui/profile/formatters"
 import type {
   LiveEvent,
   LiveSession,
@@ -89,13 +90,17 @@ export function liveEventDescription(event: LiveEvent) {
 }
 
 export function liveEventLocation(event: LiveEvent) {
-  const city = event.city?.trim()
-  const country = displayCountryLabel(event.country)
+  const compact = formatCompactLocation(
+    {
+      city: event.city,
+      region: event.region,
+      country: event.country,
+      countryCode: event.countryCode,
+    },
+    { flagShown: true }
+  )
 
-  if (city && country) return `${city}, ${country}`
-  if (city) return city
-  if (country) return country
-  return "unknown location"
+  return compact || event.locationLabel?.trim() || null
 }
 
 export function deviceLabel(type?: string | null) {

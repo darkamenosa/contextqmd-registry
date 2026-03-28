@@ -79,6 +79,60 @@ class Admin::AnalyticsProfilesTest < ActionDispatch::IntegrationTest
     Current.reset
   end
 
+  test "profiles index searches generated anonymous display names through projections" do
+    staff_identity, = create_tenant(
+      email: "staff-profiles-generated-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Profiles Generated"
+    )
+    staff_identity.update!(staff: true)
+
+    profile = AnalyticsProfile.create!(
+      status: AnalyticsProfile::STATUS_ANONYMOUS,
+      first_seen_at: 15.minutes.ago,
+      last_seen_at: 4.minutes.ago
+    )
+
+    visit = Ahoy::Visit.create!(
+      visit_token: SecureRandom.hex(16),
+      visitor_token: SecureRandom.hex(16),
+      analytics_profile: profile,
+      browser_id: SecureRandom.uuid,
+      started_at: 6.minutes.ago.change(usec: 0),
+      country: "Spain",
+      city: "Barcelona",
+      region: "Catalonia",
+      device_type: "Desktop",
+      os: "Mac OS",
+      browser: "Chrome",
+      landing_page: "https://example.test/generated"
+    )
+
+    Ahoy::Event.create!(
+      visit: visit,
+      name: "pageview",
+      properties: { page: "/generated" },
+      time: 5.minutes.ago.change(usec: 0)
+    )
+
+    generated_name = profile.display_name
+
+    AnalyticsProfile::Projection.rebuild(profile)
+    sign_in(staff_identity)
+
+    get "/admin/analytics/profiles",
+        params: { period: "day", search: generated_name.split.first },
+        headers: { "ACCEPT" => "application/json" }
+
+    assert_response :success
+
+    payload = JSON.parse(response.body)
+    row = payload.fetch("results").first
+
+    assert_equal generated_name, row.fetch("name")
+  ensure
+    Current.reset
+  end
+
   test "profile journey endpoint returns summary and session projections for selected profile" do
     staff_identity, = create_tenant(
       email: "staff-profile-journey-#{SecureRandom.hex(4)}@example.com",
@@ -308,6 +362,99 @@ class Admin::AnalyticsProfilesTest < ActionDispatch::IntegrationTest
     payload = JSON.parse(response.body)
     assert_equal false, payload.fetch("hasMore")
     assert_equal [ visits.third.id ], payload.fetch("sessions").map { |session| session.fetch("visitId") }
+  ensure
+    Current.reset
+  end
+
+  test "profile sessions index filters projected sessions by selected day" do
+    staff_identity, = create_tenant(
+      email: "staff-profile-sessions-date-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Profile Sessions Date"
+    )
+    staff_identity.update!(staff: true)
+
+    profile = AnalyticsProfile.create!(
+      status: AnalyticsProfile::STATUS_IDENTIFIED,
+      traits: { display_name: "black emu" },
+      first_seen_at: 2.days.ago,
+      last_seen_at: 5.minutes.ago
+    )
+
+    older_visit = Ahoy::Visit.create!(
+      visit_token: SecureRandom.hex(16),
+      visitor_token: SecureRandom.hex(16),
+      analytics_profile: profile,
+      browser_id: SecureRandom.uuid,
+      started_at: Time.zone.parse("2026-03-28 23:15:00"),
+      country: "Czechia",
+      city: "Prague",
+      device_type: "Desktop",
+      os: "Windows",
+      browser: "Chrome",
+      landing_page: "https://example.test/older"
+    )
+
+    filtered_visit = Ahoy::Visit.create!(
+      visit_token: SecureRandom.hex(16),
+      visitor_token: SecureRandom.hex(16),
+      analytics_profile: profile,
+      browser_id: SecureRandom.uuid,
+      started_at: Time.zone.parse("2026-03-29 08:30:00"),
+      country: "Czechia",
+      city: "Prague",
+      device_type: "Desktop",
+      os: "Windows",
+      browser: "Chrome",
+      landing_page: "https://example.test/filtered"
+    )
+
+    [ older_visit, filtered_visit ].each do |visit|
+      Ahoy::Event.create!(
+        visit: visit,
+        name: "pageview",
+        properties: { page: "/#{visit.id}" },
+        time: visit.started_at + 1.minute
+      )
+    end
+
+    AnalyticsProfile::Projection.rebuild(profile)
+    sign_in(staff_identity)
+
+    get "/admin/analytics/profiles/#{profile.public_id}/sessions",
+        params: { period: "day", limit: 20, page: 1, date: "2026-03-29" },
+        headers: { "ACCEPT" => "application/json" }
+
+    assert_response :success
+
+    payload = JSON.parse(response.body)
+    assert_equal [ filtered_visit.id ], payload.fetch("sessions").map { |session| session.fetch("visitId") }
+    assert_equal false, payload.fetch("hasMore")
+  ensure
+    Current.reset
+  end
+
+  test "profile sessions index rejects invalid date filters" do
+    staff_identity, = create_tenant(
+      email: "staff-profile-sessions-invalid-date-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Profile Sessions Invalid Date"
+    )
+    staff_identity.update!(staff: true)
+
+    profile = AnalyticsProfile.create!(
+      status: AnalyticsProfile::STATUS_IDENTIFIED,
+      traits: { display_name: "black emu" },
+      first_seen_at: 1.hour.ago,
+      last_seen_at: 5.minutes.ago
+    )
+
+    sign_in(staff_identity)
+
+    get "/admin/analytics/profiles/#{profile.public_id}/sessions",
+        params: { period: "day", limit: 20, page: 1, date: "2026-3-29" },
+        headers: { "ACCEPT" => "application/json" }
+
+    assert_response :unprocessable_content
+    assert_equal "Invalid date", JSON.parse(response.body).fetch("error")
   ensure
     Current.reset
   end

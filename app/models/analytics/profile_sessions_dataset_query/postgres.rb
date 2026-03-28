@@ -1,17 +1,18 @@
 # frozen_string_literal: true
 
 class Analytics::ProfileSessionsDatasetQuery::Postgres < Analytics::DatasetQuery
-  def initialize(profile:, limit:, page:)
+  def initialize(profile:, limit:, page:, date: nil)
     super(query: Analytics::Query.new, limit:, page:)
     @profile = profile
+    @date = date
   end
 
   def page_records
     @page_records ||= begin
+      scope = AnalyticsProfileSession.where(analytics_profile_id: profile.id)
+      scope = scope.where(started_at: date.beginning_of_day..date.end_of_day) if date
       records, @has_more = fetch_page(
-        AnalyticsProfileSession
-          .where(analytics_profile_id: profile.id)
-          .order(started_at: :desc, id: :desc)
+        scope.order(started_at: :desc, id: :desc)
       )
       records
     end
@@ -23,5 +24,5 @@ class Analytics::ProfileSessionsDatasetQuery::Postgres < Analytics::DatasetQuery
   end
 
   private
-    attr_reader :profile
+    attr_reader :profile, :date
 end
