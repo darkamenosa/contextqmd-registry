@@ -17,18 +17,19 @@ export default defineConfig({
     sourcemap: false,
     rollupOptions: {
       output: {
+        onlyExplicitManualChunks: true,
         manualChunks(id) {
-          if (id.indexOf('node_modules/three') !== -1 || id.indexOf('@react-three') !== -1) {
-            return 'vendor-3d'
-          }
-          if (id.indexOf('chart.js') !== -1 || id.indexOf('react-chartjs-2') !== -1) {
+          if (
+            id.includes("/node_modules/chart.js/") ||
+            id.includes("/node_modules/react-chartjs-2/")
+          ) {
             return 'vendor-charts'
           }
-          if (id.indexOf('d3-geo') !== -1 || id.indexOf('topojson-client') !== -1) {
+          if (
+            id.includes("/node_modules/d3-geo/") ||
+            id.includes("/node_modules/topojson-client/")
+          ) {
             return 'vendor-maps'
-          }
-          if (id.indexOf('react-day-picker') !== -1) {
-            return 'vendor-date-picker'
           }
         },
       },
