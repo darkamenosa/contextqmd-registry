@@ -41,7 +41,11 @@ Rails.application.configure do
 
   # Use letter_opener to preview emails in browser
   config.action_mailer.delivery_method = :letter_opener
-  config.action_mailer.letter_opener_location = Rails.root.join("tmp/letter_opener")
+  config.action_mailer.perform_deliveries = true
+
+  LetterOpener.configure do |letter_opener|
+    letter_opener.location = Rails.root.join("tmp/letter_opener")
+  end
 
   # Print deprecation notices to the Rails logger.
   config.active_support.deprecation = :log

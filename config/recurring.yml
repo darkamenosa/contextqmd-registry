@@ -11,13 +11,13 @@
 
 development:
   analytics_live_update:
-    class: AnalyticsUpdateJob
+    class: Analytics::LiveBroadcastJob
     queue: default
     schedule: every 30 seconds
 
 production:
   analytics_live_update:
-    class: AnalyticsUpdateJob
+    class: Analytics::LiveBroadcastJob
     queue: default
     schedule: every 30 seconds
 

@@ -43,13 +43,9 @@ export type SiteContextValue = {
   hasProps: boolean
   funnelsAvailable: boolean
   propsAvailable: boolean
+  profilesAvailable: boolean
   segments: Array<{ id: string; name: string }>
   flags: { dbip: boolean }
-}
-
-export type UserContextValue = {
-  role: "super_admin" | "owner" | "admin" | "editor" | "viewer"
-  email: string
 }
 
 export type TopStat = {
@@ -218,6 +214,136 @@ export type BehaviorsPayload =
     }
   | ListPayload
 
+export type ProfileListItem = {
+  id: string
+  publicId: string
+  name: string
+  status: string
+  identified: boolean
+  email?: string | null
+  firstSeenAt?: string | null
+  country?: string | null
+  countryCode?: string | null
+  city?: string | null
+  region?: string | null
+  deviceType?: string | null
+  os?: string | null
+  browser?: string | null
+  source?: string | null
+  currentPage?: string | null
+  lastSeenAt?: string | null
+  totalVisits: number
+  scopedVisits: number
+  totalSessions?: number
+  totalPageviews?: number
+  totalEvents?: number
+  latestContext?: Record<string, unknown>
+  devicesUsed?: Array<{
+    label: string
+    count: number
+    lastSeenAt?: string | null
+  }>
+  browsersUsed?: Array<{
+    label: string
+    count: number
+    lastSeenAt?: string | null
+  }>
+  osesUsed?: Array<{ label: string; count: number; lastSeenAt?: string | null }>
+  sourcesUsed?: Array<{
+    label: string
+    count: number
+    lastSeenAt?: string | null
+  }>
+  locationsUsed?: Array<{
+    label: string
+    count: number
+    country?: string | null
+    countryCode?: string | null
+    region?: string | null
+    city?: string | null
+    lastSeenAt?: string | null
+  }>
+  topPages?: Array<{ label: string; count: number }>
+}
+
+export type ProfilesPayload = {
+  kind: "profiles"
+  results: ProfileListItem[]
+  meta: {
+    hasMore: boolean
+  }
+}
+
+export type ProfileSessionItem = {
+  id: number
+  visitId: number
+  startedAt?: string | null
+  lastEventAt?: string | null
+  country?: string | null
+  countryCode?: string | null
+  region?: string | null
+  city?: string | null
+  deviceType?: string | null
+  os?: string | null
+  browser?: string | null
+  source?: string | null
+  entryPage?: string | null
+  exitPage?: string | null
+  currentPage?: string | null
+  durationSeconds: number
+  pageviewsCount: number
+  eventsCount: number
+  pagePaths?: string[]
+  eventNames?: string[]
+}
+
+export type ProfileJourneyPayload = {
+  profile: ProfileListItem
+  summary: {
+    sessions: number
+    pageviews: number
+    events: number
+  }
+  activity: Array<{
+    startedAt?: string | null
+    count: number
+  }>
+}
+
+export type ProfileSessionsListPayload = {
+  sessions: ProfileSessionItem[]
+  hasMore: boolean
+}
+
+export type ProfileSessionPayload = {
+  session: ProfileSessionItem
+  sourceSummary?: {
+    sourceLabel: string
+    sourceKind?: string | null
+    sourceChannel?: string | null
+    faviconDomain?: string | null
+    referringDomain?: string | null
+    referrer?: string | null
+    landingPage?: string | null
+    utmSource?: string | null
+    utmMedium?: string | null
+    utmCampaign?: string | null
+    trackerParams?: Array<{ key: string; value: string }>
+    searchTerms?: Array<{ label: string; probability: number }>
+  }
+  events: Array<{
+    id: number
+    visitId?: number
+    eventName: string
+    label: string
+    occurredAt: string
+    page?: string | null
+    properties?: Record<string, unknown>
+  }>
+}
+
+export type BottomPanelPayload = BehaviorsPayload | ProfilesPayload
+
 export type AnalyticsDashboardBoot = {
   topStats: TopStatsPayload
   mainGraph: MainGraphPayload
@@ -225,7 +351,7 @@ export type AnalyticsDashboardBoot = {
   pages: ListPayload
   locations: MapPayload | ListPayload
   devices: DevicesPayload
-  behaviors: BehaviorsPayload | null
+  behaviors: BottomPanelPayload | null
   ui: {
     graphMetric: string
     graphInterval: string
@@ -242,7 +368,6 @@ export type AnalyticsDashboardBoot = {
 
 export type AnalyticsPageProps = {
   site: SiteContextValue
-  user: UserContextValue
   query: AnalyticsQuery
   defaultQuery: AnalyticsQuery
   boot: AnalyticsDashboardBoot

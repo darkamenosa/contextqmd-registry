@@ -43,16 +43,17 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "excluded auth pages do not bootstrap or track analytics" do
+  test "auth pages bootstrap and track analytics" do
     with_server_visits(true) do
-      assert_no_difference -> { Ahoy::Visit.count } do
-        assert_no_difference -> { Ahoy::Event.count } do
+      assert_difference -> { Ahoy::Visit.count }, +1 do
+        assert_difference -> { Ahoy::Event.count }, +1 do
           get "/login", headers: MODERN_BROWSER_HEADERS
         end
       end
 
       assert_response :success
-      assert_includes response.body, "\"initialPageviewTracked\":false"
+      assert_includes response.body, "\"initialPageviewTracked\":true"
+      assert_includes response.body, "\"initialPageKey\":\"/login\""
       refute_includes response.body, "meta name=\"ahoy-visit\""
       refute_includes response.body, "meta name=\"ahoy-visitor\""
     end

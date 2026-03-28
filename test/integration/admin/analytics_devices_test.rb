@@ -133,4 +133,49 @@ class Admin::AnalyticsDevicesTest < ActionDispatch::IntegrationTest
   ensure
     Current.reset
   end
+
+  test "devices endpoint returns operating systems and screen sizes without reusing browser labels" do
+    staff_identity, = create_tenant(
+      email: "staff-devices-base-modes-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Devices Base Modes"
+    )
+    staff_identity.update!(staff: true)
+
+    Ahoy::Visit.create!(
+      visit_token: SecureRandom.hex(16),
+      visitor_token: "chrome-mac",
+      browser: "Chrome",
+      os: "Mac",
+      screen_size: "Desktop",
+      started_at: Time.zone.now.change(usec: 0)
+    )
+    Ahoy::Visit.create!(
+      visit_token: SecureRandom.hex(16),
+      visitor_token: "safari-ios",
+      browser: "Safari",
+      os: "iOS",
+      screen_size: "Mobile",
+      started_at: Time.zone.now.change(usec: 0)
+    )
+
+    sign_in(staff_identity)
+
+    get "/admin/analytics/devices",
+        params: { period: "day", mode: "operating-systems", with_imported: "false" },
+        headers: { "ACCEPT" => "application/json" }
+
+    assert_response :success
+    os_rows = JSON.parse(response.body).fetch("results")
+    assert_equal [ "Mac", "iOS" ], os_rows.map { |row| row.fetch("name") }.sort
+
+    get "/admin/analytics/devices",
+        params: { period: "day", mode: "screen-sizes", with_imported: "false" },
+        headers: { "ACCEPT" => "application/json" }
+
+    assert_response :success
+    size_rows = JSON.parse(response.body).fetch("results")
+    assert_equal [ "Desktop", "Mobile" ], size_rows.map { |row| row.fetch("name") }.sort
+  ensure
+    Current.reset
+  end
 end

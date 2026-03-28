@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { createRequire } from "node:module"
 import { tmpdir } from "node:os"
 import path from "node:path"
@@ -30,6 +30,32 @@ async function loadAnalyticsApiModule() {
     await rm(workdir, { force: true, recursive: true })
   }
 }
+
+async function loadContractFixtures() {
+  const fixturePath = path.join(
+    repoRoot,
+    "test/fixtures/analytics_query_contract_cases.json"
+  )
+  return JSON.parse(await readFile(fixturePath, "utf8"))
+}
+
+test("analytics frontend query codec stays aligned with shared contract fixtures", async () => {
+  const api = await loadAnalyticsApiModule()
+  const fixtures = await loadContractFixtures()
+
+  for (const fixture of fixtures) {
+    const parsed = api.parseQueryParams(
+      fixture.search,
+      fixture.fallback
+    )
+
+    assert.deepEqual(parsed, fixture.frontend, fixture.name)
+
+    for (const key of fixture.frontend_absent_keys || []) {
+      assert.equal(key in parsed, false, `${fixture.name}: expected ${key} absent`)
+    }
+  }
+})
 
 test("analytics query params round-trip comma-containing filters and labels", async () => {
   const api = await loadAnalyticsApiModule()

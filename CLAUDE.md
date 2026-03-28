@@ -14,6 +14,7 @@ Guidance for Claude Code when working with this Rails + InertiaJS React/TypeScri
 - Read `docs/auth-tenant-guide.md` before adding models, controllers, or features that involve tenant data, authentication, or authorization. It covers the Identity/User/Account pattern, scoping rules, and has a safety checklist
 - Read `docs/analytics.md` before modifying analytics tracking, the dashboard, visit/event models, or the Ahoy store. It covers the dedicated database, query pipeline, client-side tracker, live view, and how to extend safely
 - Self-critique your work when finishing a task
+- Simplicity criterion: All else being equal, simpler is better. A small improvement that adds ugly complexity is not worth it. Conversely, removing something and getting equal or better results is a great outcome — that's a simplification win. When evaluating whether to keep a change, weigh the complexity cost against the improvement magnitude. A improvement that adds 20 lines of hacky code? Probably not worth it. A improvement from deleting code? Definitely keep. An improvement of ~0 but much simpler code? Keep.
 - **DO NOT GUESS** — If you can't test or verify something after 2 attempts, ask for help with specific instructions
 
 ## Development Workflow

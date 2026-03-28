@@ -41,10 +41,16 @@ export function SessionsByLocation({
       </CardHeader>
       <CardContent className="space-y-2.5 px-4 pt-2 pb-4">
         {sessions.map((session, i) => {
+          const country =
+            session.country && session.country !== "Unknown"
+              ? session.country
+              : null
           const locationParts = [
-            session.country,
-            session.region,
             session.city,
+            session.region && session.region !== session.city
+              ? session.region
+              : null,
+            country,
           ].filter(Boolean)
 
           return (

@@ -30,7 +30,8 @@ class AhoyGeoEnrichmentTest < ActiveSupport::TestCase
 
     visit = Ahoy::Visit.order(:id).last
     assert_not_nil visit
-    assert_equal "US", visit.country
+    assert_equal "United States", visit.country
+    assert_equal "US", visit.country_code
     assert_equal "Minnesota", visit.region
     assert_equal "Minneapolis", visit.city
     assert_equal 44.9696, visit.latitude

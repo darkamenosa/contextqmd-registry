@@ -18,8 +18,15 @@ import {
   fetchSearchTerms,
   fetchSources,
 } from "../api"
+import { usePanelData } from "../hooks/use-panel-data"
 import {
-  baseAnalyticsPath,
+  getReportsDialogSearch,
+  openReportsDialogRoute,
+  syncReportsDialogRoute,
+  useCloseReportsDialogRoute,
+} from "../hooks/use-reports-dialog-route"
+import { pickCardMetrics } from "../lib/card-metrics"
+import {
   buildDialogPath,
   buildReferrersPath,
   dialogSegmentForMode,
@@ -33,6 +40,10 @@ import {
   hasPanelModeSearchParam,
   inferSourcesModeFromFilters,
 } from "../lib/panel-mode"
+import {
+  analyticsPreferenceKey,
+  writeAnalyticsPreference,
+} from "../lib/preferences"
 import { useScopedQuery } from "../lib/query-scope"
 import {
   getSourceFaviconDomain,
@@ -83,8 +94,6 @@ export default function SourcesPanel({
     ? getSourcesModeFromSearch(search, query)
     : null
 
-  const [data, setData] = useState<ListPayload>(initialData)
-  const [loading, setLoading] = useState(false)
   const [debugOpen, setDebugOpen] = useState(false)
   const [preferredMode, setPreferredMode] = useState(
     () => explicitSearchMode ?? initialMode
@@ -106,6 +115,7 @@ export default function SourcesPanel({
     [query.filters]
   )
   const mode = dialogMode ?? derivedModeFromFilters ?? preferredMode
+  const storageKey = analyticsPreferenceKey(STORAGE_PREFIX, site.domain)
   const detailsOpen =
     parsedDialog.type === "segment" ||
     (parsedDialog.type === "referrers" && /^google$/i.test(parsedDialog.source))
@@ -119,26 +129,23 @@ export default function SourcesPanel({
     () => JSON.stringify([baseQuery, mode]),
     [baseQuery, mode]
   )
-  const lastRequestKeyRef = useRef(initialRequestKey)
-
-  const closeDialog = useCallback(() => {
-    try {
-      const sp = new URLSearchParams(window.location.search)
-      sp.delete("dialog")
-      navigateAnalytics(baseAnalyticsPath(sp.toString()))
-    } catch {
-      // Ignore history errors; local dialog state remains usable.
-    }
-  }, [])
+  const closeDialog = useCloseReportsDialogRoute()
+  const panelState = usePanelData({
+    initialData,
+    initialRequestKey,
+    requestKey,
+    fetchData: (controller) =>
+      fetchSources(baseQuery, { mode }, controller.signal),
+  })
+  const data = panelState.data
+  const loading = panelState.loading
 
   const setAndStoreMode = useCallback(
     (value: string) => {
       setPreferredMode(value)
-      if (typeof window !== "undefined") {
-        localStorage.setItem(`${STORAGE_PREFIX}.${site.domain}`, value)
-      }
+      writeAnalyticsPreference(storageKey, value)
     },
-    [site.domain]
+    [storageKey]
   )
 
   const applyFilter = useCallback(
@@ -150,22 +157,6 @@ export default function SourcesPanel({
     },
     [updateQuery]
   )
-
-  useEffect(() => {
-    if (requestKey === lastRequestKeyRef.current) return
-    lastRequestKeyRef.current = requestKey
-
-    const controller = new AbortController()
-    startTransition(() => setLoading(true))
-    fetchSources(baseQuery, { mode }, controller.signal)
-      .then(setData)
-      .catch((error) => {
-        if (error.name !== "AbortError") console.error(error)
-      })
-      .finally(() => setLoading(false))
-
-    return () => controller.abort()
-  }, [baseQuery, mode, requestKey])
 
   // Drilldown for a selected source (when mode === 'all')
   const activeSource =
@@ -186,20 +177,31 @@ export default function SourcesPanel({
   const [termsData, setTermsData] = useState<ListPayload | null>(null)
   const [termsLoading, setTermsLoading] = useState(false)
   const [termsError, setTermsError] = useState<string | null>(null)
+  const refRequestIdRef = useRef(0)
+  const termsRequestIdRef = useRef(0)
 
   useEffect(() => {
     if (mode !== "all" || !activeSource) {
       startTransition(() => setRefData(null))
+      startTransition(() => setRefLoading(false))
       return
     }
     const controller = new AbortController()
+    const requestId = refRequestIdRef.current + 1
+    refRequestIdRef.current = requestId
     startTransition(() => setRefLoading(true))
     fetchReferrers(baseQuery, { source: activeSource }, controller.signal)
-      .then(setRefData)
+      .then((payload) => {
+        if (refRequestIdRef.current !== requestId) return
+        setRefData(payload)
+      })
       .catch((error) => {
         if (error.name !== "AbortError") console.error(error)
       })
-      .finally(() => setRefLoading(false))
+      .finally(() => {
+        if (refRequestIdRef.current !== requestId) return
+        setRefLoading(false)
+      })
     return () => controller.abort()
   }, [activeSource, baseQuery, mode])
 
@@ -208,24 +210,32 @@ export default function SourcesPanel({
     if (mode !== "all" || !isGoogleActive) {
       startTransition(() => setTermsData(null))
       startTransition(() => setTermsError(null))
+      startTransition(() => setTermsLoading(false))
       return
     }
     const controller = new AbortController()
+    const requestId = termsRequestIdRef.current + 1
+    termsRequestIdRef.current = requestId
     startTransition(() => setTermsLoading(true))
     startTransition(() => setTermsError(null))
     fetchSearchTerms(baseQuery, {}, controller.signal)
       .then((payload) => {
+        if (termsRequestIdRef.current !== requestId) return
         setTermsData(payload)
         setTermsError(null)
       })
       .catch((error) => {
         if (error.name !== "AbortError") {
+          if (termsRequestIdRef.current !== requestId) return
           setTermsData(null)
           setTermsError(searchTermsErrorMessage(error))
           console.error(error)
         }
       })
-      .finally(() => setTermsLoading(false))
+      .finally(() => {
+        if (termsRequestIdRef.current !== requestId) return
+        setTermsLoading(false)
+      })
     return () => controller.abort()
   }, [baseQuery, isGoogleActive, mode])
 
@@ -367,11 +377,10 @@ export default function SourcesPanel({
                 data-testid="sources-details-btn"
                 onClick={() => {
                   try {
-                    const sp = new URLSearchParams(window.location.search)
-                    sp.delete("dialog")
-                    const qs = sp.toString()
                     if (activeSource) {
-                      navigateAnalytics(buildReferrersPath(activeSource, qs))
+                      openReportsDialogRoute((search) =>
+                        buildReferrersPath(activeSource, search)
+                      )
                     }
                   } catch {
                     // Ignore history errors when opening the details route.
@@ -399,11 +408,10 @@ export default function SourcesPanel({
               <DetailsButton
                 onClick={() => {
                   try {
-                    const sp = new URLSearchParams(window.location.search)
-                    sp.delete("dialog")
-                    const qs = sp.toString()
                     // For Google Search Terms, mirror Plausible route
-                    navigateAnalytics(buildReferrersPath("Google", qs))
+                    openReportsDialogRoute((search) =>
+                      buildReferrersPath("Google", search)
+                    )
                   } catch {
                     // Ignore history errors when opening the details route.
                   }
@@ -484,12 +492,9 @@ export default function SourcesPanel({
                     // If a specific source is active, open Referrer Details instead of Sources
                     if (mode === "all" && activeSource && !isGoogleActive) {
                       try {
-                        const sp = new URLSearchParams(window.location.search)
-                        sp.delete("dialog")
-                        const qs = sp.toString()
                         if (activeSource) {
-                          navigateAnalytics(
-                            buildReferrersPath(String(activeSource), qs)
+                          openReportsDialogRoute((search) =>
+                            buildReferrersPath(String(activeSource), search)
                           )
                         }
                       } catch {
@@ -497,11 +502,10 @@ export default function SourcesPanel({
                       }
                     } else {
                       try {
-                        const sp = new URLSearchParams(window.location.search)
-                        sp.delete("dialog")
-                        const qs = sp.toString()
                         const seg = dialogSegmentForMode(mode as SourcesMode)
-                        navigateAnalytics(buildDialogPath(seg, qs))
+                        openReportsDialogRoute((search) =>
+                          buildDialogPath(seg, search)
+                        )
                       } catch {
                         // Ignore history errors when opening source details.
                       }
@@ -523,19 +527,25 @@ export default function SourcesPanel({
         open={detailsOpen}
         onOpenChange={(open) => {
           try {
-            const sp = new URLSearchParams(window.location.search)
-            sp.delete("dialog")
-            const qs = sp.toString()
             if (open) {
               if (isGoogleActive) {
                 // Keep Google keywords route when Search Terms modal is open
-                navigateAnalytics(buildReferrersPath("Google", qs))
+                syncReportsDialogRoute(open, (search) =>
+                  buildReferrersPath("Google", search)
+                )
               } else {
                 const seg = dialogSegmentForMode(mode as SourcesMode)
-                navigateAnalytics(buildDialogPath(seg, qs))
+                syncReportsDialogRoute(open, (search) =>
+                  buildDialogPath(seg, search)
+                )
               }
             } else {
-              navigateAnalytics(baseAnalyticsPath(qs))
+              syncReportsDialogRoute(open, (search) =>
+                buildDialogPath(
+                  dialogSegmentForMode(mode as SourcesMode),
+                  search
+                )
+              )
             }
           } catch {
             // Ignore history errors when syncing modal state.
@@ -571,13 +581,13 @@ export default function SourcesPanel({
           open={refDetailsOpen}
           onOpenChange={(open) => {
             try {
-              const sp = new URLSearchParams(window.location.search)
-              sp.delete("dialog")
-              const qs = sp.toString()
+              const qs = getReportsDialogSearch()
               if (open && activeSource) {
                 navigateAnalytics(buildReferrersPath(String(activeSource), qs))
               } else if (!open) {
-                navigateAnalytics(baseAnalyticsPath(qs))
+                syncReportsDialogRoute(open, (search) =>
+                  buildReferrersPath(String(activeSource), search)
+                )
               }
             } catch (e) {
               console.warn("Failed to push dialog path", e)
@@ -615,14 +625,6 @@ export default function SourcesPanel({
       />
     </section>
   )
-}
-
-function pickCardMetrics(metrics: ListMetricKey[]): ListMetricKey[] {
-  const preferred: ListMetricKey[] = []
-  if (metrics.includes("visitors")) preferred.push("visitors")
-  if (metrics.includes("percentage")) preferred.push("percentage")
-  else if (metrics.includes("conversionRate")) preferred.push("conversionRate")
-  return preferred.length > 0 ? preferred : metrics.slice(0, 2)
 }
 
 function searchTermsErrorMessage(error: unknown) {

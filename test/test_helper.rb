@@ -5,6 +5,12 @@ require "fileutils"
 
 Dir[Rails.root.join("test/support/**/*.rb")].each { |f| require f }
 
+if defined?(ActiveJob::QueueAdapters::TestAdapter) &&
+    defined?(ActiveJob::QueueAdapters::AsyncExt) &&
+    !(ActiveJob::QueueAdapters::TestAdapter < ActiveJob::QueueAdapters::AsyncExt)
+  ActiveJob::QueueAdapters::TestAdapter.include ActiveJob::QueueAdapters::AsyncExt
+end
+
 module ActiveSupport
   class TestCase
     include TenantTestHelper

@@ -11,7 +11,7 @@ const BROWSER_ICONS: Record<string, string> = {
   Chromium: "chromium.svg",
   "UC Browser": "uc.svg",
   "Yandex Browser": "yandex.png",
-  "DuckDuckGo Privacy Browser": "duckduckgo.svg",
+  "DuckDuckGo Privacy Browser": "duckduckgo.png",
   Brave: "brave.svg",
   Ecosia: "ecosia.png",
   "MIUI Browser": "miui.webp",

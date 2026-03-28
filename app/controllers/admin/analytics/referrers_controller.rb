@@ -19,7 +19,7 @@ module Admin
         search = normalized_search
         lim_opt = params[:limit].present? ? limit : nil
         page_opt = params[:page].present? ? page : nil
-        payload = cache_for([ :referrers, source, lim_opt, page_opt, search, params[:order_by], @query[:filters], @query[:period] ]) do
+        payload = cache_for([ :referrers, source, lim_opt, page_opt, search, params[:order_by], @query.filter_clauses, @query.time_range_key ]) do
           referrers_payload(@query, source, limit: lim_opt, page: page_opt, search:)
         end
         render json: camelize_keys(payload)

@@ -7,8 +7,8 @@ module Admin
         source = params[:source].to_s
         return render json: camelize_keys(empty_payload), status: :ok if source.blank?
 
-        payload = cache_for([ :source_debug, source, @query[:filters], @query[:period] ]) do
-          Ahoy::Visit.source_debug_payload(@query, source)
+        payload = cache_for([ :source_debug, source, @query.filter_clauses, @query.time_range_key ]) do
+          ::Analytics::Sources.debug_payload(@query, source)
         end
 
         render json: camelize_keys(payload)

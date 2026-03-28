@@ -2,7 +2,6 @@ import { useMemo } from "react"
 
 import { useQueryContext } from "../query-context"
 import { useSiteContext } from "../site-context"
-import { TopStatsProvider } from "../top-stats-context"
 import type { AnalyticsDashboardBoot } from "../types"
 import BehaviorsPanel from "./behaviors-panel"
 import DevicesPanel from "./devices-panel"
@@ -21,47 +20,48 @@ export default function AnalyticsDashboard({
   const site = useSiteContext()
   const isRealtime = useMemo(() => query.period === "realtime", [query.period])
   const hasBehaviors =
-    site.hasGoals || site.funnelsAvailable || site.propsAvailable
+    site.hasGoals ||
+    site.funnelsAvailable ||
+    site.propsAvailable ||
+    site.profilesAvailable
 
   return (
-    <TopStatsProvider initial={initialBoot.topStats}>
-      <div className="flex flex-col gap-4">
-        <TopBar showCurrentVisitors={!isRealtime} />
+    <div className="flex flex-col gap-4">
+      <TopBar showCurrentVisitors={!isRealtime} />
 
-        <VisitorGraph initialGraph={initialBoot.mainGraph} />
+      <VisitorGraph initialGraph={initialBoot.mainGraph} />
 
-        <section className="grid gap-4 lg:grid-cols-2">
-          <SourcesPanel
-            initialData={initialBoot.sources}
-            initialMode={initialBoot.ui.sourcesMode}
-          />
-          <PagesPanel
-            initialData={initialBoot.pages}
-            initialMode={initialBoot.ui.pagesMode}
-          />
-        </section>
+      <section className="grid gap-4 lg:grid-cols-2">
+        <SourcesPanel
+          initialData={initialBoot.sources}
+          initialMode={initialBoot.ui.sourcesMode}
+        />
+        <PagesPanel
+          initialData={initialBoot.pages}
+          initialMode={initialBoot.ui.pagesMode}
+        />
+      </section>
 
-        <section className="grid gap-4 lg:grid-cols-2">
-          <LocationsPanel
-            initialData={initialBoot.locations}
-            initialMode={initialBoot.ui.locationsMode}
-          />
-          <DevicesPanel
-            initialData={initialBoot.devices}
-            initialBaseMode={initialBoot.ui.devicesBaseMode}
-            initialMode={initialBoot.ui.devicesMode}
-          />
-        </section>
+      <section className="grid gap-4 lg:grid-cols-2">
+        <LocationsPanel
+          initialData={initialBoot.locations}
+          initialMode={initialBoot.ui.locationsMode}
+        />
+        <DevicesPanel
+          initialData={initialBoot.devices}
+          initialBaseMode={initialBoot.ui.devicesBaseMode}
+          initialMode={initialBoot.ui.devicesMode}
+        />
+      </section>
 
-        {hasBehaviors && initialBoot.behaviors ? (
-          <BehaviorsPanel
-            initialData={initialBoot.behaviors}
-            initialMode={initialBoot.ui.behaviorsMode}
-            initialFunnel={initialBoot.ui.behaviorsFunnel}
-            initialProperty={initialBoot.ui.behaviorsProperty}
-          />
-        ) : null}
-      </div>
-    </TopStatsProvider>
+      {hasBehaviors && initialBoot.behaviors ? (
+        <BehaviorsPanel
+          initialData={initialBoot.behaviors}
+          initialMode={initialBoot.ui.behaviorsMode}
+          initialFunnel={initialBoot.ui.behaviorsFunnel}
+          initialProperty={initialBoot.ui.behaviorsProperty}
+        />
+      ) : null}
+    </div>
   )
 }

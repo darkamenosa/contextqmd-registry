@@ -4,18 +4,20 @@ This document describes the self-hosted analytics system in this repo. It covers
 
 ## Overview
 
-A Plausible-style analytics dashboard built on Ahoy. Cookieless by default. Runs in a dedicated PostgreSQL database isolated from primary app data. The admin dashboard at `/admin/analytics/reports` shows traffic stats; `/admin/analytics/live` shows real-time visitors on a 3D globe.
+A Plausible-style analytics dashboard built on Ahoy. Ahoy visit/session ownership remains cookieless, while an app-owned first-party browser cookie provides weak continuity for analytics profile resolution. Runs in a dedicated PostgreSQL database isolated from primary app data. The admin dashboard at `/admin/analytics/reports` shows traffic stats; `/admin/analytics/live` shows real-time visitors on a 3D globe.
 
 ```text
 Browser → analytics.ts tracker → /ahoy/visits + /ahoy/events
                                         ↓
                               Ahoy::Store (ahoy.rb initializer)
                                         ↓
-                              analytics database (ahoy_visits, ahoy_events)
+                              analytics database (ahoy_visits, ahoy_events, analytics_profiles, analytics_profile_keys, analytics_profile_sessions, analytics_profile_summaries)
                                         ↓
-                    Ahoy::Visit concern pipeline (filters, ranges, metrics, …)
+                 Analytics::RequestQueryParser → Analytics::Query
                                         ↓
-                    Admin::Analytics::*Controller → JSON API → React dashboard
+      Analytics::* / AnalyticsProfile::* domain objects + shallow Analytics::*Job jobs
+                                        ↓
+                   Admin::Analytics::*Controller → JSON API → React dashboard
 ```
 
 ## Database Isolation
@@ -29,7 +31,7 @@ class AnalyticsRecord < ActiveRecord::Base
 end
 ```
 
-**Tables**: `ahoy_visits`, `ahoy_events`, `analytics_funnels`, `analytics_settings`
+**Tables**: `ahoy_visits`, `ahoy_events`, `analytics_funnels`, `analytics_settings`, `analytics_profiles`, `analytics_profile_keys`, `analytics_profile_sessions`, `analytics_profile_summaries`
 
 **Migrations** live in `db/analytics_migrate/`, not `db/migrate/`.
 
@@ -48,7 +50,7 @@ One row per visitor session. Contains all dimensions used for analytics breakdow
 
 | Column group | Columns | Purpose |
 |---|---|---|
-| Identity | `visit_token`, `visitor_token`, `user_id` | Session + visitor tracking |
+| Identity | `visit_token`, `visitor_token`, `user_id`, `analytics_profile_id`, `browser_id` | Session + visitor tracking plus resolved profile continuity |
 | Source | `referrer`, `referring_domain`, `utm_source/medium/campaign/content/term` | Traffic source attribution |
 | Technology | `browser`, `browser_version`, `os`, `device_type`, `screen_size` | Device breakdowns |
 | Location | `country`, `region`, `city`, `latitude`, `longitude` | Geo breakdowns + globe dots |
@@ -74,6 +76,77 @@ Named conversion funnels with ordered step definitions (JSONB array).
 
 Key-value store for runtime analytics configuration (e.g., `gsc_configured`).
 
+### analytics_profiles
+
+One row per resolved analytics profile. This is the durable analytics-side actor record used to group visits over time without joining across the primary application database.
+
+| Column | Purpose |
+|---|---|
+| `public_id` | External-safe profile identifier |
+| `status` | `anonymous`, `identified`, or `merged` |
+| `merged_into_id` | Canonical profile target when profiles are merged |
+| `first_seen_at`, `last_seen_at`, `last_event_at` | Resolution lifecycle timestamps |
+| `traits`, `stats` | Lightweight denormalized profile metadata |
+| `resolver_version` | Resolution algorithm version used for the latest assignment |
+
+### analytics_profile_keys
+
+Strong identity keys that can safely stitch visits to a profile across sessions and devices.
+
+| Column | Purpose |
+|---|---|
+| `analytics_profile_id` | Parent profile |
+| `kind` | Strong key type like `identity_id`, `email_hash`, `stripe_customer_id` |
+| `value` | Key value |
+| `verified` | Whether the key is trusted enough for canonical resolution |
+| `first_seen_at`, `last_seen_at` | When the key was observed |
+| `metadata` | Optional source-specific metadata |
+
+`browser_id` is intentionally not stored here. It is a weak browser-continuity signal stored on `ahoy_visits`, not a canonical identity key.
+
+### analytics_profile_sessions
+
+One row per projected profile-owned session, keyed back to the original `ahoy_visits` row. This is the profile journey read model used by profile-specific views.
+
+| Column group | Columns | Purpose |
+|---|---|---|
+| Ownership | `analytics_profile_id`, `visit_id` | Canonical profile + backing visit |
+| Timeline | `started_at`, `last_event_at`, `duration_seconds` | Session chronology |
+| Activity | `events_count`, `pageviews_count`, `event_names`, `page_paths` | Session-level rollups |
+| Context | `entry_page`, `exit_page`, `current_page`, `source`, `country`, `country_code`, `region`, `city`, `device_type`, `browser`, `os` | Latest session summary for journey/live/profile screens |
+
+### analytics_profile_summaries
+
+One row per profile summary. This is the denormalized directory/list read model optimized for profile search and profile overview payloads.
+
+| Column group | Columns | Purpose |
+|---|---|---|
+| Ownership | `analytics_profile_id`, `latest_visit_id` | Canonical profile + latest backing visit |
+| Timeline | `first_seen_at`, `last_seen_at`, `last_event_at` | Profile lifecycle summary |
+| Identity | `display_name`, `email`, `search_text` | Searchable identity surface |
+| Latest context | `latest_source`, `latest_current_page`, `latest_country_name`, `latest_country_code`, `latest_region`, `latest_city`, `latest_device_type`, `latest_browser`, `latest_os`, `latest_context` | Fast profile directory payload |
+| Rollups | `total_visits`, `total_sessions`, `total_pageviews`, `total_events`, `devices_used`, `browsers_used`, `oses_used`, `sources_used`, `locations_used`, `top_pages` | Precomputed aggregate summary |
+
+## Counting Semantics
+
+The system currently has two different identity concepts:
+
+- `visitor_token` = browser-scoped visitor identity used by most aggregate analytics metrics
+- `analytics_profile_id` = resolved profile/person identity used by profile-centric analytics views
+
+This means the current UI labels `Unique visitors` and `Live visitors` are browser-scoped, not person-scoped. A logged-in user opening the site in Chrome and Safari will currently count as:
+
+- `2` visitors for top stats, most breakdowns, and live visitor counts
+- `1` resolved profile/person when both visits resolve to the same strong identity key
+
+Important implications:
+
+- visitor counts are based on `visitor_token`, not `user_id` or `analytics_profile_id`
+- profile merging does not retroactively change most report metrics today
+- profile pages and live session cards can represent the same person across multiple browser sessions, while top-level visitor metrics still count those browser sessions separately
+
+If product semantics need person-level counts, that change should happen in the reporting query layer by counting a merged identity key based on `analytics_profile_id` with fallback to `visitor_token`. Tracking and raw data collection do not need to change for that.
+
 ## Client-Side Tracker
 
 `app/frontend/entrypoints/analytics.ts` — a standalone, framework-agnostic tracker injected into the application layout via `<%= vite_typescript_tag "analytics.ts" %>`.
@@ -81,11 +154,12 @@ Key-value store for runtime analytics configuration (e.g., `gsc_configured`).
 ### How it works
 
 1. **Server-first initial pageview**: On eligible public HTML `GET` requests, Rails creates the visit and first `pageview` before the response is sent. The layout bootstraps only the initial `pageKey` and whether the current render was already counted.
-2. **Client follow-up tracking**: The standalone tracker seeds its dedupe/engagement state from that bootstrap and continues tracking SPA navigation, engagement, downloads, and outbound clicks.
-3. **Event-only follow-up ingestion**: Subsequent tracking uses POST `/ahoy/events` only. Ahoy creates a new visit lazily on the next `pageview` when no recent visit exists.
-4. **Engagement does not open a new visit**: `engagement` events extend an active visit, but are dropped when no recent visit exists. This matches Plausible-style session handling.
-5. **Engagement tracking**: Tracks time-on-page and scroll depth (Plausible-style). Fires `engagement` events on visibility change / blur / navigation.
-6. **Dedup**: Uses a `pageKey` (pathname + search) to prevent double-counting when frameworks call `pushState` then `replaceState` in the same tick, and seeds that key from the server-rendered page on first load.
+2. **Browser continuity cookie**: Rails ensures a first-party `cq_analytics_browser_id` cookie exists. This browser id is separate from Ahoy visit/session ownership and is used only for anonymous continuity and profile resolution.
+3. **Client follow-up tracking**: The standalone tracker seeds its dedupe/engagement state from that bootstrap and continues tracking SPA navigation, engagement, downloads, and outbound clicks.
+4. **Event-only follow-up ingestion**: Subsequent tracking uses POST `/ahoy/events` only. Ahoy creates a new visit lazily on the next `pageview` when no recent visit exists.
+5. **Engagement does not open a new visit**: `engagement` events extend an active visit, but are dropped when no recent visit exists. This matches Plausible-style session handling.
+6. **Engagement tracking**: Tracks time-on-page and scroll depth (Plausible-style). Fires `engagement` events on visibility change / blur / navigation.
+7. **Dedup**: Uses a `pageKey` (pathname + search) to prevent double-counting when frameworks call `pushState` then `replaceState` in the same tick, and seeds that key from the server-rendered page on first load.
 
 ### Configuration
 
@@ -93,7 +167,7 @@ Runtime config is injected by the layout into `window.analyticsConfig`:
 
 ```javascript
 window.analyticsConfig = {
-  useCookies: false,             // localStorage mode (cookieless)
+  useCookies: false,             // Ahoy visit/session cookies remain disabled
   visitDurationMinutes: 30,      // 30-minute session window
   useBeaconForEvents: false,     // legacy flag; fetch keepalive is the active transport
   trackVisits: false,            // legacy flag; follow-up tracking is event-only
@@ -139,11 +213,31 @@ Events use `fetch` with `keepalive: true`, a JSON body, and `X-CSRF-Token` heade
 3. Cleans self-referrals (same-site referring_domain → null)
 4. Enriches geo data via MaxMind GeoIP when available
 5. Falls back to Cloudflare `CF-IPCountry` header for country
+6. Persists `browser_id` from the first-party analytics cookie
+7. Resolves `analytics_profile_id` when the profile tables are available
 
 ### Event enrichment (track_event)
 
 1. Extracts `screen_size` from viewport string and classifies into `Mobile/Tablet/Laptop/Desktop`
 2. Corrects `landing_page` on the visit when the first event provides a real URL
+3. Re-runs profile resolution so late identity signals can upgrade an anonymous profile
+
+### Profile resolution
+
+Profile resolution is triggered from the Ahoy store and resolved through shallow analytics jobs that write `ahoy_visits.analytics_profile_id`.
+
+Resolution priority:
+
+1. strong keys from `analytics_profile_keys`
+2. anonymous browser continuity via `ahoy_visits.browser_id`
+3. create a new anonymous `analytics_profile`
+
+Important constraints:
+
+- strong keys win over browser continuity
+- `browser_id` alone never upgrades or merges an already identified profile
+- anonymous browser history may later merge into an identified profile when a strong key appears
+- raw facts remain in `ahoy_visits` and `ahoy_events`; the profile is only the resolved owner
 
 ### Client IP Resolution
 
@@ -164,15 +258,15 @@ All dashboard API requests flow through the same pipeline:
 ```text
 Browser → GET /admin/analytics/sources?period=7d&f=is,country,US
                     ↓
-        Admin::Analytics::BaseController#prepare_query
-          - parses period, filters (f=op,dim,clause), labels (l=key,val)
-          - builds @query hash
+        Admin::Analytics::BaseController
+          - delegates request parsing to Analytics::RequestQueryParser
+          - builds Analytics::Query
                     ↓
         SourcesController#index
-          - calls Ahoy::Visit.sources_payload(@query, limit:, page:, search:)
+          - calls Analytics::SourcesDatasetQuery.payload(query: @query, ...)
                     ↓
-        Ahoy::Visit concern chain:
-          Filters → Ranges → [Sources|Pages|Locations|Devices] → Metrics → Ordering → Pagination
+        Analytics domain layer:
+          Query → VisitScope / ReportMetrics / DatasetQuery::* → Storage adapter
                     ↓
         cache_for(key) { ... }  # 5-minute Rails.cache with SHA256 digest
                     ↓
@@ -183,41 +277,52 @@ Browser → GET /admin/analytics/sources?period=7d&f=is,country,US
 
 ### BaseController responsibilities
 
-- `prepare_query` — merges URL params into a normalized query hash
-- `shell_props(query)` — builds Inertia props for the dashboard shell (site context, user context, query, default query)
+- `prepare_query` — parses URL params through `Analytics::RequestQueryParser` and builds `Analytics::Query`
+- `shell_props(query)` — builds Inertia props for the dashboard shell (`site`, `query`, `defaultQuery`)
+- `dashboard_boot_payload(query)` — preloads top stats, graph, panel payloads, and initial UI modes for the reports page
 - `cache_for(key)` — SHA256-digest cache with 5-minute TTL
 - `camelize_keys` — recursive snake→camel conversion for JSON responses
 - `parsed_pagination` — limit/page with bounds (max 500)
 - `normalized_search` — sanitized search term (max 100 chars)
 - `parsed_order_by` — delegates to model whitelist
 
-### Ahoy::Visit concerns
+### Backend query objects
 
-The Visit model includes 13 concerns that compose the query pipeline:
+The reporting layer now lives primarily under `app/models/analytics/`:
 
-| Concern | Purpose |
+| Object | Purpose |
 |---|---|
-| `Constants` | Channel classification rules, search engine list, social networks |
-| `Filters` | Applies query filters (country, source, page, device, UTM, goals, etc.) to scopes |
-| `Ranges` | Converts period strings (`day`, `7d`, `30d`, `month`, `custom`, etc.) to time ranges |
-| `Series` | Time-series bucketing via PostgreSQL `generate_series` for the main graph |
-| `Metrics` | Computes visitors, visits, pageviews, bounce rate, visit duration, views per visit |
-| `Sources` | Groups by source/channel/UTM with the source catalog + custom alias YAML |
-| `Pages` | Groups by landing page, entry page, or exit page |
-| `Locations` | Groups by country/region/city with ISO metadata via `countries` gem |
-| `Devices` | Groups by browser, OS, or screen size |
-| `Ordering` | Whitelist-based column ordering with direction |
-| `Pagination` | Limit/offset with `has_more` metadata |
-| `CacheKey` | `analytics_data_version` counter for cache invalidation |
-| `UrlLabels` | Human-readable labels for filter values (city names, region names) |
+| `Analytics::Query` | Semantic backend query contract |
+| `Analytics::RequestQueryParser` | Backend URL/query parser |
+| `Analytics::VisitScope` | Visit/pageview filtering and scoping |
+| `Analytics::ReportMetrics` | Shared analytics calculations |
+| `Analytics::*DatasetQuery` | Sources/pages/locations/devices/behaviors/referrers/search terms datasets |
+| `Analytics::MainGraphQuery` | Main graph payload |
+| `Analytics::TopStatsQuery` | Top stats payload |
+| `Analytics::LiveState` | Public live analytics boundary |
+
+### Current metric caveat
+
+Most aggregate reporting queries still count distinct `visitor_token` values. In practice, this means:
+
+- `Live visitors` is browser-scoped
+- `Unique visitors` is browser-scoped
+- many source, page, location, and behavior visitor counts are browser-scoped
+- profile directory, profile journey, and live profile/session views are `analytics_profile_id`-aware
+
+When changing labels or product copy, prefer:
+
+- `visitor` only if browser-scoped counting is acceptable
+- `browser` or `device` if the distinction needs to be explicit
+- `profile`, `person`, or `identified person` for `analytics_profile_id`-based views
 
 ### Source classification
 
 Traffic sources are classified into channels using this priority:
 
-1. `utm_medium` / `utm_source` → channel mapping (e.g., `cpc` → Paid Search, `social` → Organic Social)
-2. Custom source aliases from `config/analytics/custom_sources.yml`
-3. Referring domain → `Analytics::SourceCatalog::SOURCE_MAP` regex matching
+1. `utm_source` direct aliases and explicit source rules from `Analytics::SourceResolver`
+2. `utm_source` or known labels canonicalized through `config/analytics/source_rules.yml`
+3. Referring domain matched through `Analytics::SourceResolver` domain rules
 4. Fallback: `Direct / None`
 
 ### Filter syntax (Plausible-compatible)
@@ -238,22 +343,24 @@ Labels use `l` params: `l=key,value` (e.g., `l=country,United States`)
 
 ```text
 /admin/analytics/reports     → ReportsController#index (Inertia page)
-  └─ QueryProvider             URL ↔ query state sync
-     └─ SiteContext + UserContext + TopStatsContext + LastLoadContext
-        └─ AnalyticsDashboard
-           ├─ TopBar            Period selector, filters, comparison toggle
-           ├─ VisitorGraph      Chart.js time-series (main metric)
-           └─ PanelTabs         Sources | Pages | Locations | Devices | Behaviors
-              ├─ SourcesPanel   Source/channel/UTM breakdowns
-              ├─ PagesPanel     Landing/entry/exit pages
-              ├─ LocationsPanel Map + country/region/city tables
-              ├─ DevicesPanel   Browser/OS/screen size tables
-              └─ BehaviorsPanel Goals/funnels/custom properties
+  └─ props: site + query + defaultQuery + boot
+     └─ AnalyticsDashboardProvider  site/top-stats/last-load state
+        └─ QueryProvider            URL ↔ query state sync
+           └─ AnalyticsDashboard
+              ├─ TopBar            Period selector, filters, comparison toggle
+              ├─ VisitorGraph      Chart.js time-series (main metric)
+              ├─ SourcesPanel      Source/channel/UTM breakdowns
+              ├─ PagesPanel        Landing/entry/exit pages
+              ├─ LocationsPanel    Map + country/region/city tables
+              ├─ DevicesPanel      Browser/OS/screen size tables
+              └─ BehaviorsPanel    Goals/funnels/custom properties
 ```
+
+`ReportsController#index` now ships a single boot payload for the initial dashboard render rather than forcing each panel to cold-fetch on mount. Thin wrapper hooks such as `site-context.tsx`, `top-stats-context.tsx`, and `last-load-context.tsx` read from `AnalyticsDashboardProvider`; they are no longer separate provider layers.
 
 ### URL state
 
-The dashboard is fully URL-driven. All query state (period, filters, comparison, panel modes, graph metric) is serialized to URL params. The `QueryProvider` context syncs React state ↔ browser URL via `history.pushState`.
+The dashboard is fully URL-driven. All query state (period, filters, comparison, panel modes, graph metric, and dialog route hints) is serialized to URL params or route state. `QueryProvider` resolves the initial query from server props plus the current URL, canonicalizes the search string, and syncs updates through `location-store.ts`, `query-codec.ts`, and `report-url.ts`.
 
 Panel-specific modes use namespaced params: `pages_mode=entry`, `devices_mode=operating-systems`, `sources_mode=utm-campaign`, `graph_metric=visit_duration`.
 
@@ -289,8 +396,8 @@ Dialog state is encoded in the URL path: `/admin/analytics/reports/_/sources` op
 ### Data flow
 
 ```text
-AnalyticsUpdateJob (every 30s via Solid Queue recurring)
-  → AnalyticsLiveStats.build
+Analytics::LiveBroadcastJob (recurring + request-triggered coalescing)
+  → Analytics::LiveState.build
     → current_visitors (5-min window)
     → today_sessions (count + yesterday comparison)
     → sparkline (hourly buckets, today vs yesterday)
@@ -302,6 +409,8 @@ AnalyticsUpdateJob (every 30s via Solid Queue recurring)
         ↓
   React live page via @rails/actioncable consumer
 ```
+
+`Admin::Analytics::LiveController#show` renders the page with `initialStats` from `Analytics::LiveState.build`. On the client, `live/show.tsx` composes extracted helpers such as `useLiveStats`, `useLiveLocationSearch`, `live-event-buffer`, `live-events-panel.tsx`, and `live-session-card.tsx` around the shared globe components.
 
 ### 3D Globe
 
@@ -347,8 +456,8 @@ The behaviors panel switches to funnel mode when `mode=funnels` is active, showi
 
 1. Add the column to `ahoy_visits` via a migration in `db/analytics_migrate/`
 2. If the data comes from tracking, add it to `Ahoy::Store#track_visit` or `track_event` in `config/initializers/ahoy.rb`
-3. Create or extend a concern under `app/models/ahoy/visit/` to add the grouping/filtering logic
-4. Include the concern in `Ahoy::Visit`
+3. Extend `Analytics::Query` / `Analytics::RequestQueryParser` if the dimension needs new filter semantics
+4. Add or extend an analytics object under `app/models/analytics/` for grouping/filtering logic
 5. Add a controller under `Admin::Analytics::` inheriting from `BaseController`
 6. Add the route in `config/routes.rb` under the `namespace :analytics` block
 7. Add a frontend panel component under `app/frontend/pages/admin/analytics/ui/`
@@ -370,19 +479,28 @@ The tracker sends custom events via `sendEvent()`. To add a new auto-captured ev
 | Tracker | `app/frontend/entrypoints/analytics.ts` |
 | Ahoy store | `config/initializers/ahoy.rb` |
 | Analytics config | `config/initializers/analytics.rb` |
-| Source aliases | `config/analytics/custom_sources.yml` |
+| Source rules | `config/analytics/source_rules.yml` |
+| Source resolver | `app/models/analytics/source_resolver.rb` |
 | Client IP | `lib/client_ip.rb`, `lib/trusted_proxy_ranges.rb` |
 | MaxMind | `config/initializers/maxmind.rb` |
 | Base controller | `app/controllers/admin/analytics/base_controller.rb` |
+| Reports controller | `app/controllers/admin/analytics/reports_controller.rb` |
+| Live controller | `app/controllers/admin/analytics/live_controller.rb` |
 | Visit model | `app/models/ahoy/visit.rb` + `app/models/ahoy/visit/*.rb` |
 | Event model | `app/models/ahoy/event.rb` |
-| Live stats | `app/models/analytics_live_stats.rb` |
-| Live job | `app/jobs/analytics_update_job.rb` |
+| Query parser + contract | `app/models/analytics/request_query_parser.rb`, `app/models/analytics/query.rb` |
+| Dataset queries | `app/models/analytics/*_dataset_query.rb` |
+| Live state | `app/models/analytics/live_state.rb` |
+| Live job | `app/jobs/analytics/live_broadcast_job.rb` |
 | ActionCable | `app/channels/analytics_channel.rb` |
 | Globe | `app/frontend/components/analytics/visitor-globe.tsx` |
 | Hex geometry | `app/frontend/lib/h3-hex-geometry.ts` |
 | Dashboard page | `app/frontend/pages/admin/analytics/reports/index.tsx` |
+| Dashboard state | `app/frontend/pages/admin/analytics/dashboard-context.tsx` |
 | API client | `app/frontend/pages/admin/analytics/api.ts` |
 | Types | `app/frontend/pages/admin/analytics/types.ts` |
 | Query context | `app/frontend/pages/admin/analytics/query-context.tsx` |
+| Query codec | `app/frontend/pages/admin/analytics/lib/query-codec.ts` |
+| Report URL helpers | `app/frontend/pages/admin/analytics/lib/report-url.ts` |
 | Dashboard shell | `app/frontend/pages/admin/analytics/ui/analytics-dashboard.tsx` |
+| Live page | `app/frontend/pages/admin/analytics/live/show.tsx` |

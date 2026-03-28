@@ -118,8 +118,20 @@ test("device panel infers version breakdowns from fixed browser and os filters",
     "browser-versions"
   )
   assert.equal(
+    panelMode.inferDevicesModeFromFilters("browsers", {
+      browser_version: "136.0",
+    }),
+    "browser-versions"
+  )
+  assert.equal(
     panelMode.inferDevicesModeFromFilters("operating-systems", {
       os: "macOS",
+    }),
+    "operating-system-versions"
+  )
+  assert.equal(
+    panelMode.inferDevicesModeFromFilters("operating-systems", {
+      os_version: "14.4",
     }),
     "operating-system-versions"
   )

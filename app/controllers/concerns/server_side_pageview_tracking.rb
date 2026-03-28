@@ -5,7 +5,6 @@ module ServerSidePageviewTracking
 
   EXCLUDED_PREFIXES = %w[
     /admin
-    /app
     /api
     /ahoy
     /rails/
@@ -13,10 +12,6 @@ module ServerSidePageviewTracking
     /up
     /jobs
     /webhooks
-    /login
-    /logout
-    /register
-    /password
     /.well-known
   ].freeze
 

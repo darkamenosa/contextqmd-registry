@@ -15,6 +15,8 @@ class Admin::AnalyticsReportsTest < ActionDispatch::IntegrationTest
   setup do
     Ahoy::Event.delete_all
     Ahoy::Visit.delete_all
+    AnalyticsProfileSession.delete_all if defined?(AnalyticsProfileSession)
+    AnalyticsProfileSummary.delete_all if defined?(AnalyticsProfileSummary)
     AnalyticsSetting.delete_all
     Goal.delete_all
     Funnel.delete_all
@@ -65,6 +67,62 @@ class Admin::AnalyticsReportsTest < ActionDispatch::IntegrationTest
     assert_equal true, site.fetch("hasGoals")
     assert_equal true, site.fetch("propsAvailable")
     assert_equal true, site.fetch("funnelsAvailable")
+  ensure
+    Current.reset
+  end
+
+  test "reports shell can boot visitors mode from analytics profiles" do
+    staff_identity, = create_tenant(
+      email: "staff-reports-profiles-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Reports Profiles"
+    )
+    staff_identity.update!(staff: true)
+
+    profile = AnalyticsProfile.create!(
+      status: AnalyticsProfile::STATUS_ANONYMOUS,
+      traits: { display_name: "coral wildcat" },
+      first_seen_at: 30.minutes.ago,
+      last_seen_at: 2.minutes.ago
+    )
+
+    visit = Ahoy::Visit.create!(
+      visit_token: SecureRandom.hex(16),
+      visitor_token: SecureRandom.hex(16),
+      analytics_profile: profile,
+      browser_id: SecureRandom.uuid,
+      started_at: 4.minutes.ago.change(usec: 0),
+      country: "Sweden",
+      city: "Stockholm",
+      device_type: "Desktop",
+      os: "Mac OS",
+      browser: "Safari",
+      source_label: "Direct/None",
+      landing_page: "https://example.test/"
+    )
+
+    Ahoy::Event.create!(
+      visit: visit,
+      name: "pageview",
+      properties: { page: "/" },
+      time: 3.minutes.ago.change(usec: 0)
+    )
+
+    sign_in(staff_identity)
+
+    get "/admin/analytics/reports",
+        params: { behaviors_mode: "visitors" },
+        headers: INERTIA_HEADERS
+
+    assert_response :success
+
+    payload = JSON.parse(response.body).fetch("props")
+    site = payload.fetch("site")
+    boot = payload.fetch("boot")
+
+    assert_equal true, site.fetch("profilesAvailable")
+    assert_equal "visitors", boot.fetch("ui").fetch("behaviorsMode")
+    assert_equal "profiles", boot.fetch("behaviors").fetch("kind")
+    assert_equal "coral wildcat", boot.fetch("behaviors").fetch("results").first.fetch("name")
   ensure
     Current.reset
   end
@@ -132,24 +190,24 @@ class Admin::AnalyticsReportsTest < ActionDispatch::IntegrationTest
 
     sign_in(staff_identity)
 
-    original_available_goal_names = Ahoy::Visit.method(:available_goal_names)
-    original_available_property_keys = Ahoy::Visit.method(:available_property_keys)
-    original_goals_available = Ahoy::Visit.method(:goals_available?)
-    original_properties_available = Ahoy::Visit.method(:properties_available?)
+    original_available_goal_names = Analytics::Goals.method(:available_names)
+    original_available_property_keys = Analytics::Properties.method(:available_keys)
+    original_goals_available = Analytics::Goals.method(:available?)
+    original_properties_available = Analytics::Properties.method(:available?)
 
-    Ahoy::Visit.define_singleton_method(:available_goal_names) { raise "should not load goal names" }
-    Ahoy::Visit.define_singleton_method(:available_property_keys) { |_events = nil| raise "should not load property keys" }
-    Ahoy::Visit.define_singleton_method(:goals_available?) { false }
-    Ahoy::Visit.define_singleton_method(:properties_available?) { false }
+    Analytics::Goals.define_singleton_method(:available_names) { raise "should not load goal names" }
+    Analytics::Properties.define_singleton_method(:available_keys) { |_events = nil| raise "should not load property keys" }
+    Analytics::Goals.define_singleton_method(:available?) { false }
+    Analytics::Properties.define_singleton_method(:available?) { false }
 
     get "/admin/analytics/reports", headers: INERTIA_HEADERS
 
     assert_response :success
   ensure
-    Ahoy::Visit.define_singleton_method(:available_goal_names, original_available_goal_names) if defined?(original_available_goal_names) && original_available_goal_names
-    Ahoy::Visit.define_singleton_method(:available_property_keys, original_available_property_keys) if defined?(original_available_property_keys) && original_available_property_keys
-    Ahoy::Visit.define_singleton_method(:goals_available?, original_goals_available) if defined?(original_goals_available) && original_goals_available
-    Ahoy::Visit.define_singleton_method(:properties_available?, original_properties_available) if defined?(original_properties_available) && original_properties_available
+    Analytics::Goals.define_singleton_method(:available_names, original_available_goal_names) if defined?(original_available_goal_names) && original_available_goal_names
+    Analytics::Properties.define_singleton_method(:available_keys, original_available_property_keys) if defined?(original_available_property_keys) && original_available_property_keys
+    Analytics::Goals.define_singleton_method(:available?, original_goals_available) if defined?(original_goals_available) && original_goals_available
+    Analytics::Properties.define_singleton_method(:available?, original_properties_available) if defined?(original_properties_available) && original_properties_available
     Current.reset
   end
 
@@ -238,6 +296,47 @@ class Admin::AnalyticsReportsTest < ActionDispatch::IntegrationTest
     assert boot.key?("pages")
     assert boot.key?("locations")
     assert boot.key?("devices")
+  ensure
+    Current.reset
+  end
+
+  test "reports shell infers device version mode from browser version filters" do
+    staff_identity, = create_tenant(
+      email: "staff-reports-device-versions-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Reports Device Versions"
+    )
+    staff_identity.update!(staff: true)
+
+    Ahoy::Visit.create!(
+      visit_token: SecureRandom.hex(16),
+      visitor_token: SecureRandom.hex(16),
+      browser: "Chrome",
+      browser_version: "135.0",
+      started_at: Time.zone.now.change(usec: 0)
+    )
+    Ahoy::Visit.create!(
+      visit_token: SecureRandom.hex(16),
+      visitor_token: SecureRandom.hex(16),
+      browser: "Chrome",
+      browser_version: "136.0",
+      started_at: Time.zone.now.change(usec: 0)
+    )
+
+    sign_in(staff_identity)
+
+    get "/admin/analytics/reports?period=day&f=is,browser_version,136.0",
+        headers: INERTIA_HEADERS
+
+    assert_response :success
+
+    payload = JSON.parse(response.body).fetch("props")
+    boot = payload.fetch("boot")
+    ui = boot.fetch("ui")
+    devices = boot.fetch("devices")
+
+    assert_equal "browsers", json_key(ui, "devicesBaseMode", "devices_base_mode")
+    assert_equal "browser-versions", json_key(ui, "devicesMode", "devices_mode")
+    assert_equal [ "136.0" ], devices.fetch("results").map { |row| row.fetch("name") }
   ensure
     Current.reset
   end

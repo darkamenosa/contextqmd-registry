@@ -1,0 +1,162 @@
+[
+  {
+    "name": "comma filters labels and advanced filters",
+    "search": "?period=day&f=is,page,%2Fdocs%2Ffoo%2Cbar&l=page,Docs%2C%20page&f=contains,source,google%2Cmail",
+    "fallback": {
+      "period": "day",
+      "comparison": null,
+      "filters": {},
+      "labels": {},
+      "withImported": false,
+      "matchDayOfWeek": true
+    },
+    "frontend": {
+      "period": "day",
+      "comparison": null,
+      "filters": { "page": "/docs/foo,bar" },
+      "labels": { "page": "Docs, page" },
+      "advancedFilters": [["contains", "source", "google,mail"]],
+      "withImported": false,
+      "matchDayOfWeek": true
+    },
+    "backend": {
+      "period": "day",
+      "comparison": null,
+      "filters": { "page": "/docs/foo,bar" },
+      "labels": { "page": "Docs, page" },
+      "advanced_filters": [["contains", "source", "google,mail"]],
+      "with_imported": null
+    }
+  },
+  {
+    "name": "comparison booleans and custom range",
+    "search": "?period=custom&from=2026-03-01&to=2026-03-07&comparison=custom&compare_from=2026-02-01&compare_to=2026-02-07&match_day_of_week=false&with_imported=true",
+    "fallback": {
+      "period": "day",
+      "comparison": null,
+      "filters": {},
+      "labels": {},
+      "withImported": false,
+      "matchDayOfWeek": true
+    },
+    "frontend": {
+      "period": "custom",
+      "comparison": "custom",
+      "filters": {},
+      "labels": {},
+      "advancedFilters": [],
+      "withImported": true,
+      "matchDayOfWeek": false,
+      "from": "2026-03-01",
+      "to": "2026-03-07",
+      "compareFrom": "2026-02-01",
+      "compareTo": "2026-02-07"
+    },
+    "backend": {
+      "period": "custom",
+      "comparison": "custom",
+      "filters": {},
+      "labels": {},
+      "advanced_filters": [],
+      "with_imported": true,
+      "match_day_of_week": false,
+      "from": "2026-03-01",
+      "to": "2026-03-07",
+      "compare_from": "2026-02-01",
+      "compare_to": "2026-02-07"
+    }
+  },
+  {
+    "name": "frontend ignores dashboard ui params",
+    "search": "?period=7d&graph_metric=views_per_visit&graph_interval=hour&pages_mode=entry&behaviors_mode=props&behaviors_funnel=Signup&behaviors_property=Plan",
+    "fallback": {
+      "period": "day",
+      "comparison": null,
+      "filters": {},
+      "labels": {},
+      "withImported": false,
+      "matchDayOfWeek": true
+    },
+    "frontend": {
+      "period": "7d",
+      "comparison": null,
+      "filters": {},
+      "labels": {},
+      "advancedFilters": [],
+      "withImported": false,
+      "matchDayOfWeek": true
+    },
+    "frontend_absent_keys": ["mode", "metric", "interval", "funnel", "dialog"],
+    "backend": {
+      "period": "7d",
+      "comparison": null,
+      "filters": {},
+      "labels": {},
+      "advanced_filters": [],
+      "with_imported": null
+    },
+    "backend_absent_keys": ["mode", "metric", "interval", "funnel", "dialog"]
+  },
+  {
+    "name": "legacy aliases remain backend-visible but frontend report parse ignores them",
+    "search": "?period=day&mode=props&funnel=Signup&dialog=sources",
+    "fallback": {
+      "period": "day",
+      "comparison": null,
+      "filters": {},
+      "labels": {},
+      "withImported": false,
+      "matchDayOfWeek": true
+    },
+    "frontend": {
+      "period": "day",
+      "comparison": null,
+      "filters": {},
+      "labels": {},
+      "advancedFilters": [],
+      "withImported": false,
+      "matchDayOfWeek": true
+    },
+    "frontend_absent_keys": ["mode", "funnel", "dialog"],
+    "backend": {
+      "period": "day",
+      "comparison": null,
+      "filters": {},
+      "labels": {},
+      "advanced_filters": [],
+      "with_imported": null,
+      "mode": "props",
+      "funnel": "Signup",
+      "dialog": "sources"
+    }
+  },
+  {
+    "name": "backend applies numeric city labels",
+    "search": "?period=day&f=is,city,123&l=123,Ho%20Chi%20Minh",
+    "fallback": {
+      "period": "day",
+      "comparison": null,
+      "filters": {},
+      "labels": {},
+      "withImported": false,
+      "matchDayOfWeek": true
+    },
+    "frontend": {
+      "period": "day",
+      "comparison": null,
+      "filters": { "city": "123" },
+      "labels": { "123": "Ho Chi Minh" },
+      "advancedFilters": [],
+      "withImported": false,
+      "matchDayOfWeek": true
+    },
+    "backend": {
+      "period": "day",
+      "comparison": null,
+      "filters": { "city": "Ho Chi Minh" },
+      "labels": { "city": "Ho Chi Minh" },
+      "advanced_filters": [],
+      "with_imported": null
+    }
+  }
+]

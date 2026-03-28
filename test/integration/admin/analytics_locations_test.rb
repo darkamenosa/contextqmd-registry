@@ -20,7 +20,7 @@ class Admin::AnalyticsLocationsTest < ActionDispatch::IntegrationTest
     Ahoy::Visit.create!(
       visit_token: SecureRandom.hex(16),
       visitor_token: SecureRandom.hex(16),
-      country: "US",
+      country: "United States",
       started_at: Time.zone.now.change(usec: 0)
     )
 

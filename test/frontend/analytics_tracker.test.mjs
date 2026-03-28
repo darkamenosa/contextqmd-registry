@@ -246,3 +246,19 @@ test("analytics tracker path matching keeps ** semantics for nested paths", asyn
     cleanupBrowserStubs()
   }
 })
+
+test("analytics tracker does not exclude app and auth paths", async () => {
+  installBrowserStubs()
+  const { StandaloneAnalytics } = await loadTrackerModule()
+  const analytics = new StandaloneAnalytics()
+
+  try {
+    assert.equal(analytics["shouldExclude"]("/app/2/dashboard"), false)
+    assert.equal(analytics["shouldExclude"]("/login"), false)
+    assert.equal(analytics["shouldExclude"]("/register"), false)
+    assert.equal(analytics["shouldExclude"]("/password/new"), false)
+    assert.equal(analytics["shouldExclude"]("/admin/dashboard"), true)
+  } finally {
+    cleanupBrowserStubs()
+  }
+})

@@ -1,32 +1,33 @@
-import {
-  startTransition,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { useClientComponent } from "@/hooks/use-client-component"
 
 import { fetchLocations } from "../api"
+import { usePanelData } from "../hooks/use-panel-data"
+import {
+  openReportsDialogRoute,
+  syncReportsDialogRoute,
+  useCloseReportsDialogRoute,
+} from "../hooks/use-reports-dialog-route"
+import { pickCardMetrics } from "../lib/card-metrics"
 import { flagFromIso2 } from "../lib/country-flag"
 import {
-  baseAnalyticsPath,
   buildDialogPath,
   locationsModeForSegment,
   locationsSegmentForMode,
   parseDialogFromPath,
 } from "../lib/dialog-path"
-import { navigateAnalytics } from "../lib/location-store"
 import { getLocationsModeAfterFilterChange } from "../lib/panel-mode"
+import {
+  analyticsPreferenceKey,
+  writeAnalyticsPreference,
+} from "../lib/preferences"
 import { useScopedQuery } from "../lib/query-scope"
 import { useQueryContext } from "../query-context"
 import { useSiteContext } from "../site-context"
 import type {
   AnalyticsQuery,
   ListItem,
-  ListMetricKey,
   ListPayload,
   MapPayload,
 } from "../types"
@@ -70,17 +71,12 @@ export default function LocationsPanel({
   const site = useSiteContext()
 
   const [preferredMode, setPreferredMode] = useState(() => initialMode)
-  const [data, setData] = useState<PanelData>(() =>
-    "map" in initialData
-      ? { type: "map", payload: initialData as MapPayload }
-      : { type: "list", payload: initialData as ListPayload }
-  )
-  const [loading, setLoading] = useState(false)
   const { value: baseQuery } = useScopedQuery(query, {
     omitMode: true,
     omitMetric: true,
     omitInterval: true,
   })
+  const storageKey = analyticsPreferenceKey(STORAGE_PREFIX, site.domain)
   const dialogMode = useMemo(() => {
     const parsed = parseDialogFromPath(pathname)
     if (parsed.type !== "segment") return null
@@ -100,41 +96,29 @@ export default function LocationsPanel({
     () => JSON.stringify([baseQuery, mode]),
     [baseQuery, mode]
   )
-  const lastRequestKeyRef = useRef(initialRequestKey)
   const previousFiltersRef = useRef(query.filters)
   const countriesRestoreModeRef = useRef<"map" | "countries">("countries")
-
-  const closeDetailsDialog = useCallback(() => {
-    try {
-      const sp = new URLSearchParams(window.location.search)
-      sp.delete("dialog")
-      navigateAnalytics(baseAnalyticsPath(sp.toString()))
-    } catch {
-      // Ignore history errors; local dialog state still works.
-    }
-  }, [])
-
-  useEffect(() => {
-    if (requestKey === lastRequestKeyRef.current) return
-    lastRequestKeyRef.current = requestKey
-
-    const controller = new AbortController()
-    startTransition(() => setLoading(true))
-    fetchLocations(baseQuery, { mode }, controller.signal)
-      .then((result) => {
-        if ("map" in result) {
-          setData({ type: "map", payload: result as MapPayload })
-        } else {
-          setData({ type: "list", payload: result as ListPayload })
-        }
-      })
-      .catch((error) => {
-        if (error.name !== "AbortError") console.error(error)
-      })
-      .finally(() => setLoading(false))
-
-    return () => controller.abort()
-  }, [baseQuery, mode, requestKey])
+  const closeDetailsDialog = useCloseReportsDialogRoute()
+  const panelState = usePanelData<PanelData>({
+    initialData:
+      "map" in initialData
+        ? { type: "map", payload: initialData as MapPayload }
+        : { type: "list", payload: initialData as ListPayload },
+    initialRequestKey,
+    requestKey,
+    fetchData: async (controller) => {
+      const result = await fetchLocations(
+        baseQuery,
+        { mode },
+        controller.signal
+      )
+      return "map" in result
+        ? { type: "map", payload: result as MapPayload }
+        : { type: "list", payload: result as ListPayload }
+    },
+  })
+  const data = panelState.data
+  const loading = panelState.loading
 
   useEffect(() => {
     const nextMode = getLocationsModeAfterFilterChange(
@@ -148,10 +132,8 @@ export default function LocationsPanel({
     if (!nextMode || nextMode === mode) return
 
     setPreferredMode(nextMode)
-    if (typeof window !== "undefined") {
-      localStorage.setItem(`${STORAGE_PREFIX}.${site.domain}`, nextMode)
-    }
-  }, [mode, query.filters, site.domain])
+    writeAnalyticsPreference(storageKey, nextMode)
+  }, [mode, query.filters, storageKey])
 
   const highlightMetric = useMemo(() => {
     if (data.type === "list") {
@@ -245,11 +227,9 @@ export default function LocationsPanel({
       })
       setPreferredMode("regions")
       closeDetailsDialog()
-      if (typeof window !== "undefined") {
-        localStorage.setItem(`${STORAGE_PREFIX}.${site.domain}`, "regions")
-      }
+      writeAnalyticsPreference(storageKey, "regions")
     },
-    [closeDetailsDialog, mode, site.domain, updateQuery]
+    [closeDetailsDialog, mode, storageKey, updateQuery]
   )
 
   const handleRegionSelect = useCallback(
@@ -266,11 +246,9 @@ export default function LocationsPanel({
       })
       setPreferredMode("cities")
       closeDetailsDialog()
-      if (typeof window !== "undefined") {
-        localStorage.setItem(`${STORAGE_PREFIX}.${site.domain}`, "cities")
-      }
+      writeAnalyticsPreference(storageKey, "cities")
     },
-    [closeDetailsDialog, site.domain, updateQuery]
+    [closeDetailsDialog, storageKey, updateQuery]
   )
 
   const onDetailsRowClick = useCallback(
@@ -298,12 +276,7 @@ export default function LocationsPanel({
               active={mode === tab.value}
               onClick={() => {
                 setPreferredMode(tab.value)
-                if (typeof window !== "undefined") {
-                  localStorage.setItem(
-                    `${STORAGE_PREFIX}.${site.domain}`,
-                    tab.value
-                  )
-                }
+                writeAnalyticsPreference(storageKey, tab.value)
               }}
             >
               {tab.label}
@@ -328,12 +301,12 @@ export default function LocationsPanel({
             <DetailsButton
               onClick={() => {
                 try {
-                  const sp = new URLSearchParams(window.location.search)
-                  sp.delete("dialog")
                   const seg = locationsSegmentForMode(
                     mode as "map" | "countries" | "regions" | "cities"
                   )
-                  navigateAnalytics(buildDialogPath(seg, sp.toString()))
+                  openReportsDialogRoute((search) =>
+                    buildDialogPath(seg, search)
+                  )
                 } catch {
                   // Ignore history errors when opening details.
                 }
@@ -392,12 +365,12 @@ export default function LocationsPanel({
               data-testid="locations-details-btn"
               onClick={() => {
                 try {
-                  const sp = new URLSearchParams(window.location.search)
-                  sp.delete("dialog")
                   const seg = locationsSegmentForMode(
                     mode as "map" | "countries" | "regions" | "cities"
                   )
-                  navigateAnalytics(buildDialogPath(seg, sp.toString()))
+                  openReportsDialogRoute((search) =>
+                    buildDialogPath(seg, search)
+                  )
                 } catch {
                   // Ignore history errors when opening details.
                 }
@@ -414,17 +387,12 @@ export default function LocationsPanel({
           open={detailsOpen}
           onOpenChange={(open) => {
             try {
-              const sp = new URLSearchParams(window.location.search)
-              sp.delete("dialog")
-              const qs = sp.toString()
-              if (open) {
-                const seg = locationsSegmentForMode(
-                  mode as "map" | "countries" | "regions" | "cities"
-                )
-                navigateAnalytics(buildDialogPath(seg, qs))
-              } else {
-                navigateAnalytics(baseAnalyticsPath(qs))
-              }
+              const seg = locationsSegmentForMode(
+                mode as "map" | "countries" | "regions" | "cities"
+              )
+              syncReportsDialogRoute(open, (search) =>
+                buildDialogPath(seg, search)
+              )
             } catch {
               // Ignore history errors when syncing modal state.
             }
@@ -461,14 +429,6 @@ export default function LocationsPanel({
       }
     </section>
   )
-}
-
-function pickCardMetrics(metrics: ListMetricKey[]): ListMetricKey[] {
-  const preferred: ListMetricKey[] = []
-  if (metrics.includes("visitors")) preferred.push("visitors")
-  if (metrics.includes("percentage")) preferred.push("percentage")
-  else if (metrics.includes("conversionRate")) preferred.push("conversionRate")
-  return preferred.length > 0 ? preferred : metrics.slice(0, 2)
 }
 
 function CountriesMapFallback() {

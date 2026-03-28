@@ -7,9 +7,12 @@ import {
   type ReactNode,
 } from "react"
 
-import { mergeReportQueryParams, resolveInitialReportQuery } from "./api"
-import { canonicalizeDashboardSearchParams } from "./lib/dashboard-url-state"
 import { navigateAnalytics, useAnalyticsLocation } from "./lib/location-store"
+import {
+  mergeReportQueryParams,
+  resolveInitialReportQuery,
+} from "./lib/query-codec"
+import { buildReportUrl, canonicalReportSearch } from "./lib/report-url"
 import type { AnalyticsQuery } from "./types"
 
 export type QueryContextValue = {
@@ -24,20 +27,39 @@ export type QueryContextValue = {
 
 const QueryContext = createContext<QueryContextValue | null>(null)
 
+function parseLocationFromUrl(url: string | undefined) {
+  if (!url) return { pathname: "", search: "" }
+
+  const parsed = new URL(url, "http://analytics.test")
+  return {
+    pathname: parsed.pathname,
+    search: parsed.search,
+  }
+}
+
 export function QueryProvider({
   initialQuery,
   defaultQuery,
+  initialUrl,
   children,
 }: {
   initialQuery: AnalyticsQuery
   defaultQuery: AnalyticsQuery
+  initialUrl?: string
   children: ReactNode
 }) {
-  const { pathname, search } = useAnalyticsLocation()
+  const location = useAnalyticsLocation()
+  const initialLocation = useMemo(
+    () => parseLocationFromUrl(initialUrl),
+    [initialUrl]
+  )
+  const pathname = location.pathname || initialLocation.pathname
+  const search = location.search || initialLocation.search
+
   const query = useMemo(
     () =>
       resolveInitialReportQuery(
-        typeof window === "undefined" ? undefined : search,
+        search || undefined,
         initialQuery,
         defaultQuery
       ),
@@ -50,10 +72,11 @@ export function QueryProvider({
       options?: { history?: "push" | "replace" }
     ) => {
       const next = updater(query)
-      const nextSearch = mergeReportQueryParams(search, next).toString()
-      const nextUrl = `${pathname}${nextSearch ? `?${nextSearch}` : ""}`
-      const currentSearch = canonicalizeDashboardSearchParams(search).toString()
-      const currentUrl = `${pathname}${currentSearch ? `?${currentSearch}` : ""}`
+      const nextUrl = buildReportUrl(
+        pathname,
+        mergeReportQueryParams(search, next)
+      )
+      const currentUrl = buildReportUrl(pathname, search)
 
       if (nextUrl === currentUrl) return
 
@@ -68,17 +91,12 @@ export function QueryProvider({
     if (typeof window === "undefined") return
 
     const current = window.location.search.replace(/^\?/, "")
-    const canonical = canonicalizeDashboardSearchParams(
-      window.location.search
-    ).toString()
+    const canonical = canonicalReportSearch(window.location.search)
     if (canonical === current) return
 
-    navigateAnalytics(
-      `${window.location.pathname}${canonical ? `?${canonical}` : ""}`,
-      {
-        history: "replace",
-      }
-    )
+    navigateAnalytics(buildReportUrl(window.location.pathname, canonical), {
+      history: "replace",
+    })
   }, [pathname, search])
 
   const value = useMemo<QueryContextValue>(

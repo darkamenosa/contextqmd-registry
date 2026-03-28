@@ -14,6 +14,8 @@ export function useClientComponent<TComponent>(
   const [component, setComponent] = useState<TComponent | null>(null)
 
   useEffect(() => {
+    mountedRef.current = true
+
     return () => {
       mountedRef.current = false
     }

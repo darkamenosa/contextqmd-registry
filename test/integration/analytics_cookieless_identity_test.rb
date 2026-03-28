@@ -4,6 +4,8 @@ require "test_helper"
 
 class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
   include ActiveSupport::Testing::TimeHelpers
+  include ActiveJob::TestHelper
+  include Devise::Test::IntegrationHelpers
   include TenantTestHelper
 
   BROWSER_HEADERS = {
@@ -17,9 +19,11 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
   end
 
   test "cookieless event ingestion reuses the recent server-side visit without client tokens" do
-    assert_difference -> { Ahoy::Visit.count }, +1 do
-      assert_difference -> { Ahoy::Event.count }, +1 do
-        get root_path, headers: BROWSER_HEADERS
+    perform_analytics_jobs do
+      assert_difference -> { Ahoy::Visit.count }, +1 do
+        assert_difference -> { Ahoy::Event.count }, +1 do
+          get root_path, headers: BROWSER_HEADERS
+        end
       end
     end
 
@@ -54,6 +58,83 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     assert_equal visit.id, Ahoy::Visit.order(:id).last.id
   end
 
+  test "server-side tracked page sets the analytics browser cookie" do
+    perform_analytics_jobs do
+      get root_path, headers: BROWSER_HEADERS
+    end
+
+    assert_response :success
+    assert_includes response.headers["Set-Cookie"].to_s, AnalyticsBrowserIdentity::COOKIE_NAME
+  end
+
+  test "signed-in visits persist identity name and email on the analytics profile" do
+    identity, = create_tenant(
+      email: "analytics-profile-#{SecureRandom.hex(4)}@example.com",
+      name: "Analytics Profile User"
+    )
+
+    sign_in(identity)
+
+    perform_analytics_jobs do
+      get root_path, headers: BROWSER_HEADERS
+    end
+
+    assert_response :success
+
+    visit = Ahoy::Visit.order(:id).last
+    profile = visit.analytics_profile
+
+    assert_not_nil profile
+    assert_equal AnalyticsProfile::STATUS_IDENTIFIED, profile.status
+    assert_equal "Analytics Profile User", profile.traits["display_name"]
+    assert_equal identity.email, profile.traits["email"]
+  end
+
+  test "server-side tracking includes authentication screens" do
+    [
+      [ new_identity_session_path, "/login" ],
+      [ new_identity_registration_path, "/register" ],
+      [ new_identity_password_path, "/password/new" ]
+    ].each do |path, expected_page|
+      perform_analytics_jobs do
+        assert_difference -> { Ahoy::Event.count }, +1 do
+          get path, headers: BROWSER_HEADERS
+        end
+      end
+
+      assert_response :success
+      event = Ahoy::Event.order(:id).last
+      assert_equal "pageview", event.name
+      assert_equal expected_page, event.properties["page"]
+    end
+  end
+
+  test "server-side tracking includes authenticated app dashboard pages" do
+    identity, account, = create_tenant(
+      email: "analytics-dashboard-#{SecureRandom.hex(4)}@example.com",
+      name: "Analytics Dashboard User"
+    )
+
+    sign_in(identity)
+
+    perform_analytics_jobs do
+      assert_difference -> { Ahoy::Visit.count }, +1 do
+        assert_difference -> { Ahoy::Event.count }, +1 do
+          get app_dashboard_path(account_id: account.external_account_id), headers: BROWSER_HEADERS
+        end
+      end
+    end
+
+    assert_response :success
+
+    visit = Ahoy::Visit.order(:id).last
+    event = Ahoy::Event.order(:id).last
+
+    assert_equal identity.id, visit.user_id
+    assert_equal "pageview", event.name
+    assert_equal app_dashboard_path(account_id: account.external_account_id), event.properties["page"]
+  end
+
   test "server-side visit stores request host and drops same-site referrers" do
     get root_path, headers: BROWSER_HEADERS.merge("HTTP_REFERER" => root_url)
 
@@ -66,8 +147,42 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     assert_nil visit.referring_domain
   end
 
-  test "cookieless event ingestion ignores spoofed client tokens" do
+  test "server-side visit stores browser and os versions from the request user agent" do
     get root_path, headers: BROWSER_HEADERS
+
+    assert_response :success
+
+    visit = Ahoy::Visit.order(:id).last
+    assert_equal "Chrome", visit.browser
+    assert_equal "146.0.0.0", visit.browser_version
+    assert_equal "Mac", visit.os
+    assert_equal "10.15.7", visit.os_version
+    assert_equal "Desktop", visit.device_type
+  end
+
+  test "separate browsers with the same ip and user agent get distinct anonymous visits" do
+    browser_a = open_session
+    browser_b = open_session
+
+    perform_analytics_jobs do
+      browser_a.get root_path, headers: BROWSER_HEADERS
+    end
+    perform_analytics_jobs do
+      browser_b.get root_path, headers: BROWSER_HEADERS
+    end
+
+    assert_equal 2, Ahoy::Visit.count
+
+    visits = Ahoy::Visit.order(:id).last(2)
+    assert_equal 2, visits.map(&:browser_id).compact.uniq.size
+    assert_equal 2, visits.map(&:visitor_token).compact.uniq.size
+    assert_equal 2, visits.map(&:analytics_profile_id).compact.uniq.size
+  end
+
+  test "cookieless event ingestion ignores spoofed client tokens" do
+    perform_analytics_jobs do
+      get root_path, headers: BROWSER_HEADERS
+    end
     visit = Ahoy::Visit.order(:id).last
 
     assert_no_difference -> { Ahoy::Visit.count } do
@@ -132,11 +247,37 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     assert_equal "Desktop", visit.screen_size
   end
 
+  test "ahoy events controller seeds the analytics browser cookie" do
+    post "/ahoy/events",
+      params: {
+        events: [
+          {
+            name: "Signup",
+            properties: {
+              page: "/about",
+              url: about_url,
+              title: "About",
+              referrer: "",
+              screen_size: "1440x900"
+            },
+            time: Time.current.iso8601
+          }
+        ]
+      },
+      as: :json,
+      headers: BROWSER_HEADERS
+
+    assert_response :success
+    assert_includes response.headers["Set-Cookie"].to_s, AnalyticsBrowserIdentity::COOKIE_NAME
+  end
+
   test "cookieless event ingestion reuses the recent visit across daily rotation" do
     visit = nil
 
     travel_to Time.utc(2026, 3, 25, 23, 59, 50) do
-      get root_path, headers: BROWSER_HEADERS
+      perform_analytics_jobs do
+        get root_path, headers: BROWSER_HEADERS
+      end
       visit = Ahoy::Visit.order(:id).last
     end
 
@@ -172,7 +313,9 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
 
   test "cookieless engagement does not create a new visit after the session window expires" do
     travel_to Time.utc(2026, 3, 25, 10, 0, 0) do
-      get root_path, headers: BROWSER_HEADERS
+      perform_analytics_jobs do
+        get root_path, headers: BROWSER_HEADERS
+      end
     end
 
     expired_visit = Ahoy::Visit.order(:id).last
@@ -212,7 +355,9 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
       name: "Analytics Logout"
     )
 
-    get root_path, headers: BROWSER_HEADERS
+    perform_analytics_jobs do
+      get root_path, headers: BROWSER_HEADERS
+    end
     initial_visit = Ahoy::Visit.order(:id).last
 
     assert_no_difference -> { Ahoy::Visit.count } do
@@ -233,9 +378,11 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
 
     assert_redirected_to root_path
 
-    assert_difference -> { Ahoy::Visit.count }, +1 do
-      assert_difference -> { Ahoy::Event.count }, +1 do
-        get root_path, headers: BROWSER_HEADERS
+    perform_analytics_jobs do
+      assert_difference -> { Ahoy::Visit.count }, +1 do
+        assert_difference -> { Ahoy::Event.count }, +1 do
+          get root_path, headers: BROWSER_HEADERS
+        end
       end
     end
 
@@ -255,7 +402,9 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
       name: "Analytics Switch B"
     )
 
-    get root_path, headers: BROWSER_HEADERS
+    perform_analytics_jobs do
+      get root_path, headers: BROWSER_HEADERS
+    end
     initial_visit = Ahoy::Visit.order(:id).last
 
     post identity_session_path, params: {
@@ -285,9 +434,11 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     assert_equal first_identity.id, initial_visit.reload.user_id
     assert_equal true, request.session["analytics.force_new_visit"]
 
-    assert_difference -> { Ahoy::Visit.count }, +1 do
-      assert_difference -> { Ahoy::Event.count }, +1 do
-        get about_path, headers: BROWSER_HEADERS
+    perform_analytics_jobs do
+      assert_difference -> { Ahoy::Visit.count }, +1 do
+        assert_difference -> { Ahoy::Event.count }, +1 do
+          get about_path, headers: BROWSER_HEADERS
+        end
       end
     end
 
@@ -296,4 +447,15 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     assert_equal second_identity.id, next_visit.user_id
     assert_equal initial_visit.visitor_token, next_visit.visitor_token
   end
+
+  private
+    def perform_analytics_jobs(&block)
+      perform_enqueued_jobs(
+        only: [
+          Analytics::ProfileResolutionJob,
+          Analytics::VisitProjectionJob
+        ],
+        &block
+      )
+    end
 end

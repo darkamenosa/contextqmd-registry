@@ -1,5 +1,7 @@
 require Rails.root.join("lib/client_ip")
+require Rails.root.join("lib/analytics/country")
 require Rails.root.join("lib/analytics_anonymous_identity")
+require Rails.root.join("lib/analytics_browser_identity")
 require Rails.root.join("lib/analytics_visit_boundary")
 
 module AhoyServerOwnedIdentity
@@ -44,7 +46,7 @@ Ahoy.user_method = :current_identity
 
 class Ahoy::Store < Ahoy::DatabaseStore
   def visit_columns
-    super + %i[hostname screen_size browser_version]
+    super + %i[hostname screen_size browser_version browser_id country_code]
   end
 
   def visit
@@ -74,7 +76,9 @@ class Ahoy::Store < Ahoy::DatabaseStore
 
     visit = super(attrs)
     AnalyticsVisitBoundary.consume_force_new_visit!(Current.request) if Current.request
-    repair_existing_visit_after_conflict!(visit, attrs)
+    visit = repair_existing_visit_after_conflict!(visit, attrs)
+    resolve_analytics_profile(visit, occurred_at: visit&.started_at)
+    Analytics::LiveState.broadcast_later
     visit
   end
 
@@ -103,7 +107,17 @@ class Ahoy::Store < Ahoy::DatabaseStore
     end
 
     repair_visit_from_event!(visit, event)
+    resolve_analytics_profile(visit, occurred_at: event.time)
+    Analytics::LiveState.broadcast_later
     event
+  end
+
+  def authenticate(data)
+    super
+
+    resolved_visit = visit
+    resolve_analytics_profile(resolved_visit, occurred_at: Time.current)
+    Analytics::LiveState.broadcast_later
   end
 
   private
@@ -113,15 +127,16 @@ class Ahoy::Store < Ahoy::DatabaseStore
 
       if req
         attrs[:visitor_token] = AnalyticsAnonymousIdentity.current(req) || attrs[:visitor_token]
+        attrs[:browser_id] ||= AnalyticsBrowserIdentity.current(req)
         attrs[:hostname] ||= req.host
+        enrich_visit_technology!(attrs, req)
         normalize_request_landing_page!(attrs, req)
         normalize_referrer!(attrs, req.referer, site_host: attrs[:hostname].presence || req.host)
         enrich_visit_location!(attrs, req, data)
-
-        cc = ClientIp.country_hint(req)
-        attrs[:country] ||= cc if cc
+        canonicalize_country!(attrs, fallback_code: ClientIp.country_hint(req))
       else
         attrs[:hostname] ||= host_from_url(attrs[:landing_page] || data[:landing_page])
+        canonicalize_country!(attrs)
       end
 
       attrs
@@ -130,13 +145,21 @@ class Ahoy::Store < Ahoy::DatabaseStore
     end
 
     def repair_existing_visit_after_conflict!(visit, attrs)
-      return if visit.is_a?(::Ahoy::Visit)
+      return visit if visit.is_a?(::Ahoy::Visit)
 
       existing_visit = visit_for_token(attrs[:visit_token])
-      return unless existing_visit
+      return visit unless existing_visit
 
       updates = {}
+      if existing_visit.respond_to?(:has_attribute?) && existing_visit.has_attribute?(:browser_id)
+        updates[:browser_id] = attrs[:browser_id] if existing_visit.browser_id.blank? && attrs[:browser_id].present?
+      end
       updates[:hostname] = attrs[:hostname] if existing_visit.hostname.blank? && attrs[:hostname].present?
+      updates[:browser] = attrs[:browser] if existing_visit.browser.blank? && attrs[:browser].present?
+      updates[:browser_version] = attrs[:browser_version] if existing_visit.browser_version.blank? && attrs[:browser_version].present?
+      updates[:os] = attrs[:os] if existing_visit.os.blank? && attrs[:os].present?
+      updates[:os_version] = attrs[:os_version] if existing_visit.os_version.blank? && attrs[:os_version].present?
+      updates[:device_type] = attrs[:device_type] if existing_visit.device_type.blank? && attrs[:device_type].present?
       if normalized_internal_referrer?(existing_visit.referring_domain, updates[:hostname] || existing_visit.hostname)
         updates[:referrer] = nil if existing_visit.referrer.present?
         updates[:referring_domain] = nil if existing_visit.referring_domain.present?
@@ -147,13 +170,16 @@ class Ahoy::Store < Ahoy::DatabaseStore
         updates,
         refresh_source_dimensions: updates.key?(:hostname) || updates.key?(:referrer) || updates.key?(:referring_domain) || source_dimensions_missing?(existing_visit)
       )
+      existing_visit
     rescue StandardError
       # never block tracking
+      visit
     end
 
     def repair_visit_from_event!(visit, event)
       props = event.properties.to_h.with_indifferent_access
       updates = {}
+      enrich_visit_technology!(updates, Current.request) if Current.request && visit_technology_missing?(visit)
 
       if visit.screen_size.blank?
         screen_size = normalized_screen_size(props[:screen_size])
@@ -196,6 +222,19 @@ class Ahoy::Store < Ahoy::DatabaseStore
       attrs[:landing_page] = req.referer
     end
 
+    def enrich_visit_technology!(attrs, req)
+      return if req.nil?
+
+      detector = DeviceDetector.new(req.user_agent.to_s)
+      attrs[:browser] ||= detector.name.presence
+      attrs[:browser_version] ||= detector.full_version.presence
+      attrs[:os] ||= detector.os_name.presence
+      attrs[:os_version] ||= detector.os_full_version.presence
+      attrs[:device_type] ||= normalized_device_type(detector)
+    rescue StandardError
+      attrs
+    end
+
     def normalize_referrer!(attrs, referrer, site_host:)
       return if referrer.blank?
 
@@ -213,13 +252,22 @@ class Ahoy::Store < Ahoy::DatabaseStore
     def enrich_visit_location!(attrs, req, data)
       if defined?(MaxmindGeo) && MaxmindGeo.available?
         if (record = lookup_maxmind_record(req, data))
-          attrs[:country] ||= record[:country_iso]
+          canonicalize_country!(attrs, fallback_code: record[:country_iso])
           attrs[:region] ||= record[:subdivisions]&.first
           attrs[:city] ||= record[:city]
           attrs[:latitude] ||= record[:latitude]
           attrs[:longitude] ||= record[:longitude]
         end
       end
+    end
+
+    def canonicalize_country!(attrs, fallback_code: nil)
+      resolved = Analytics::Country.resolve(
+        country: attrs[:country],
+        country_code: attrs[:country_code] || fallback_code
+      )
+      attrs[:country_code] = resolved.code
+      attrs[:country] = resolved.name
     end
 
     def visit_for_token(token)
@@ -233,8 +281,27 @@ class Ahoy::Store < Ahoy::DatabaseStore
       landing_page.blank? || internal_path?(landing_page)
     end
 
+    def visit_technology_missing?(visit)
+      visit.browser.blank? ||
+        visit.browser_version.blank? ||
+        visit.os.blank? ||
+        visit.os_version.blank? ||
+        visit.device_type.blank?
+    end
+
     def source_dimensions_missing?(visit)
       visit.source_label.blank? || visit.source_kind.blank? || visit.source_channel.blank?
+    end
+
+    def normalized_device_type(detector)
+      case detector.device_type
+      when "smartphone"
+        "Mobile"
+      when "tv"
+        "TV"
+      else
+        detector.device_type.to_s.presence&.titleize
+      end
     end
 
     def normalized_internal_referrer?(ref_host, site_host)
@@ -250,7 +317,7 @@ class Ahoy::Store < Ahoy::DatabaseStore
     end
 
     def normalized_screen_size(raw_size)
-      size = Ahoy::Visit.categorize_screen_size(raw_size)
+      size = Analytics::Devices.categorize_screen_size(raw_size)
       return nil if size.blank? || size == "(not set)" || size == raw_size.to_s
 
       size
@@ -294,6 +361,58 @@ class Ahoy::Store < Ahoy::DatabaseStore
       tokens.presence || [ ahoy.visitor_token ].compact
     end
 
+    def resolve_analytics_profile(visit, occurred_at:)
+      return if visit.blank?
+
+      visit.resolve_profile_later(
+        browser_id: browser_id_for(visit),
+        strong_keys: strong_keys_for(visit),
+        occurred_at: occurred_at,
+        identity_snapshot: identity_snapshot_for(visit)
+      )
+    rescue StandardError
+      # never block tracking
+    end
+
+    def browser_id_for(visit)
+      browser_id = AnalyticsBrowserIdentity.current(request)
+      return browser_id if browser_id.present?
+
+      if visit.respond_to?(:has_attribute?) && visit.has_attribute?(:browser_id)
+        visit.browser_id
+      end
+    end
+
+    def strong_keys_for(visit)
+      keys = {}
+
+      if visit.user_id.present?
+        keys[:identity_id] = visit.user_id
+      end
+
+      keys
+    end
+
+    def identity_snapshot_for(visit)
+      identity =
+        if visit.respond_to?(:user) && visit.user.present?
+          visit.user
+        elsif Current.identity.present? && Current.identity.id == visit.user_id
+          Current.identity
+        else
+          nil
+        end
+
+      return {} if identity.blank?
+
+      {
+        display_name: identity.display_name,
+        email: identity.email
+      }
+    rescue StandardError
+      {}
+    end
+
     def force_new_visit_boundary?
       request.present? && AnalyticsVisitBoundary.force_new_visit?(request)
     end
@@ -325,12 +444,18 @@ end
 Rails.application.config.to_prepare do
   if defined?(Ahoy::VisitsController)
     Ahoy::VisitsController.skip_forgery_protection
+    Ahoy::VisitsController.before_action do
+      AnalyticsBrowserIdentity.ensure!(request, cookies:)
+    end
     Ahoy::VisitsController.around_action do |controller, action|
       Current.set(request: controller.request) { action.call }
     end
   end
   if defined?(Ahoy::EventsController)
     Ahoy::EventsController.skip_forgery_protection
+    Ahoy::EventsController.before_action do
+      AnalyticsBrowserIdentity.ensure!(request, cookies:)
+    end
     Ahoy::EventsController.around_action do |controller, action|
       Current.set(request: controller.request) { action.call }
     end

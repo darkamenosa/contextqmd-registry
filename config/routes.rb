@@ -80,6 +80,9 @@ Rails.application.routes.draw do
         resources :locations, only: [ :index ]
         resources :devices, only: [ :index ]
         resources :behaviors, only: [ :index ]
+        resources :profiles, only: [ :index, :show ] do
+          resources :sessions, only: [ :index, :show ], controller: "profile_sessions"
+        end
       end
 
       resource :settings, only: :show

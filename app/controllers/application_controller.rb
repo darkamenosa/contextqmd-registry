@@ -4,6 +4,7 @@ class ApplicationController < ActionController::Base
   include Authentication
   include Authorization
   include ErrorHandling
+  include AnalyticsBrowserTracking
   include CurrentRequest
   include CurrentTimezone
   include ServerSidePageviewTracking

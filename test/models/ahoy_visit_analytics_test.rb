@@ -23,7 +23,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
       started_at: now
     )
 
-    payload = Ahoy::Visit.sources_payload(
+    payload = sources_payload(
       {
         period: "custom",
         from: now.to_date.iso8601,
@@ -57,7 +57,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
       )
     end
 
-    payload = Ahoy::Visit.sources_payload(
+    payload = sources_payload(
       {
         period: "custom",
         from: now.to_date.iso8601,
@@ -111,8 +111,8 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
       started_at: now + 1.second
     )
 
-    assert_equal [ matching.id ], Ahoy::Visit.filtered_visits({ "source" => "Facebook" }).pluck(:id)
-    assert_equal [ matching.id ], Ahoy::Visit.filtered_visits({ "channel" => "Paid Social" }).pluck(:id)
+    assert_equal [ matching.id ], filtered_visits({ "source" => "Facebook" }).pluck(:id)
+    assert_equal [ matching.id ], filtered_visits({ "channel" => "Paid Social" }).pluck(:id)
   end
 
   test "source payload and filters fall back to legacy raw source values when normalized fields are missing" do
@@ -135,7 +135,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
       source_match_strategy: nil
     )
 
-    payload = Ahoy::Visit.sources_payload(
+    payload = sources_payload(
       {
         period: "custom",
         from: now.to_date.iso8601,
@@ -149,8 +149,8 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
     )
 
     assert_includes payload.fetch(:results).map { |row| row.fetch(:name) }, "legacy-newsletter"
-    assert_equal [ legacy_visit.id ], Ahoy::Visit.filtered_visits({ "source" => "legacy-newsletter" }).pluck(:id)
-    assert_equal [ legacy_visit.id ], Ahoy::Visit.filtered_visits({ "channel" => "email" }).pluck(:id)
+    assert_equal [ legacy_visit.id ], filtered_visits({ "source" => "legacy-newsletter" }).pluck(:id)
+    assert_equal [ legacy_visit.id ], filtered_visits({ "channel" => "email" }).pluck(:id)
   end
 
   test "source debug payload exposes normalized and raw source details" do
@@ -165,7 +165,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
       started_at: now
     )
 
-    payload = Ahoy::Visit.source_debug_payload(
+    payload = Analytics::Sources.debug_payload(
       {
         period: "custom",
         from: now.to_date.iso8601,
@@ -195,7 +195,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
       started_at: now
     )
 
-    payload = Ahoy::Visit.sources_payload(
+    payload = sources_payload(
       {
         period: "custom",
         from: now.to_date.iso8601,
@@ -233,7 +233,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
       )
     end
 
-    payload = Ahoy::Visit.sources_payload(
+    payload = sources_payload(
       {
         period: "custom",
         from: now.to_date.iso8601,
@@ -254,9 +254,9 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
   test "removed imported aggregates fall back to empty hashes" do
     range = Time.zone.now.beginning_of_day..Time.zone.now.end_of_day
 
-    assert_equal({}, Ahoy::Visit.imported_pages_aggregates(range))
-    assert_equal({}, Ahoy::Visit.imported_entry_aggregates(range))
-    assert_equal({}, Ahoy::Visit.imported_exit_aggregates(range))
+    assert_equal({}, Analytics::Imports.pages_aggregates(range))
+    assert_equal({}, Analytics::Imports.entry_aggregates(range))
+    assert_equal({}, Analytics::Imports.exit_aggregates(range))
   end
 
   test "live visitors prefer recent event activity over recent started_at fallback" do
@@ -284,7 +284,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
       longitude: -122.4194
     )
 
-    assert_equal 1, Ahoy::Visit.live_visitors_count
+    assert_equal 1, Analytics::LiveState.current_visitors(now: now)
   end
 
   test "live visitors fall back to recent started_at when there are no recent events" do
@@ -296,7 +296,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
       started_at: now - 2.minutes
     )
 
-    assert_equal 1, Ahoy::Visit.live_visitors_count
+    assert_equal 1, Analytics::LiveState.current_visitors(now: now)
   end
 
   test "recent with coordinates includes visits revived by recent events" do
@@ -316,14 +316,14 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
       time: now - 1.minute
     )
 
-    ids = Ahoy::Visit.recent_with_coordinates(window: 5.minutes).pluck(:id)
+    ids = Analytics::LiveState.active_visits_with_coordinates(now: now, window: 5.minutes).pluck(:id)
 
     assert_includes ids, old_visit.id
   end
 
   test "custom comparison range covers the full compare_to day" do
     Time.use_zone("UTC") do
-      range = Ahoy::Visit.custom_compare_range(
+      range = Analytics::Ranges.custom_compare_range(
         compare_from: "2026-03-01",
         compare_to: "2026-03-07"
       )
@@ -336,8 +336,8 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
   test "invalid date params fall back instead of raising" do
     travel_to Time.utc(2026, 3, 24, 15, 30, 0) do
       Time.use_zone("UTC") do
-        day_range, = Ahoy::Visit.range_and_interval_for("day", nil, { date: "not-a-date" })
-        custom_range, = Ahoy::Visit.range_and_interval_for(
+        day_range, = Analytics::Ranges.range_and_interval_for("day", nil, { date: "not-a-date" })
+        custom_range, = Analytics::Ranges.range_and_interval_for(
           "custom",
           nil,
           { from: "not-a-date", to: "still-not-a-date" }
@@ -354,9 +354,9 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
   test "current day range trims to the end of the current hour" do
     travel_to Time.utc(2026, 3, 24, 15, 30, 0) do
       Time.use_zone("UTC") do
-        day_range, = Ahoy::Visit.range_and_interval_for("day", nil, {})
+        day_range, = Analytics::Ranges.range_and_interval_for("day", nil, {})
 
-        trimmed = Ahoy::Visit.trim_range_to_now_if_applicable(day_range, "day")
+        trimmed = Analytics::Ranges.trim_range_to_now_if_applicable(day_range, "day")
 
         assert_equal Time.zone.parse("2026-03-24 15:59:59"), trimmed.end.change(usec: 0)
       end
@@ -366,7 +366,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
   test "main graph payload marks the current hour as present for today's comparison view" do
     travel_to Time.utc(2026, 3, 24, 15, 30, 0) do
       Time.use_zone("UTC") do
-        payload = Ahoy::Visit.main_graph_payload(
+        payload = main_graph_payload(
           period: "day",
           comparison: "previous_period",
           metric: "visitors",
@@ -407,7 +407,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
           properties: { page: "/docs" }
         )
 
-        payload = Ahoy::Visit.main_graph_payload(
+        payload = main_graph_payload(
           period: "day",
           comparison: "previous_period",
           metric: "visitors",
@@ -424,7 +424,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
   test "main graph payload leaves present index empty for historical days" do
     travel_to Time.utc(2026, 3, 24, 15, 30, 0) do
       Time.use_zone("UTC") do
-        payload = Ahoy::Visit.main_graph_payload(
+        payload = main_graph_payload(
           period: "day",
           date: "2026-03-23",
           metric: "visitors",
@@ -437,12 +437,12 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
   end
 
   test "top stat change follows plausible comparison semantics" do
-    assert_equal 100, Ahoy::Visit.top_stat_change(:visitors, 0, 60)
-    assert_equal 0, Ahoy::Visit.top_stat_change(:visitors, 0, 0)
-    assert_equal(-47, Ahoy::Visit.top_stat_change(:visitors, 113, 60))
-    assert_equal(-7, Ahoy::Visit.top_stat_change(:views_per_visit, 1.90, 1.77))
-    assert_in_delta(-1.3, Ahoy::Visit.top_stat_change(:bounce_rate, 23.01, 21.67), 0.001)
-    assert_nil Ahoy::Visit.top_stat_change(:bounce_rate, 0, 21.67)
+    assert_equal 100, Analytics::ReportMetrics.top_stat_change(:visitors, 0, 60)
+    assert_equal 0, Analytics::ReportMetrics.top_stat_change(:visitors, 0, 0)
+    assert_equal(-47, Analytics::ReportMetrics.top_stat_change(:visitors, 113, 60))
+    assert_equal(-7, Analytics::ReportMetrics.top_stat_change(:views_per_visit, 1.90, 1.77))
+    assert_in_delta(-1.3, Analytics::ReportMetrics.top_stat_change(:bounce_rate, 23.01, 21.67), 0.001)
+    assert_nil Analytics::ReportMetrics.top_stat_change(:bounce_rate, 0, 21.67)
   end
 
   test "top stats compare today against the previous period up to the current hour" do
@@ -483,7 +483,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
         properties: { page: "/docs" }
       )
 
-      payload = Ahoy::Visit.top_stats_payload(
+      payload = top_stats_payload(
         period: "day",
         comparison: "previous_period",
         match_day_of_week: false,
@@ -520,7 +520,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
         started_at: Time.zone.parse("2026-03-25 10:00:00")
       )
 
-      payload = Ahoy::Visit.top_stats_payload(
+      payload = top_stats_payload(
         period: "day",
         comparison: "previous_period",
         filters: { "goal" => "Signup" }
@@ -566,7 +566,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
         properties: { plan: "Starter" }
       )
 
-      payload = Ahoy::Visit.top_stats_payload(
+      payload = top_stats_payload(
         period: "day",
         filters: { "goal" => "Signup Pro" }
       )
@@ -604,7 +604,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
         started_at: Time.zone.parse("2026-03-25 10:00:00")
       )
 
-      payload = Ahoy::Visit.top_stats_payload(
+      payload = top_stats_payload(
         period: "day",
         filters: { "goal" => "Visit Pricing" }
       )
@@ -642,7 +642,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
         started_at: Time.zone.parse("2026-03-25 10:00:00")
       )
 
-      payload = Ahoy::Visit.top_stats_payload(
+      payload = top_stats_payload(
         period: "day",
         filters: { "goal" => "Visit /blog*" }
       )
@@ -675,7 +675,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
         )
       end
 
-      payload = Ahoy::Visit.top_stats_payload(
+      payload = top_stats_payload(
         period: "day",
         filters: { "goal" => "Visit /blog*" }
       )
@@ -712,7 +712,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
       started_at: Time.zone.parse("2026-03-24 09:15:00")
     )
 
-    payload = Ahoy::Visit.main_graph_payload(
+    payload = main_graph_payload(
       period: "day",
       date: "2026-03-24",
       metric: "conversion_rate",
@@ -744,7 +744,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
         properties: { page: "/docs", engaged_ms: 15_000, scroll_depth: 80 }
       )
 
-      payload = Ahoy::Visit.top_stats_payload(
+      payload = top_stats_payload(
         period: "day",
         comparison: "previous_period",
         filters: { "page" => "/docs" }
@@ -799,10 +799,9 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
       properties: { page: "/home", engaged_ms: 1_000, scroll_depth: 10 }
     )
 
-    metrics = Ahoy::Visit.page_filter_metrics(
+    metrics = Analytics::ReportMetrics.page_filter_metrics(
       range,
-      { "page" => "/docs" },
-      advanced_filters: []
+      Analytics::Query.new(filters: { page: "/docs" })
     )
 
     assert_equal 600.0, metrics[:time_on_page]
@@ -831,7 +830,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
         properties: { page: "/docs", engaged_ms: 15_000, scroll_depth: 80 }
       )
 
-      payload = Ahoy::Visit.top_stats_payload(
+      payload = top_stats_payload(
         period: "day",
         comparison: "previous_period",
         filters: { "entry_page" => "/docs" }
@@ -862,7 +861,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
         started_at: Time.zone.parse("2026-03-24 09:15:00")
       )
 
-      payload = Ahoy::Visit.main_graph_payload(
+      payload = main_graph_payload(
         period: "day",
         date: "2026-03-24",
         metric: "conversion_rate",
@@ -895,7 +894,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
         properties: { page: "/docs", engaged_ms: 12_000, scroll_depth: 75 }
       )
 
-      payload = Ahoy::Visit.main_graph_payload(
+      payload = main_graph_payload(
         period: "day",
         date: "2026-03-24",
         metric: "time_on_page",
@@ -935,7 +934,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
         )
       end
 
-      payload = Ahoy::Visit.main_graph_payload(
+      payload = main_graph_payload(
         period: "day",
         date: "2026-03-25",
         metric: "views_per_visit",
@@ -976,7 +975,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
       properties: { page: "/pricing" }
     )
 
-    metrics = Ahoy::Visit.visit_metrics(
+    metrics = Analytics::ReportMetrics.visit_metrics(
       Ahoy::Visit.where(id: [ visit_with_events.id, visit_without_events.id ]),
       Ahoy::Event.where(name: "pageview", time: range, visit_id: [ visit_with_events.id, visit_without_events.id ])
     )
@@ -1011,7 +1010,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
         properties: { plan: "free" }
       )
 
-      payload = Ahoy::Visit.behaviors_payload(
+      payload = behaviors_payload(
         {
           period: "day",
           mode: "conversions",
@@ -1061,10 +1060,9 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
       properties: { plan: "free" }
     )
 
-    totals = Ahoy::Visit.goal_metric_totals(
+    totals = Analytics::ReportMetrics.goal_metric_totals(
       Time.zone.parse("2026-03-25 00:00:00")..Time.zone.parse("2026-03-25 23:59:59"),
-      { "goal" => "Signup", "prop:plan" => "pro" },
-      advanced_filters: []
+      Analytics::Query.new(filters: { goal: "Signup", "prop:plan" => "pro" })
     )
 
     assert_equal 1, totals[:unique_conversions]
@@ -1073,7 +1071,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
   end
 
   test "goals available uses cheap existence checks for unmanaged analytics" do
-    refute Ahoy::Visit.goals_available?
+    refute Analytics::Goals.available?
 
     visit = Ahoy::Visit.create!(
       visit_token: SecureRandom.hex(16),
@@ -1087,11 +1085,11 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
       properties: {}
     )
 
-    assert Ahoy::Visit.goals_available?
+    assert Analytics::Goals.available?
   end
 
   test "properties available uses cheap existence checks for unmanaged analytics" do
-    refute Ahoy::Visit.properties_available?
+    refute Analytics::Properties.available?
 
     visit = Ahoy::Visit.create!(
       visit_token: SecureRandom.hex(16),
@@ -1105,15 +1103,15 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
       properties: { plan: "pro" }
     )
 
-    assert Ahoy::Visit.properties_available?
+    assert Analytics::Properties.available?
   end
 
   test "screen size categorization matches ingestion breakpoints" do
-    assert_equal "Mobile", Ahoy::Visit.categorize_screen_size("575x900")
-    assert_equal "Tablet", Ahoy::Visit.categorize_screen_size("576x900")
-    assert_equal "Tablet", Ahoy::Visit.categorize_screen_size("991x900")
-    assert_equal "Laptop", Ahoy::Visit.categorize_screen_size("992x900")
-    assert_equal "Desktop", Ahoy::Visit.categorize_screen_size("1440x900")
+    assert_equal "Mobile", Analytics::Devices.categorize_screen_size("575x900")
+    assert_equal "Tablet", Analytics::Devices.categorize_screen_size("576x900")
+    assert_equal "Tablet", Analytics::Devices.categorize_screen_size("991x900")
+    assert_equal "Laptop", Analytics::Devices.categorize_screen_size("992x900")
+    assert_equal "Desktop", Analytics::Devices.categorize_screen_size("1440x900")
   end
 
   test "search terms payload counts unique visitors" do
@@ -1140,8 +1138,8 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
         referrer: "https://google.com/search?q=rails"
       )
 
-      payload = Ahoy::Visit.search_terms_payload(
-        { period: "day", filters: {} },
+      payload = Analytics::SearchTermsDatasetQuery.payload(
+        query: { period: "day", filters: {} },
         limit: 100,
         page: 1
       )
@@ -1151,4 +1149,25 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
       assert_equal 2, row.fetch(:visitors)
     end
   end
+
+  private
+    def sources_payload(query, **options)
+      Analytics::SourcesDatasetQuery.payload(query: query, **options)
+    end
+
+    def filtered_visits(filters, advanced_filters: [])
+      Analytics::VisitScope.filtered(Analytics::Query.new(filters:, advanced_filters:))
+    end
+
+    def main_graph_payload(query)
+      Analytics::MainGraphQuery.payload(query: query)
+    end
+
+    def top_stats_payload(query)
+      Analytics::TopStatsQuery.payload(query: query)
+    end
+
+    def behaviors_payload(query, **options)
+      Analytics::BehaviorsDatasetQuery.payload(query: query, **options)
+    end
 end

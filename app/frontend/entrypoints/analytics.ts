@@ -55,17 +55,7 @@ class StandaloneAnalytics {
       eventsEndpoint: "/ahoy/events",
       // Defaults similar to our app; can be overridden by data-* attributes or window.analyticsConfig
       // Exclude internal/system endpoints to avoid accidental tracking
-      excludePaths: [
-        "/admin",
-        "/app",
-        "/login",
-        "/logout",
-        "/register",
-        "/password",
-        "/.well-known",
-        "/ahoy",
-        "/cable",
-      ],
+      excludePaths: ["/admin", "/.well-known", "/ahoy", "/cable"],
       excludeAssets: [
         ".png",
         ".jpg",

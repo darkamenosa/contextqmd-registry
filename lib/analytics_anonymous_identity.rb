@@ -2,6 +2,7 @@
 
 require "openssl"
 require Rails.root.join("lib/client_ip")
+require Rails.root.join("lib/analytics_browser_identity")
 
 module AnalyticsAnonymousIdentity
   extend self
@@ -42,8 +43,9 @@ module AnalyticsAnonymousIdentity
       masked_ip = Ahoy.mask_ip(client_ip)
       host = normalized_host(request)
       user_agent = request.user_agent.to_s
+      browser_id = AnalyticsBrowserIdentity.current(request).to_s.presence
 
-      [ masked_ip, host, user_agent ].join("\0")
+      [ masked_ip, host, user_agent, browser_id ].compact.join("\0")
     rescue StandardError
       nil
     end

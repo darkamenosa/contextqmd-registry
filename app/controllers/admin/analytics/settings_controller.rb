@@ -26,7 +26,7 @@ module Admin
           AnalyticsSetting.set_bool("goals_managed", true)
         elsif permitted.key?(:goals)
           Goal.sync_from_definitions!(
-            Ahoy::Visit.normalize_string_list(permitted[:goals]).map do |name|
+            ::Analytics::Lists.normalize_strings(permitted[:goals]).map do |name|
               { display_name: name, event_name: name, custom_props: {} }
             end,
             created_by_id: Current.identity&.id
@@ -35,7 +35,7 @@ module Admin
         end
 
         if permitted.key?(:allowed_event_props)
-          AnalyticsSetting.set_json("allowed_event_props", Ahoy::Visit.normalize_string_list(permitted[:allowed_event_props]))
+          AnalyticsSetting.set_json("allowed_event_props", ::Analytics::Lists.normalize_strings(permitted[:allowed_event_props]))
         end
 
         head :no_content

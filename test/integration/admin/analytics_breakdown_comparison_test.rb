@@ -291,8 +291,8 @@ class Admin::AnalyticsBreakdownComparisonTest < ActiveSupport::TestCase
         started_at: Time.zone.parse("2026-03-25 12:00:00")
       )
 
-      payload = Ahoy::Visit.sources_payload(
-        {
+      payload = Analytics::SourcesDatasetQuery.payload(
+        query: {
           period: "day",
           mode: "channels",
           filters: { "goal" => "Signup", "prop:plan" => "pro" },
@@ -389,13 +389,13 @@ class Admin::AnalyticsBreakdownComparisonTest < ActiveSupport::TestCase
         browser: "Safari"
       )
 
-      payload = Ahoy::Visit.referrers_payload(
-        {
+      payload = Analytics::ReferrersDatasetQuery.payload(
+        query: {
           period: "day",
           filters: {},
           advanced_filters: [ [ "is_not", "browser", "Chrome" ] ]
         },
-        "Direct / None",
+        source: "Direct / None",
         limit: 100,
         page: 1
       )
@@ -458,12 +458,12 @@ class Admin::AnalyticsBreakdownComparisonTest < ActiveSupport::TestCase
         referrer: "https://google.com/search?q=beta"
       )
 
-      payload = Ahoy::Visit.referrers_payload(
-        {
+      payload = Analytics::ReferrersDatasetQuery.payload(
+        query: {
           period: "day",
           filters: { "goal" => "Signup", "prop:plan" => "pro" }
         },
-        "google.com",
+        source: "google.com",
         limit: 100,
         page: 1,
         order_by: [ "conversion_rate", "desc" ]
@@ -500,12 +500,12 @@ class Admin::AnalyticsBreakdownComparisonTest < ActiveSupport::TestCase
         referrer: "https://google.com/search?q=alpha"
       )
 
-      payload = Ahoy::Visit.referrers_payload(
-        {
+      payload = Analytics::ReferrersDatasetQuery.payload(
+        query: {
           period: "day",
           filters: { "goal" => "Signup" }
         },
-        "google.com",
+        source: "google.com",
         limit: 100,
         page: 1
       )
@@ -544,8 +544,8 @@ class Admin::AnalyticsBreakdownComparisonTest < ActiveSupport::TestCase
         properties: {}
       )
 
-      payload = Ahoy::Visit.devices_payload(
-        {
+      payload = Analytics::DevicesDatasetQuery.payload(
+        query: {
           period: "day",
           mode: "screen-sizes",
           filters: { "goal" => "Signup" },
@@ -598,8 +598,8 @@ class Admin::AnalyticsBreakdownComparisonTest < ActiveSupport::TestCase
         )
       end
 
-      payload = Ahoy::Visit.devices_payload(
-        {
+      payload = Analytics::DevicesDatasetQuery.payload(
+        query: {
           period: "day",
           mode: "browsers",
           filters: { "goal" => "Signup" },

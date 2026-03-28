@@ -38,7 +38,12 @@ export const DEVICES_MODES = [
   "screen-sizes",
 ] as const
 
-export const BEHAVIORS_MODES = ["conversions", "props", "funnels"] as const
+export const BEHAVIORS_MODES = [
+  "conversions",
+  "props",
+  "funnels",
+  "visitors",
+] as const
 
 function isAllowedMode<T extends string>(
   mode: string | undefined,
@@ -100,24 +105,35 @@ export function getDevicesModeFromSearch(search: string, legacyMode?: string) {
   )
 }
 
-export function getBehaviorsMode(mode: string | undefined, hasGoals: boolean) {
+export function getBehaviorsMode(
+  mode: string | undefined,
+  hasGoals: boolean,
+  profilesAvailable = true
+) {
   const allowed = hasGoals
     ? BEHAVIORS_MODES
     : BEHAVIORS_MODES.filter((value) => value !== "conversions")
-  return isAllowedMode(mode, allowed) ? mode : null
+  const available = profilesAvailable
+    ? allowed
+    : allowed.filter((value) => value !== "visitors")
+  return isAllowedMode(mode, available) ? mode : null
 }
 
 export function getBehaviorsModeFromSearch(
   search: string,
   legacyMode: string | undefined,
-  hasGoals: boolean
+  hasGoals: boolean,
+  profilesAvailable = true
 ) {
   const allowed = hasGoals
     ? BEHAVIORS_MODES
     : BEHAVIORS_MODES.filter((value) => value !== "conversions")
+  const available = profilesAvailable
+    ? allowed
+    : allowed.filter((value) => value !== "visitors")
   return (
-    getModeFromSearch(search, "behaviors", allowed) ??
-    getBehaviorsMode(legacyMode, hasGoals)
+    getModeFromSearch(search, "behaviors", available) ??
+    getBehaviorsMode(legacyMode, hasGoals, profilesAvailable)
   )
 }
 
@@ -138,10 +154,16 @@ export function inferDevicesModeFromFilters(
   filters: AnalyticsQuery["filters"]
 ) {
   const activeFilters = filters || {}
-  if (baseMode === "browsers" && activeFilters.browser) {
+  if (
+    baseMode === "browsers" &&
+    (activeFilters.browser || activeFilters.browser_version)
+  ) {
     return "browser-versions"
   }
-  if (baseMode === "operating-systems" && activeFilters.os) {
+  if (
+    baseMode === "operating-systems" &&
+    (activeFilters.os || activeFilters.os_version)
+  ) {
     return "operating-system-versions"
   }
   return baseMode

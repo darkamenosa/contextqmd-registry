@@ -34,7 +34,7 @@ module Admin
 
         # Parse order_by using model's whitelist/normalization
         def parsed_order_by
-          Ahoy::Visit.parsed_order_by(params[:order_by])
+          ::Analytics::Ordering.parsed_order_by(params[:order_by])
         end
 
         def analytics_funnels_payload
@@ -44,18 +44,17 @@ module Admin
         def analytics_settings_payload
           {
             gsc_configured: AnalyticsSetting.get_bool("gsc_configured", fallback: false),
-            goals: Ahoy::Visit.available_goal_names,
+            goals: ::Analytics::Goals.available_names,
             goal_definitions: Goal.definition_payloads,
-            allowed_event_props: Ahoy::Visit.available_property_keys
+            allowed_event_props: ::Analytics::Properties.available_keys
           }
         end
 
         def shell_props(query)
           {
             site: site_context,
-            user: user_context,
-            query: query,
-            "defaultQuery" => default_query
+            query: query_payload(query),
+            "defaultQuery" => query_payload(default_query)
           }
         end
 
@@ -72,11 +71,11 @@ module Admin
 
           payload = {
             top_stats: top_stats,
-            main_graph: main_graph_payload(query.merge(metric: graph_metric, interval: graph_interval)),
-            sources: sources_payload(query.merge(mode: sources_mode)),
-            pages: pages_payload(query.merge(mode: pages_mode)),
-            locations: locations_payload(query.merge(mode: locations_mode)),
-            devices: devices_payload(query.merge(mode: devices_mode)),
+            main_graph: main_graph_payload(query.with_options(metric: graph_metric, interval: graph_interval)),
+            sources: sources_payload(query.with_option(:mode, sources_mode)),
+            pages: pages_payload(query.with_option(:mode, pages_mode)),
+            locations: locations_payload(query.with_option(:mode, locations_mode)),
+            devices: devices_payload(query.with_option(:mode, devices_mode)),
             ui: {
               graph_metric: graph_metric,
               graph_interval: graph_interval,
@@ -92,13 +91,18 @@ module Admin
           }
 
           if behaviors_mode.present?
-            payload[:behaviors] = behaviors_payload(
-              query.merge(
-                mode: behaviors_mode,
-                funnel: requested_behaviors_funnel,
-                property: behaviors_mode == "props" ? requested_behaviors_property : nil
-              ).compact
-            )
+            payload[:behaviors] =
+              if behaviors_mode == "visitors"
+                profiles_payload(query)
+              else
+                behaviors_payload(
+                  query.with_options(
+                    mode: behaviors_mode,
+                    funnel: requested_behaviors_funnel,
+                    property: behaviors_mode == "props" ? requested_behaviors_property : nil
+                  ).compact
+                )
+              end
           else
             payload[:behaviors] = nil
           end
@@ -107,112 +111,37 @@ module Admin
         end
 
         def prepare_query
-          @query = default_query.merge(prepared_params(params))
+          @query = ::Analytics::Query.from_ui_params(
+            default_query.ui_attributes.merge(prepared_params(params)),
+            dataset: :dashboard,
+            order_by: parsed_order_by
+          )
         end
 
         def prepared_params(raw_params)
-          labels = parse_labels_from_params
-          filters, advanced_filters = parse_filters_from_params(raw_params)
-          match_day_of_week = if raw_params.key?(:match_day_of_week) || raw_params.key?("match_day_of_week")
-            ActiveModel::Type::Boolean.new.cast(raw_params[:match_day_of_week])
-          end
-          # Map numeric city id -> label if available
-          if (city = filters["city"]).present? && city =~ /^\d+$/ && labels[city].present?
-            filters["city"] = labels[city]
-            labels["city"] = labels[city]
-            labels.delete(city)
-          end
-
-          # Accept ISO 3166-2 region codes (e.g., "US-CA"). Use label if provided.
-          if (region_code = filters["region"]).present? && region_code =~ /^[A-Za-z]{2}-[A-Za-z0-9]{1,3}$/
-            if labels["region"].present?
-              filters["region"] = labels["region"]
-            end
-          end
-
-          per = raw_params[:period]
-          per = "day" unless ALLOWED_PERIODS.include?(per.to_s)
-
-          {
-            period: per,
-            comparison: (raw_params[:comparison].to_s == "off" ? nil : raw_params[:comparison]),
-            match_day_of_week: match_day_of_week,
-            date: raw_params[:date],
-            from: raw_params[:from],
-            to: raw_params[:to],
-            compare_from: raw_params[:compare_from],
-            compare_to: raw_params[:compare_to],
-            metric: raw_params[:metric],
-            interval: raw_params[:interval],
-            mode: raw_params[:mode],
-            funnel: raw_params[:funnel],
-            property: raw_params[:property],
-            dialog: raw_params[:dialog],
-            with_imported: ActiveModel::Type::Boolean.new.cast(raw_params[:with_imported]),
-            filters: filters,
-            labels: labels,
-            advanced_filters: advanced_filters
-          }.compact
-        end
-
-        def parse_labels_from_params
-          cgi_map = CGI.parse(request.query_string.to_s)
-          list = Array(cgi_map["l"])
-          labels = {}
-          list.each do |token|
-            key, value = token.to_s.split(",", 2)
-            next if key.blank? || value.blank?
-            labels[key] = value
-          end
-          labels
-        end
-
-        def parse_filters_from_params(raw_params)
-          cgi_map = CGI.parse(request.query_string.to_s)
-          list = Array(cgi_map["f"])
-          f = raw_params[:f]
-          list |= Array(f).compact if f.present?
-
-          if list.empty?
-            [ {}, [] ]
-          else
-            filters = {}
-            advanced = []
-            list.each do |token|
-              parts = token.to_s.split(",", 3)
-              next if parts.length < 3
-              op = parts[0].to_s
-              dim = parts[1].to_s
-              clause = parts[2].to_s
-              next if dim.blank? || clause.blank?
-              if op == "is"
-                if dim == "event:goal" || dim == "goal"
-                  filters["goal"] = clause
-                else
-                  filters[dim] = clause
-                end
-              elsif [ "is_not", "contains" ].include?(op)
-                advanced << [ op, dim, clause ]
-              end
-            end
-            [ filters, advanced ]
-          end
+          ::Analytics::RequestQueryParser.parse(
+            query_string: request.query_string,
+            params: raw_params,
+            allowed_periods: ALLOWED_PERIODS
+          )
         end
 
         def default_query
-          {
-            period: "day",
-            comparison: nil,
-            match_day_of_week: true,
-            filters: {},
-            labels: {},
-            with_imported: false
-          }
+          ::Analytics::Query.from_ui_params(
+            {
+              period: "day",
+              comparison: nil,
+              match_day_of_week: true,
+              filters: {},
+              labels: {},
+              with_imported: false
+            }
+          )
         end
 
         def site_context
-          has_goals = Ahoy::Visit.goals_available?
-          has_props = Ahoy::Visit.properties_available?
+          has_goals = ::Analytics::Goals.available?
+          has_props = ::Analytics::Properties.available?
 
           {
             domain: request.host,
@@ -221,6 +150,7 @@ module Admin
             has_props: has_props,
             funnels_available: Funnel.exists?,
             props_available: has_props,
+            profiles_available: AnalyticsProfile.available?,
             segments: SEGMENTS,
             flags: {
               dbip: defined?(MaxmindGeo) && MaxmindGeo.available?
@@ -236,25 +166,25 @@ module Admin
         end
 
         def devices_payload(query, limit: nil, page: nil, search: nil)
-          payload = Ahoy::Visit.devices_payload(query, limit: limit, page: page, search: search, order_by: parsed_order_by)
+          payload = ::Analytics::DevicesDatasetQuery.payload(query: query_for_dataset(query, :devices), limit: limit, page: page, search: search)
           attach_list_comparison(payload, query, search:) do |comparison_query|
-            Ahoy::Visit.devices_payload(comparison_query, limit: MAX_LIMIT, page: 1, search: search, order_by: parsed_order_by)
+            ::Analytics::DevicesDatasetQuery.payload(query: query_for_dataset(comparison_query, :devices), limit: MAX_LIMIT, page: 1, search: search)
           end
         end
 
         def behaviors_payload(query, limit: nil, page: nil, search: nil)
-          payload = Ahoy::Visit.behaviors_payload(query, limit: limit, page: page, search: search, order_by: parsed_order_by)
+          payload = ::Analytics::BehaviorsDatasetQuery.payload(query: query_for_dataset(query, :behaviors), limit: limit, page: page, search: search)
 
-          if query[:comparison].present?
+          if query.comparison.present?
             if payload.is_a?(Hash) && payload[:list].is_a?(Hash)
               list = attach_list_comparison(payload[:list], query, search:) do |comparison_query|
-                comparison_payload = Ahoy::Visit.behaviors_payload(comparison_query, limit: MAX_LIMIT, page: 1, search: search, order_by: parsed_order_by)
+                comparison_payload = ::Analytics::BehaviorsDatasetQuery.payload(query: query_for_dataset(comparison_query, :behaviors), limit: MAX_LIMIT, page: 1, search: search)
                 comparison_payload[:list] || comparison_payload
               end
               payload.merge(list: list)
             elsif payload.is_a?(Hash) && payload[:results].is_a?(Array)
               attach_list_comparison(payload, query, search:) do |comparison_query|
-                Ahoy::Visit.behaviors_payload(comparison_query, limit: MAX_LIMIT, page: 1, search: search, order_by: parsed_order_by)
+                ::Analytics::BehaviorsDatasetQuery.payload(query: query_for_dataset(comparison_query, :behaviors), limit: MAX_LIMIT, page: 1, search: search)
               end
             else
               payload
@@ -264,48 +194,62 @@ module Admin
           end
         end
 
+        def profiles_payload(query, limit: nil, page: nil, search: nil)
+          effective_limit = limit || DEFAULT_LIMIT
+          effective_page = page || 1
+
+          AnalyticsProfile.profiles_payload(
+            query_for_dataset(query, :profiles),
+            limit: effective_limit,
+            page: effective_page,
+            search: search
+          )
+        end
+
         def goals_available?
-          Ahoy::Visit.goals_available?
+          ::Analytics::Goals.available?
         end
 
         def behaviors_available?(site = site_context)
-          site[:has_goals] || site[:funnels_available] || site[:props_available]
+          site[:has_goals] || site[:funnels_available] || site[:props_available] || site[:profiles_available]
         end
 
         def sources_payload(query, limit: nil, page: nil, search: nil)
-          payload = Ahoy::Visit.sources_payload(query, limit: limit, page: page, search: search, order_by: parsed_order_by)
+          payload = ::Analytics::SourcesDatasetQuery.payload(query: query_for_dataset(query, :sources), limit: limit, page: page, search: search)
           attach_list_comparison(payload, query, search:) do |comparison_query|
-            Ahoy::Visit.sources_payload(comparison_query, limit: MAX_LIMIT, page: 1, search: search, order_by: parsed_order_by)
+            ::Analytics::SourcesDatasetQuery.payload(query: query_for_dataset(comparison_query, :sources), limit: MAX_LIMIT, page: 1, search: search)
           end
         end
 
         def pages_payload(query, limit: nil, page: nil, search: nil)
-          payload = Ahoy::Visit.pages_payload(query, limit: limit, page: page, search: search, order_by: parsed_order_by)
+          payload = ::Analytics::PagesDatasetQuery.payload(query: query_for_dataset(query, :pages), limit: limit, page: page, search: search)
           attach_list_comparison(payload, query, search:) do |comparison_query|
-            Ahoy::Visit.pages_payload(comparison_query, limit: MAX_LIMIT, page: 1, search: search, order_by: parsed_order_by)
+            ::Analytics::PagesDatasetQuery.payload(query: query_for_dataset(comparison_query, :pages), limit: MAX_LIMIT, page: 1, search: search)
           end
         end
 
         def locations_payload(query, limit: nil, page: nil, search: nil)
-          payload = Ahoy::Visit.locations_payload(query, limit: limit, page: page, search: search, order_by: parsed_order_by)
+          payload = ::Analytics::LocationsDatasetQuery.payload(query: query_for_dataset(query, :locations), limit: limit, page: page, search: search)
           attach_list_comparison(payload, query, search:) do |comparison_query|
-            Ahoy::Visit.locations_payload(comparison_query, limit: MAX_LIMIT, page: 1, search: search, order_by: parsed_order_by)
+            ::Analytics::LocationsDatasetQuery.payload(query: query_for_dataset(comparison_query, :locations), limit: MAX_LIMIT, page: 1, search: search)
           end
         end
 
         def main_graph_payload(query)
-          Ahoy::Visit.main_graph_payload(query)
+          ::Analytics::MainGraphQuery.payload(query: query_for_dataset(query, :main_graph))
         end
 
         def top_stats_payload(query)
-          Ahoy::Visit.top_stats_payload(query)
+          ::Analytics::TopStatsQuery.payload(query: query_for_dataset(query, :top_stats))
         end
 
         def search_terms_payload(query, limit:, page:, search: nil)
-          Ahoy::Visit.search_terms_payload(query, limit: limit, page: page, search: search, order_by: parsed_order_by)
+          ::Analytics::SearchTermsDatasetQuery.payload(query: query_for_dataset(query, :search_terms), limit: limit, page: page, search: search)
         end
 
         def search_terms_response(query, limit:, page:, search: nil)
+          query = ::Analytics::Query.wrap(query)
+
           if !gsc_configured?
             [ { errorCode: "not_configured", isAdmin: true }, :unprocessable_entity ]
           elsif unsupported_gsc_filters?(query)
@@ -318,7 +262,7 @@ module Admin
               search_terms_payload(comparison_query, limit: MAX_LIMIT, page: 1, search:)
             end
 
-            range, = Ahoy::Visit.range_and_interval_for(query[:period], nil, query)
+            range, = ::Analytics::Ranges.range_and_interval_for(query.time_range_key, nil, query)
             if payload[:results].blank? && (Time.zone.now - range.begin < 72.hours)
               [ { errorCode: "period_too_recent" }, :unprocessable_entity ]
             else
@@ -328,9 +272,9 @@ module Admin
         end
 
         def referrers_payload(query, source, limit: nil, page: nil, search: nil)
-          payload = Ahoy::Visit.referrers_payload(query, source, limit: limit, page: page, search: search, order_by: parsed_order_by)
+          payload = ::Analytics::ReferrersDatasetQuery.payload(query: query_for_dataset(query, :referrers), source: source, limit: limit, page: page, search: search)
           attach_list_comparison(payload, query, search:) do |comparison_query|
-            Ahoy::Visit.referrers_payload(comparison_query, source, limit: MAX_LIMIT, page: 1, search: search, order_by: parsed_order_by)
+            ::Analytics::ReferrersDatasetQuery.payload(query: query_for_dataset(comparison_query, :referrers), source: source, limit: MAX_LIMIT, page: 1, search: search)
           end
         end
 
@@ -348,20 +292,27 @@ module Admin
         end
 
         def unsupported_gsc_filters?(query)
-          filters = (query[:filters] || {}).stringify_keys
           disallowed = %w[channel referrer utm_source utm_medium utm_campaign utm_content utm_term entry_page exit_page]
 
-          if filters.keys.any? { |k| disallowed.include?(k) }
+          if query.filter_dimensions.any? { |dimension| disallowed.include?(dimension) }
             true
           else
-            Array(query[:advanced_filters]).any?
+            query.filter_clauses.any? { |operator, _dimension, _value| operator != :eq }
           end
         end
 
         # --- Query helpers ---
         def cache_for(key)
-          digest = Digest::SHA256.hexdigest(JSON.dump([ key, @query, Ahoy::Visit.analytics_data_version ]))
+          digest = Digest::SHA256.hexdigest(JSON.dump([ key, query_payload(@query), Ahoy::Visit.analytics_data_version ]))
           Rails.cache.fetch([ :analytics, action_name, digest ], expires_in: 5.minutes) { yield }
+        end
+
+        def query_payload(query)
+          query.respond_to?(:to_h) ? query.to_h : query
+        end
+
+        def query_for_dataset(query, dataset)
+          ::Analytics::Query.wrap(query).for_dataset(dataset)
         end
 
         def camelize_keys(value)
@@ -378,14 +329,16 @@ module Admin
         end
 
         def skip_imported_reason
-          @query[:with_imported] ? "not_supported" : nil
+          @query.with_imported? ? "not_supported" : nil
         end
 
         def attach_list_comparison(payload, query, search: nil)
-          if payload.is_a?(Hash) && payload[:results].is_a?(Array) && payload[:results].any? && query[:comparison].present?
-            source_range, = Ahoy::Visit.range_and_interval_for(query[:period], nil, query)
-            effective_source_range = Ahoy::Visit.trim_range_to_now_if_applicable(source_range, query[:period])
-            comparison_range = Ahoy::Visit.comparison_range_for(
+          query = ::Analytics::Query.wrap(query)
+
+          if payload.is_a?(Hash) && payload[:results].is_a?(Array) && payload[:results].any? && query.comparison.present?
+            source_range, = ::Analytics::Ranges.range_and_interval_for(query.time_range_key, nil, query)
+            effective_source_range = ::Analytics::Ranges.trim_range_to_now_if_applicable(source_range, query.time_range_key)
+            comparison_range = ::Analytics::Ranges.comparison_range_for(
               query,
               source_range,
               effective_source_range: effective_source_range
@@ -428,7 +381,7 @@ module Admin
 
                     comparison_values[metric.to_sym] = previous_value
                     comparison_changes[metric.to_sym] =
-                      Ahoy::Visit.top_stat_change(metric, previous_value, current_value)
+                      ::Analytics::ReportMetrics.top_stat_change(metric, previous_value, current_value)
                   end
 
                   row.merge(
@@ -516,12 +469,11 @@ module Admin
           when "utm-terms"
             "utm-term"
           else
-            filters = query[:filters] || {}
-            return "utm-medium" if filters["utm_medium"].present?
-            return "utm-source" if filters["utm_source"].present?
-            return "utm-campaign" if filters["utm_campaign"].present?
-            return "utm-content" if filters["utm_content"].present?
-            return "utm-term" if filters["utm_term"].present?
+            return "utm-medium" if query.filter_value(:utm_medium).present?
+            return "utm-source" if query.filter_value(:utm_source).present?
+            return "utm-campaign" if query.filter_value(:utm_campaign).present?
+            return "utm-content" if query.filter_value(:utm_content).present?
+            return "utm-term" if query.filter_value(:utm_term).present?
 
             "all"
           end
@@ -555,7 +507,14 @@ module Admin
 
         def requested_devices_base_mode
           requested = normalized_ui_param(:devices_mode) || normalized_ui_param(:mode)
-          return requested if requested.in?(%w[browsers operating-systems screen-sizes])
+          case requested
+          when "browsers", "browser-versions"
+            return "browsers"
+          when "operating-systems", "operating-system-versions"
+            return "operating-systems"
+          when "screen-sizes"
+            return "screen-sizes"
+          end
 
           case normalized_dialog_segment
           when "operating-systems"
@@ -568,10 +527,12 @@ module Admin
         end
 
         def requested_devices_mode(query, base_mode: requested_devices_base_mode)
-          filters = query[:filters] || {}
-          if base_mode == "browsers" && filters["browser"].present?
+          requested = normalized_ui_param(:devices_mode) || normalized_ui_param(:mode)
+          return requested if requested.in?(%w[browser-versions operating-system-versions])
+
+          if base_mode == "browsers" && (query.filter_value(:browser).present? || query.filter_value(:browser_version).present?)
             "browser-versions"
-          elsif base_mode == "operating-systems" && filters["os"].present?
+          elsif base_mode == "operating-systems" && (query.filter_value(:os).present? || query.filter_value(:os_version).present?)
             "operating-system-versions"
           else
             base_mode
@@ -582,12 +543,13 @@ module Admin
           requested = normalized_ui_param(:behaviors_mode) || normalized_ui_param(:mode)
           allowed =
             if site[:has_goals]
-              %w[conversions props funnels]
+              %w[conversions props funnels visitors]
             else
-              %w[props funnels]
+              %w[props funnels visitors]
             end
 
           return requested if allowed.include?(requested)
+          return "visitors" if site[:profiles_available]
           return "conversions" if site[:has_goals]
           return "props" if site[:props_available]
           return "funnels" if site[:funnels_available]

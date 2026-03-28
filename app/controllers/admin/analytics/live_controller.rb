@@ -5,7 +5,7 @@ module Admin
     class LiveController < ::Admin::BaseController
       def show
         render inertia: "admin/analytics/live/show", props: {
-          "initialStats" => AnalyticsLiveStats.build(now: Time.zone.now, camelize: false)
+          "initialStats" => ::Analytics::LiveState.build(now: Time.zone.now, camelize: false)
         }
       end
     end

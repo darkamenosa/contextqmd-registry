@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { createRequire } from "node:module"
 import { tmpdir } from "node:os"
 import path from "node:path"
@@ -58,6 +58,10 @@ test("device visual helpers cover Plausible browser and os mappings", async () =
   )
 
   assert.equal(visuals.getBrowserIcon("curl"), "curl.svg")
+  assert.equal(
+    visuals.getBrowserIcon("DuckDuckGo Privacy Browser"),
+    "duckduckgo.png"
+  )
   assert.equal(visuals.getBrowserIcon("Huawei Browser Mobile"), "huawei.png")
   assert.equal(visuals.getBrowserIcon("QQ Browser"), "qq.png")
   assert.equal(visuals.getBrowserIcon("Ecosia"), "ecosia.png")
@@ -70,4 +74,22 @@ test("device visual helpers cover Plausible browser and os mappings", async () =
   assert.equal(visuals.categorizeScreenSize("576x900"), "Tablet")
   assert.equal(visuals.categorizeScreenSize("992x900"), "Laptop")
   assert.equal(visuals.categorizeScreenSize("1440x900"), "Desktop")
+})
+
+test("duckduckgo browser icon asset is a real png file", async () => {
+  const visuals = await loadModule(
+    "app/frontend/pages/admin/analytics/lib/device-visuals.ts",
+    "device-visuals.cjs"
+  )
+
+  const filename = visuals.getBrowserIcon("DuckDuckGo Privacy Browser")
+  const asset = await readFile(
+    path.join(repoRoot, "public/images/icon/browser", filename)
+  )
+
+  assert.equal(filename, "duckduckgo.png")
+  assert.equal(asset[0], 0x89)
+  assert.equal(asset[1], 0x50)
+  assert.equal(asset[2], 0x4e)
+  assert.equal(asset[3], 0x47)
 })

@@ -11,15 +11,19 @@ import {
 import type React from "react"
 import { OrbitControls } from "@react-three/drei"
 import { Canvas } from "@react-three/fiber"
+import { latLngToCell } from "h3-js"
 import * as THREE from "three"
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib"
 
-import HexHighlights from "@/components/analytics/hex-highlights"
+import HexHighlights, {
+  type HexHighlightSelection,
+} from "@/components/analytics/hex-highlights"
 import HexLandLayer from "@/components/analytics/hex-land-layer"
 
 export const VISITOR_GLOBE_MIN_DISTANCE = 1.8
 export const VISITOR_GLOBE_MAX_DISTANCE = 3.2
 const ZOOM_STEP = 0.35
+const VIEW_CHANGE_THROTTLE_MS = 120
 const INITIAL_LAT = 39 // continental US
 const INITIAL_LNG = -98
 const INITIAL_DISTANCE = VISITOR_GLOBE_MAX_DISTANCE // start at farthest zoom
@@ -36,6 +40,7 @@ type VisitorGlobeProps = {
   autoRotate?: boolean
   onZoomChange?: (state: VisitorGlobeZoomState) => void
   onViewChange?: (view: { lat: number; lng: number; distance: number }) => void
+  onSelectCell?: (selection: HexHighlightSelection | null) => void
 }
 
 export type VisitorGlobeZoomState = {
@@ -54,7 +59,12 @@ export type VisitorGlobeHandle = {
     lng: number,
     distance?: number,
     durationMs?: number
-  ) => void
+  ) => Promise<void>
+  getSelectionAnchor: (
+    lat: number,
+    lng: number,
+    label?: string
+  ) => HexHighlightSelection | null
   getView: () => { lat: number; lng: number; distance: number }
 }
 
@@ -64,6 +74,7 @@ export const VisitorGlobe = forwardRef(function VisitorGlobe(
     autoRotate = false,
     onZoomChange,
     onViewChange,
+    onSelectCell,
   }: VisitorGlobeProps,
   ref: React.Ref<VisitorGlobeHandle>
 ) {
@@ -71,7 +82,10 @@ export const VisitorGlobe = forwardRef(function VisitorGlobe(
   const controlsRef = useRef<OrbitControlsImpl>(null)
   const directionRef = useRef(new THREE.Vector3())
   const tempPositionRef = useRef(new THREE.Vector3())
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
   const animationFrameRef = useRef<number | null>(null)
+  const viewChangeTimeoutRef = useRef<number | null>(null)
+  const lastViewChangeAtRef = useRef(0)
   const animationStateRef = useRef<
     | {
         kind: "distance"
@@ -79,6 +93,7 @@ export const VisitorGlobe = forwardRef(function VisitorGlobe(
         to: number
         start: number | null
         duration: number
+        resolve?: () => void
       }
     | {
         kind: "fly"
@@ -87,9 +102,11 @@ export const VisitorGlobe = forwardRef(function VisitorGlobe(
         distance: number
         start: number | null
         duration: number
+        resolve?: () => void
       }
     | null
   >(null)
+  const [isInteracting, setIsInteracting] = useState(false)
 
   const getDistance = useCallback(() => {
     const controls = controlsRef.current
@@ -100,10 +117,12 @@ export const VisitorGlobe = forwardRef(function VisitorGlobe(
   }, [])
 
   const cancelAnimation = useCallback(() => {
+    const state = animationStateRef.current
     if (animationFrameRef.current !== null) {
       cancelAnimationFrame(animationFrameRef.current)
       animationFrameRef.current = null
     }
+    state?.resolve?.()
     animationStateRef.current = null
   }, [])
 
@@ -128,6 +147,41 @@ export const VisitorGlobe = forwardRef(function VisitorGlobe(
     const { lat, lng } = vector3ToLatLng(camera.position)
     onViewChange({ lat, lng, distance })
   }, [getDistance, onViewChange])
+
+  const clearScheduledViewChange = useCallback(() => {
+    if (viewChangeTimeoutRef.current !== null) {
+      window.clearTimeout(viewChangeTimeoutRef.current)
+      viewChangeTimeoutRef.current = null
+    }
+  }, [])
+
+  const scheduleViewChange = useCallback(
+    ({ immediate = false }: { immediate?: boolean } = {}) => {
+      if (!onViewChange || !controlsRef.current) return
+
+      const now = performance.now()
+      const elapsed = now - lastViewChangeAtRef.current
+      if (
+        immediate ||
+        lastViewChangeAtRef.current === 0 ||
+        elapsed >= VIEW_CHANGE_THROTTLE_MS
+      ) {
+        clearScheduledViewChange()
+        lastViewChangeAtRef.current = now
+        emitViewChange()
+        return
+      }
+
+      if (viewChangeTimeoutRef.current !== null) return
+
+      viewChangeTimeoutRef.current = window.setTimeout(() => {
+        viewChangeTimeoutRef.current = null
+        lastViewChangeAtRef.current = performance.now()
+        emitViewChange()
+      }, VIEW_CHANGE_THROTTLE_MS - elapsed)
+    },
+    [clearScheduledViewChange, emitViewChange, onViewChange]
+  )
 
   const applyDistance = useCallback(
     (distance: number, emit = true) => {
@@ -227,75 +281,128 @@ export const VisitorGlobe = forwardRef(function VisitorGlobe(
       camera.updateProjectionMatrix()
       controls.update()
       emitZoomChange(d)
-      emitViewChange()
+      scheduleViewChange({ immediate: true })
     },
-    [emitViewChange, emitZoomChange, getDistance]
+    [emitZoomChange, getDistance, scheduleViewChange]
   )
 
   const flyTo = useCallback(
     (lat: number, lng: number, distance?: number, durationMs?: number) => {
       const controls = controlsRef.current
-      if (!controls) return
+      if (!controls) return Promise.resolve()
       const camera = controls.object as THREE.PerspectiveCamera
       controls.target.set(0, 0, 0)
-      const fromDir = camera.position.clone().normalize()
-      const toDir = latLngToVector3(lat, lng, 1).normalize()
-      const targetDistance = distance ?? getDistance() // equals camera radius when target at origin
-      // If duration not provided, scale it with angular distance (slower for long spins)
-      const angle = THREE.MathUtils.clamp(fromDir.dot(toDir), -1, 1)
-      const theta = Math.acos(angle) // [0..PI]
+      const from = vector3ToLatLng(camera.position)
+      const targetDistance = distance ?? getDistance()
+
+      // Shortest longitude path (handles wrapping across the antimeridian)
+      let dLng = lng - from.lng
+      if (dLng > 180) dLng -= 360
+      if (dLng < -180) dLng += 360
+
+      // Scale duration with total angular travel
+      const totalAngle = Math.abs(lat - from.lat) + Math.abs(dLng) // rough arc degrees
       const minMs = 600
       const maxMs = 1800
-      const autoDuration = minMs + (theta / Math.PI) * (maxMs - minMs)
+      const autoDuration = minMs + (totalAngle / 360) * (maxMs - minMs)
       const duration = Math.max(
         300,
         Math.min(maxMs, durationMs ?? autoDuration)
       )
 
-      cancelAnimation()
-      animationStateRef.current = {
-        kind: "fly",
-        fromDir,
-        toDir,
-        distance: targetDistance,
-        start: null,
-        duration,
-      }
-      const tmp = new THREE.Vector3()
-      const identityQ = new THREE.Quaternion()
-      const rotQ = new THREE.Quaternion().setFromUnitVectors(
-        fromDir.clone().normalize(),
-        toDir.clone().normalize()
-      )
-      const qTmp = new THREE.Quaternion()
-
-      const step = (timestamp: number) => {
-        const state = animationStateRef.current
-        if (!state) return
-        if (state.kind !== "fly") return
-        if (state.start === null) state.start = timestamp
-        const t = Math.min((timestamp - state.start) / state.duration, 1)
-        // ease-in-out quad
-        const eased = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
-        qTmp.copy(identityQ).slerp(rotQ, eased)
-        tmp.copy(state.fromDir).applyQuaternion(qTmp).normalize()
-        const cameraRadius = state.distance
-        camera.position.copy(tmp.clone().multiplyScalar(cameraRadius))
-        camera.updateProjectionMatrix()
-        controls.update()
-        emitZoomChange(state.distance)
-        emitViewChange()
-        if (t < 1) {
-          animationFrameRef.current = requestAnimationFrame(step)
-        } else {
-          animationFrameRef.current = null
-          animationStateRef.current = null
+      return new Promise<void>((resolve) => {
+        cancelAnimation()
+        animationStateRef.current = {
+          kind: "fly",
+          fromDir: camera.position.clone().normalize(),
+          toDir: latLngToVector3(lat, lng, 1).normalize(),
+          distance: targetDistance,
+          start: null,
+          duration,
+          resolve,
         }
+
+        const fromLat = from.lat
+        const fromLng = from.lng
+
+        const step = (timestamp: number) => {
+          const state = animationStateRef.current
+          if (!state) return
+          if (state.kind !== "fly") return
+          if (state.start === null) state.start = timestamp
+          const t = Math.min((timestamp - state.start) / state.duration, 1)
+          // ease-in-out quad
+          const eased = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
+
+          // Interpolate lat/lng independently — this keeps the rotation
+          // "around" the globe (horizontal) rather than cutting over the poles.
+          const curLat = fromLat + (lat - fromLat) * eased
+          const curLng = fromLng + dLng * eased
+          const pos = latLngToVector3(curLat, curLng, state.distance)
+          camera.position.copy(pos)
+          camera.updateProjectionMatrix()
+          controls.update()
+          emitZoomChange(state.distance)
+          scheduleViewChange()
+          if (t < 1) {
+            animationFrameRef.current = requestAnimationFrame(step)
+          } else {
+            animationFrameRef.current = null
+            animationStateRef.current = null
+            scheduleViewChange({ immediate: true })
+            state.resolve?.()
+          }
+        }
+
+        animationFrameRef.current = requestAnimationFrame(step)
+      })
+    },
+    [cancelAnimation, emitZoomChange, getDistance, scheduleViewChange]
+  )
+
+  const getSelectionAnchor = useCallback(
+    (lat: number, lng: number, label = "Unknown") => {
+      const controls = controlsRef.current
+      const renderer = rendererRef.current
+      if (!controls || !renderer) return null
+
+      const camera = controls.object as THREE.PerspectiveCamera
+      const point = latLngToVector3(lat, lng, 1.01)
+      const visibleHemisphere = point
+        .clone()
+        .normalize()
+        .dot(camera.position.clone().normalize())
+
+      if (visibleHemisphere <= 0) return null
+
+      const projected = point.clone().project(camera)
+      if (
+        projected.z < -1 ||
+        projected.z > 1 ||
+        !Number.isFinite(projected.x) ||
+        !Number.isFinite(projected.y)
+      ) {
+        return null
       }
 
-      animationFrameRef.current = requestAnimationFrame(step)
+      const rect = renderer.domElement.getBoundingClientRect()
+      let cellId: string
+      try {
+        cellId = latLngToCell(lat, lng, 3)
+      } catch {
+        return null
+      }
+
+      return {
+        cellId,
+        label,
+        x: ((projected.x + 1) / 2) * rect.width,
+        y: ((1 - projected.y) / 2) * rect.height,
+        width: rect.width,
+        height: rect.height,
+      }
     },
-    [cancelAnimation, emitViewChange, emitZoomChange, getDistance]
+    []
   )
 
   useImperativeHandle(
@@ -306,6 +413,7 @@ export const VisitorGlobe = forwardRef(function VisitorGlobe(
       getDistance,
       focusOn,
       flyTo,
+      getSelectionAnchor,
       getView: () => {
         const controls = controlsRef.current
         if (!controls)
@@ -319,32 +427,60 @@ export const VisitorGlobe = forwardRef(function VisitorGlobe(
         return { lat, lng, distance: getDistance() }
       },
     }),
-    [flyTo, focusOn, getDistance, zoomBy]
+    [flyTo, focusOn, getDistance, getSelectionAnchor, zoomBy]
   )
+
+  const [tooltip, setTooltip] = useState<{
+    x: number
+    y: number
+    label: string
+  } | null>(null)
 
   useEffect(() => {
     const controls = controlsRef.current
     if (!controls) return
 
-    const handleStart = () => cancelAnimation()
+    const handleStart = () => {
+      setIsInteracting(true)
+      setTooltip(null)
+      clearScheduledViewChange()
+      cancelAnimation()
+    }
     const handleChange = () => {
       emitZoomChange()
-      emitViewChange()
+      scheduleViewChange()
+    }
+    const handleEnd = () => {
+      setIsInteracting(false)
+      scheduleViewChange({ immediate: true })
     }
     controls.addEventListener("change", handleChange)
     controls.addEventListener("start", handleStart)
+    controls.addEventListener("end", handleEnd)
 
     // Emit once on mount so parent syncs initial state
     emitZoomChange()
-    emitViewChange()
+    scheduleViewChange({ immediate: true })
 
     return () => {
+      controls.removeEventListener("end", handleEnd)
       controls.removeEventListener("start", handleStart)
       controls.removeEventListener("change", handleChange)
     }
-  }, [cancelAnimation, emitViewChange, emitZoomChange])
+  }, [
+    cancelAnimation,
+    clearScheduledViewChange,
+    emitZoomChange,
+    scheduleViewChange,
+  ])
 
-  useEffect(() => cancelAnimation, [cancelAnimation])
+  useEffect(
+    () => () => {
+      clearScheduledViewChange()
+      cancelAnimation()
+    },
+    [cancelAnimation, clearScheduledViewChange]
+  )
 
   // Initial focus on the Americas, slightly closer, no auto-rotate by default
   useEffect(() => {
@@ -359,12 +495,6 @@ export const VisitorGlobe = forwardRef(function VisitorGlobe(
     }
   }, [focusOn])
 
-  const [tooltip, setTooltip] = useState<{
-    x: number
-    y: number
-    label: string
-  } | null>(null)
-
   return (
     <div className="relative h-full w-full overflow-hidden bg-muted">
       <Canvas
@@ -372,6 +502,7 @@ export const VisitorGlobe = forwardRef(function VisitorGlobe(
         camera={{ position: [0, 0, VISITOR_GLOBE_MAX_DISTANCE], fov: 45 }}
         gl={{ alpha: true, antialias: true }}
         onCreated={({ gl, camera }) => {
+          rendererRef.current = gl
           gl.setClearColor(0x000000, 0)
           // Pre-orient the camera so the US faces forward even before OrbitControls attaches
           const dir = latLngToVector3(
@@ -389,7 +520,12 @@ export const VisitorGlobe = forwardRef(function VisitorGlobe(
         <Globe />
         <Halo />
         <HexLandLayer />
-        <HexHighlights data={visitors} onHover={setTooltip} />
+        <HexHighlights
+          data={visitors}
+          hoverDisabled={isInteracting}
+          onHover={setTooltip}
+          onSelectCell={onSelectCell}
+        />
 
         <OrbitControls
           ref={controlsRef}
@@ -427,7 +563,7 @@ function Globe() {
 
   return (
     <mesh>
-      <sphereGeometry args={[1, 96, 96]} />
+      <sphereGeometry args={[1, 64, 64]} />
       <shaderMaterial
         transparent={false}
         uniforms={uniforms}
@@ -466,7 +602,7 @@ function Halo() {
   const materialRef = useRef<THREE.ShaderMaterial>(null)
   return (
     <mesh>
-      <sphereGeometry args={[1.01, 64, 64]} />
+      <sphereGeometry args={[1.01, 48, 48]} />
       <shaderMaterial
         ref={materialRef}
         transparent

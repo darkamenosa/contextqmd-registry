@@ -1,27 +1,29 @@
-import {
-  startTransition,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react"
+import { useCallback, useMemo, useState } from "react"
 
 import { fetchDevices } from "../api"
+import { usePanelData } from "../hooks/use-panel-data"
+import {
+  openReportsDialogRoute,
+  syncReportsDialogRoute,
+  useCloseReportsDialogRoute,
+} from "../hooks/use-reports-dialog-route"
+import { pickCardMetrics } from "../lib/card-metrics"
 import {
   categorizeScreenSize,
   getBrowserIcon,
   getOSIcon,
 } from "../lib/device-visuals"
 import {
-  baseAnalyticsPath,
   buildDialogPath,
   devicesModeForSegment,
   devicesSegmentForMode,
   parseDialogFromPath,
 } from "../lib/dialog-path"
-import { navigateAnalytics } from "../lib/location-store"
 import { inferDevicesModeFromFilters } from "../lib/panel-mode"
+import {
+  analyticsPreferenceKey,
+  writeAnalyticsPreference,
+} from "../lib/preferences"
 import { useScopedQuery } from "../lib/query-scope"
 import { useQueryContext } from "../query-context"
 import { useSiteContext } from "../site-context"
@@ -69,13 +71,12 @@ export default function DevicesPanel({
   const site = useSiteContext()
 
   const [preferredMode, setPreferredMode] = useState(() => initialBaseMode)
-  const [data, setData] = useState<DevicesPayload>(initialData)
-  const [loading, setLoading] = useState(false)
   const { value: baseQuery } = useScopedQuery(query, {
     omitMode: true,
     omitMetric: true,
     omitInterval: true,
   })
+  const storageKey = analyticsPreferenceKey(STORAGE_PREFIX, site.domain)
   const dialogMode = useMemo(() => {
     const parsed = parseDialogFromPath(pathname)
     if (parsed.type !== "segment") return null
@@ -95,33 +96,16 @@ export default function DevicesPanel({
     () => JSON.stringify([baseQuery, mode]),
     [baseQuery, mode]
   )
-  const lastRequestKeyRef = useRef(initialRequestKey)
-
-  const closeDetailsDialog = useCallback(() => {
-    try {
-      const sp = new URLSearchParams(window.location.search)
-      sp.delete("dialog")
-      navigateAnalytics(baseAnalyticsPath(sp.toString()))
-    } catch {
-      // Ignore history errors; local dialog state remains authoritative.
-    }
-  }, [])
-
-  useEffect(() => {
-    if (requestKey === lastRequestKeyRef.current) return
-    lastRequestKeyRef.current = requestKey
-
-    const controller = new AbortController()
-    startTransition(() => setLoading(true))
-    fetchDevices(baseQuery, { mode }, controller.signal)
-      .then(setData)
-      .catch((error) => {
-        if (error.name !== "AbortError") console.error(error)
-      })
-      .finally(() => setLoading(false))
-
-    return () => controller.abort()
-  }, [baseQuery, mode, requestKey])
+  const closeDetailsDialog = useCloseReportsDialogRoute()
+  const panelState = usePanelData({
+    initialData,
+    initialRequestKey,
+    requestKey,
+    fetchData: (controller) =>
+      fetchDevices(baseQuery, { mode }, controller.signal),
+  })
+  const data = panelState.data
+  const loading = panelState.loading
 
   const highlightMetric = useMemo<ListMetricKey>(() => "visitors", [])
 
@@ -160,11 +144,9 @@ export default function DevicesPanel({
   const setAndStoreMode = useCallback(
     (next: string) => {
       setPreferredMode(next)
-      if (typeof window !== "undefined") {
-        localStorage.setItem(`${STORAGE_PREFIX}.${site.domain}`, next)
-      }
+      writeAnalyticsPreference(storageKey, next)
     },
-    [site.domain]
+    [storageKey]
   )
 
   const handleSelect = useCallback(
@@ -251,15 +233,15 @@ export default function DevicesPanel({
               data-testid="devices-details-btn"
               onClick={() => {
                 try {
-                  const sp = new URLSearchParams(window.location.search)
-                  sp.delete("dialog")
                   const seg = devicesSegmentForMode(
                     dialogBaseMode as
                       | "browsers"
                       | "operating-systems"
                       | "screen-sizes"
                   )
-                  navigateAnalytics(buildDialogPath(seg, sp.toString()))
+                  openReportsDialogRoute((search) =>
+                    buildDialogPath(seg, search)
+                  )
                 } catch {
                   // Ignore history errors when opening the details modal.
                 }
@@ -275,20 +257,15 @@ export default function DevicesPanel({
         open={detailsOpen}
         onOpenChange={(open) => {
           try {
-            const sp = new URLSearchParams(window.location.search)
-            sp.delete("dialog")
-            const qs = sp.toString()
-            if (open) {
-              const seg = devicesSegmentForMode(
-                dialogBaseMode as
-                  | "browsers"
-                  | "operating-systems"
-                  | "screen-sizes"
-              )
-              navigateAnalytics(buildDialogPath(seg, qs))
-            } else {
-              navigateAnalytics(baseAnalyticsPath(qs))
-            }
+            const seg = devicesSegmentForMode(
+              dialogBaseMode as
+                | "browsers"
+                | "operating-systems"
+                | "screen-sizes"
+            )
+            syncReportsDialogRoute(open, (search) =>
+              buildDialogPath(seg, search)
+            )
           } catch {
             // Ignore history errors when syncing modal state.
           }
@@ -306,14 +283,6 @@ export default function DevicesPanel({
       />
     </section>
   )
-}
-
-function pickCardMetrics(metrics: ListMetricKey[]): ListMetricKey[] {
-  const preferred: ListMetricKey[] = []
-  if (metrics.includes("visitors")) preferred.push("visitors")
-  if (metrics.includes("percentage")) preferred.push("percentage")
-  else if (metrics.includes("conversionRate")) preferred.push("conversionRate")
-  return preferred.length > 0 ? preferred : metrics.slice(0, 2)
 }
 
 function renderDeviceLeading(mode: string, item: Record<string, unknown>) {
