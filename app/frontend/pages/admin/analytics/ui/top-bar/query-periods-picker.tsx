@@ -101,7 +101,9 @@ export default function QueryPeriodsPicker() {
       <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
         <DropdownMenuTrigger className="inline-flex h-7 items-center gap-2 rounded-lg border border-border bg-background px-2.5 text-sm font-medium hover:bg-muted">
           <Calendar className="size-4 shrink-0" />
-          <span className="truncate">{getPeriodDisplay(query)}</span>
+          <span className="truncate" suppressHydrationWarning>
+            {getPeriodDisplay(query)}
+          </span>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuItem

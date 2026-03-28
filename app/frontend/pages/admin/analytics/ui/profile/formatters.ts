@@ -108,7 +108,7 @@ export function maskEmail(email: string): string {
 }
 
 export function formatProfileDuration(seconds: number): string {
-  if (seconds <= 0) return "0m"
+  if (seconds <= 0) return "0s"
 
   const hrs = Math.floor(seconds / 3600)
   const mins = Math.floor((seconds % 3600) / 60)

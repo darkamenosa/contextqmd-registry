@@ -29,6 +29,32 @@ export function availableIntervalsForPeriod(period: string) {
   }
 }
 
+export function resolveInitialMetricSelection(
+  graphableMetrics: string[],
+  fallbackMetric: string,
+  requestedMetric?: string | null
+) {
+  if (requestedMetric && graphableMetrics.includes(requestedMetric)) {
+    return requestedMetric
+  }
+  return fallbackMetric
+}
+
+export function resolveInitialIntervalSelection(
+  period: string,
+  fallbackInterval: string,
+  requestedInterval?: string | null
+) {
+  const options = availableIntervalsForPeriod(period)
+  if (requestedInterval && options.includes(requestedInterval)) {
+    return requestedInterval
+  }
+  if (options.includes(fallbackInterval)) {
+    return fallbackInterval
+  }
+  return options[0] ?? fallbackInterval
+}
+
 export function resolvePreferredMetric(
   graphableMetrics: string[],
   siteDomain: string,

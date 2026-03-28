@@ -84,7 +84,7 @@ export default function ProfilesList({
                 <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground sm:hidden">
                   <ProfileSourceInline source={profile.source} />
                   <span className="text-border">·</span>
-                  <span>
+                  <span suppressHydrationWarning>
                     {profile.lastSeenAt
                       ? formatDateTime(profile.lastSeenAt)
                       : "—"}
@@ -95,7 +95,10 @@ export default function ProfilesList({
             <div className="hidden min-w-0 text-sm text-foreground sm:block">
               <ProfileSourceInline source={profile.source} />
             </div>
-            <div className="hidden text-right text-sm text-muted-foreground sm:block">
+            <div
+              className="hidden text-right text-sm text-muted-foreground sm:block"
+              suppressHydrationWarning
+            >
               {profile.lastSeenAt ? formatDateTime(profile.lastSeenAt) : "—"}
             </div>
           </button>
