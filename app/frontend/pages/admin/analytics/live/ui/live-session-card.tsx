@@ -65,7 +65,7 @@ export default function LiveSessionCard({
   return (
     <section className="overflow-hidden rounded-xl border border-border/60 bg-card/90 shadow-lg backdrop-blur-md">
       {/* Identity */}
-      <div className="flex items-start gap-3 px-4 py-3">
+      <div className="flex items-start gap-3 px-4 py-2.5">
         <VisitorAvatar name={session.name} size={40} />
         <div className="min-w-0 flex-1">
           <div className="flex items-start gap-2">
@@ -108,7 +108,7 @@ export default function LiveSessionCard({
 
       {/* Device environment */}
       {(session.deviceType || session.os || session.browser) && (
-        <div className="flex flex-wrap items-center gap-1.5 border-t border-border/40 px-4 py-3 text-xs/4 text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-border/40 px-4 py-2 text-xs/4 text-muted-foreground">
           {session.deviceType && (
             <ProfileDeviceInline
               deviceType={session.deviceType}
@@ -140,7 +140,7 @@ export default function LiveSessionCard({
       )}
 
       {sessionsAtCell.length > 1 ? (
-        <div className="flex flex-col gap-2 border-t border-border/40 px-4 py-3">
+        <div className="flex flex-col gap-2 border-t border-border/40 px-4 py-2">
           <div className="flex items-center gap-1.5 text-xs/4 font-medium tracking-wide text-muted-foreground/70 uppercase">
             <Users className="size-3" />
             <span>{sessionsAtCell.length} sessions here</span>
@@ -164,26 +164,26 @@ export default function LiveSessionCard({
         </div>
       ) : null}
 
-      <div className="border-t border-border/40 px-4 py-3">
-        <div className="flex items-center justify-between border-b border-border/30 py-2">
+      <div className="border-t border-border/40 px-4 py-1.5">
+        <div className="flex items-center justify-between border-b border-border/30 py-1.5">
           <span className="text-xs/4 text-muted-foreground">Referrer</span>
           <span className="truncate pl-3 text-right text-xs/4 font-medium text-foreground">
             {session.source || "Direct / None"}
           </span>
         </div>
-        <div className="flex items-center justify-between border-b border-border/30 py-2">
+        <div className="flex items-center justify-between border-b border-border/30 py-1.5">
           <span className="text-xs/4 text-muted-foreground">Current URL</span>
           <span className="truncate pl-3 text-right font-mono text-xs/4 font-medium text-foreground">
             {session.currentPage || "/"}
           </span>
         </div>
-        <div className="flex items-center justify-between border-b border-border/30 py-2">
+        <div className="flex items-center justify-between border-b border-border/30 py-1.5">
           <span className="text-xs/4 text-muted-foreground">Session time</span>
           <span className="text-xs/4 font-medium text-foreground tabular-nums">
             {formatDuration(liveDuration)}
           </span>
         </div>
-        <div className="flex items-center justify-between pt-2">
+        <div className="flex items-center justify-between py-1.5">
           <span className="text-xs/4 text-muted-foreground">Total visits</span>
           <span className="text-xs/4 font-medium text-foreground">
             {session.totalVisits}
