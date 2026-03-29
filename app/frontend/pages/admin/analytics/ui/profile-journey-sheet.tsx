@@ -9,7 +9,6 @@ import {
   Eye,
   Globe,
   Loader2,
-  MapPin,
   Route,
   Share2,
   Smartphone,
@@ -43,7 +42,6 @@ import type {
 import {
   formatCompactNumber,
   formatProfileDuration,
-  formatProfileLocation,
   maskEmail,
 } from "./profile/formatters"
 import {
@@ -147,13 +145,11 @@ export default function ProfileJourneySheet({
     date: string
     count: number
   } | null>(null)
-  const [expandedSessionId, setExpandedSessionId] = useState<number | null>(
-    null
-  )
+  const [expandedSessionIds, setExpandedSessionIds] = useState<number[]>([])
   const [sessionPayloads, setSessionPayloads] = useState<
     Record<number, ProfileSessionPayload>
   >({})
-  const [sessionLoadingId, setSessionLoadingId] = useState<number | null>(null)
+  const [sessionLoadingIds, setSessionLoadingIds] = useState<number[]>([])
 
   const PAGE_SIZE = 20
   const [sessions, setSessions] = useState<ProfileSessionItem[]>([])
@@ -172,7 +168,7 @@ export default function ProfileJourneySheet({
     requestIdRef.current = nextRequestId
     startTransition(() => {
       setLoading(true)
-      setExpandedSessionId(null)
+      setExpandedSessionIds([])
       setSelectedActivityDay(null)
       setSessionPayloads({})
       setSessions([])
@@ -209,8 +205,8 @@ export default function ProfileJourneySheet({
 
     startTransition(() => {
       setSessionsLoading(true)
-      setExpandedSessionId(null)
-      setSessionLoadingId(null)
+      setExpandedSessionIds([])
+      setSessionLoadingIds([])
       setSessions([])
       setSessionsPage(1)
       setSessionsHasMore(false)
@@ -284,16 +280,36 @@ export default function ProfileJourneySheet({
 
   const loadSession = (session: ProfileSessionItem) => {
     if (!profile) return
+
+    const isExpanded = expandedSessionIds.includes(session.visitId)
+
     if (sessionPayloads[session.visitId]) {
-      setExpandedSessionId((current) =>
-        current === session.visitId ? null : session.visitId
+      setExpandedSessionIds((current) =>
+        current.includes(session.visitId)
+          ? current.filter((id) => id !== session.visitId)
+          : [...current, session.visitId]
+      )
+      return
+    }
+
+    if (isExpanded) {
+      setExpandedSessionIds((current) =>
+        current.filter((id) => id !== session.visitId)
       )
       return
     }
 
     const controller = new AbortController()
-    setExpandedSessionId(session.visitId)
-    setSessionLoadingId(session.visitId)
+    setExpandedSessionIds((current) =>
+      current.includes(session.visitId)
+        ? current
+        : [...current, session.visitId]
+    )
+    setSessionLoadingIds((current) =>
+      current.includes(session.visitId)
+        ? current
+        : [...current, session.visitId]
+    )
 
     fetchProfileSession(profile.id, session.visitId, query, controller.signal)
       .then((value) => {
@@ -305,11 +321,11 @@ export default function ProfileJourneySheet({
       .catch((error: Error) => {
         if (error.name !== "AbortError") console.error(error)
       })
-      .finally(() =>
-        setSessionLoadingId((current) =>
-          current === session.visitId ? null : current
+      .finally(() => {
+        setSessionLoadingIds((current) =>
+          current.filter((id) => id !== session.visitId)
         )
-      )
+      })
   }
 
   const activityDataset = useMemo(() => {
@@ -330,13 +346,9 @@ export default function ProfileJourneySheet({
     locations: resolvedProfile?.locationsUsed || [],
     topPages: resolvedProfile?.topPages || [],
   }
-  const profileLocation = useMemo(() => {
-    return formatProfileLocation({
-      city: resolvedProfile?.city,
-      region: resolvedProfile?.region,
-      country: resolvedProfile?.country,
-    })
-  }, [resolvedProfile])
+  const hasProfileLocation = Boolean(
+    resolvedProfile?.city || resolvedProfile?.region || resolvedProfile?.country
+  )
   const selectedActivityDayLabel = selectedActivityDay
     ? formatCalendarDay(selectedActivityDay.date)
     : null
@@ -363,24 +375,24 @@ export default function ProfileJourneySheet({
             <aside className="border-b border-border px-4 py-5 lg:overflow-y-auto lg:border-r lg:border-b-0">
               <div className="flex flex-col items-center text-center">
                 <VisitorAvatar name={resolvedProfile?.name || "?"} size={72} />
-                <div className="mt-2.5 flex items-center gap-1.5">
+                <div className="mt-3 flex items-center gap-1.5">
                   <h2 className="text-base font-semibold text-foreground">
                     {resolvedProfile?.name || "Visitor"}
                   </h2>
                   {resolvedProfile?.identified ? (
-                    <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-px text-[10px] font-medium text-emerald-700">
+                    <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-px text-xs font-medium text-emerald-700">
                       User
                     </span>
                   ) : null}
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p className="mt-1.5 text-xs text-muted-foreground">
                   {resolvedProfile?.identified && resolvedProfile?.email
                     ? resolvedProfile.email
                     : maskEmail(resolvedProfile?.email || "")}
                 </p>
               </div>
 
-              <div className="mt-5 grid grid-cols-2 gap-1.5">
+              <div className="mt-5 grid grid-cols-2 gap-2">
                 {[
                   {
                     label: "Visits",
@@ -401,23 +413,23 @@ export default function ProfileJourneySheet({
                 ].map((item) => (
                   <div
                     key={item.label}
-                    className="rounded-lg border border-border bg-muted/20 px-2.5 py-2"
+                    className="rounded-lg border border-border bg-muted/20 px-3 py-2.5"
                   >
-                    <p className="text-[10px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       {item.label}
                     </p>
-                    <p className="mt-0.5 text-base font-semibold text-foreground">
+                    <p className="mt-1 text-lg font-semibold text-foreground">
                       {item.value}
                     </p>
                   </div>
                 ))}
               </div>
 
-              <section className="mt-4 rounded-lg border border-border bg-muted/20 px-3 py-3">
-                <h3 className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
+              <section className="mt-4 rounded-lg border border-border bg-muted/20 px-3.5 py-3.5">
+                <h3 className="text-xs font-semibold tracking-[0.12em] text-muted-foreground uppercase">
                   Profile summary
                 </h3>
-                <div className="mt-2 space-y-1.5 text-[11px]">
+                <div className="mt-3 space-y-2 text-xs">
                   <div className="flex justify-between gap-3">
                     <span className="text-muted-foreground">Status</span>
                     <span className="font-medium text-foreground capitalize">
@@ -442,7 +454,7 @@ export default function ProfileJourneySheet({
                   </div>
                   <div className="flex justify-between gap-3">
                     <span className="text-muted-foreground">Latest source</span>
-                    <span className="truncate text-right font-medium text-foreground">
+                    <span className="max-w-[12rem] truncate text-right font-medium text-foreground">
                       {resolvedProfile?.source || "Direct/None"}
                     </span>
                   </div>
@@ -453,7 +465,7 @@ export default function ProfileJourneySheet({
                         href={resolvedProfile.currentPage}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="truncate text-right font-medium text-foreground underline decoration-muted-foreground/30 underline-offset-2 hover:decoration-foreground"
+                        className="max-w-[12rem] truncate text-right font-medium text-foreground underline decoration-muted-foreground/30 underline-offset-2 hover:decoration-foreground"
                       >
                         {resolvedProfile.currentPage}
                       </a>
@@ -461,12 +473,12 @@ export default function ProfileJourneySheet({
                       <span className="font-medium text-foreground">—</span>
                     )}
                   </div>
-                  {profileLocation ? (
+                  {hasProfileLocation ? (
                     <div className="flex justify-between gap-3">
                       <span className="text-muted-foreground">
                         Latest location
                       </span>
-                      <span className="truncate text-right font-medium text-foreground">
+                      <span className="max-w-[12rem] text-right font-medium text-foreground">
                         <ProfileLocationText
                           city={resolvedProfile?.city}
                           region={resolvedProfile?.region}
@@ -486,7 +498,7 @@ export default function ProfileJourneySheet({
                   <h3 className="text-sm font-medium text-foreground">
                     Session journey
                   </h3>
-                  <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
                     <span className="rounded-full border border-border bg-muted/30 px-2 py-0.5 text-muted-foreground">
                       {data?.summary.sessions ?? 0} sessions
                     </span>
@@ -515,7 +527,7 @@ export default function ProfileJourneySheet({
                 <button
                   type="button"
                   onClick={() => setSortOldest((value) => !value)}
-                  className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                  className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground"
                 >
                   {sortOldest ? "OLDEST FIRST" : "NEWEST FIRST"}
                 </button>
@@ -531,7 +543,12 @@ export default function ProfileJourneySheet({
                   <div className="space-y-2.5">
                     {orderedSessions.map((session) => {
                       const sessionPayload = sessionPayloads[session.visitId]
-                      const isOpen = expandedSessionId === session.visitId
+                      const isOpen = expandedSessionIds.includes(
+                        session.visitId
+                      )
+                      const isSessionLoading = sessionLoadingIds.includes(
+                        session.visitId
+                      )
 
                       return (
                         <article
@@ -540,18 +557,18 @@ export default function ProfileJourneySheet({
                         >
                           <button
                             type="button"
-                            className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left"
+                            className="flex w-full items-start justify-between gap-3 px-4 py-3.5 text-left"
                             onClick={() => loadSession(session)}
                           >
-                            <div className="min-w-0 flex-1 space-y-2">
+                            <div className="min-w-0 flex-1 space-y-2.5">
                               <div className="flex flex-wrap items-center gap-2">
-                                <span className="rounded-full bg-muted/60 px-2.5 py-0.5 text-[11px] font-medium text-foreground">
+                                <span className="rounded-full bg-muted/60 px-2.5 py-0.5 text-xs font-medium text-foreground">
                                   {session.startedAt
                                     ? formatDateTime(session.startedAt)
                                     : "Unknown session"}
                                 </span>
                                 {session.source ? (
-                                  <span className="rounded-full border border-border px-2.5 py-0.5 text-[11px] text-muted-foreground">
+                                  <span className="rounded-full border border-border px-2.5 py-0.5 text-xs text-muted-foreground">
                                     <ProfileSourceInline
                                       source={session.source}
                                       iconClassName="size-3.5"
@@ -571,24 +588,23 @@ export default function ProfileJourneySheet({
                                   browser={session.browser}
                                 />
                                 {session.country ||
+                                session.countryCode ||
                                 session.region ||
                                 session.city ? (
                                   <span className="inline-flex items-center gap-1.5">
-                                    <MapPin className="size-3.5" />
                                     <ProfileLocationText
                                       city={session.city}
                                       region={session.region}
                                       country={session.country}
                                       countryCode={session.countryCode}
-                                      order="country-first"
                                     />
                                   </span>
                                 ) : null}
                               </div>
 
-                              <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                                 <span>
-                                  <span className="text-[10px] tracking-wide uppercase">
+                                  <span className="text-xs tracking-[0.12em] uppercase">
                                     Duration
                                   </span>{" "}
                                   <span className="font-medium text-foreground">
@@ -598,7 +614,7 @@ export default function ProfileJourneySheet({
                                   </span>
                                 </span>
                                 <span>
-                                  <span className="text-[10px] tracking-wide uppercase">
+                                  <span className="text-xs tracking-[0.12em] uppercase">
                                     Pageviews
                                   </span>{" "}
                                   <span className="font-medium text-foreground">
@@ -606,7 +622,7 @@ export default function ProfileJourneySheet({
                                   </span>
                                 </span>
                                 <span>
-                                  <span className="text-[10px] tracking-wide uppercase">
+                                  <span className="text-xs tracking-[0.12em] uppercase">
                                     Events
                                   </span>{" "}
                                   <span className="font-medium text-foreground">
@@ -615,7 +631,7 @@ export default function ProfileJourneySheet({
                                 </span>
                               </div>
 
-                              <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+                              <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                                 <span className="inline-flex items-center gap-1">
                                   <Route className="size-3" />
                                   <span>
@@ -637,7 +653,7 @@ export default function ProfileJourneySheet({
                               </div>
                             </div>
 
-                            <div className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-muted/20 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+                            <div className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-muted/20 px-2.5 py-1 text-xs font-medium text-muted-foreground">
                               <span>
                                 {isOpen ? "Hide events" : "Show events"}
                               </span>
@@ -651,8 +667,7 @@ export default function ProfileJourneySheet({
 
                           {isOpen ? (
                             <div className="border-t border-border px-4 py-3">
-                              {sessionLoadingId === session.visitId &&
-                              !sessionPayload ? (
+                              {isSessionLoading && !sessionPayload ? (
                                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                   <Loader2 className="size-3.5 animate-spin" />
                                   Loading session events...
@@ -762,7 +777,7 @@ export default function ProfileJourneySheet({
             <aside className="border-t border-border px-4 py-5 lg:overflow-y-auto lg:border-t-0 lg:border-l">
               <div className="space-y-4">
                 <section className="space-y-1.5">
-                  <h3 className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
+                  <h3 className="flex items-center gap-1.5 text-xs font-semibold tracking-[0.12em] text-muted-foreground uppercase">
                     <Activity className="size-3" />
                     Activity
                   </h3>

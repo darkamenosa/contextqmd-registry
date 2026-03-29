@@ -11,9 +11,8 @@ import { FileText, Link2, MapPin, Search } from "lucide-react"
 
 import { formatCalendarDay, formatDateTime } from "@/lib/format-date"
 
-import { flagFromIso2 } from "../../lib/country-flag"
 import type { ProfileListItem, ProfileSessionPayload } from "../../types"
-import { ProfileSourceInline } from "./primitives"
+import { ProfileLocationText, ProfileSourceInline } from "./primitives"
 
 function normalizeHeatmapDate(date: string): string {
   const [year = "", month = "", day = ""] = date.split(/[/-]/)
@@ -37,7 +36,7 @@ export function SectionChips({
 }: SectionChipsProps) {
   return (
     <section className="space-y-1.5">
-      <h3 className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
+      <h3 className="flex items-center gap-1.5 text-xs font-semibold tracking-[0.12em] text-muted-foreground uppercase">
         <Icon className="size-3" />
         {title}
       </h3>
@@ -46,7 +45,7 @@ export function SectionChips({
           {items.slice(0, 8).map((item) => (
             <span
               key={`${title}-${item.label}`}
-              className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/30 px-2 py-0.5 text-[11px] text-foreground"
+              className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/30 px-2 py-0.5 text-xs text-foreground"
             >
               {renderItemIcon ? renderItemIcon(item.label) : null}
               <span>{item.label}</span>
@@ -55,7 +54,7 @@ export function SectionChips({
           ))}
         </div>
       ) : (
-        <p className="text-[11px] text-muted-foreground">{empty}</p>
+        <p className="text-xs text-muted-foreground">{empty}</p>
       )}
     </section>
   )
@@ -68,35 +67,35 @@ export function LocationList({
 }) {
   return (
     <section className="space-y-1.5">
-      <h3 className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
+      <h3 className="flex items-center gap-1.5 text-xs font-semibold tracking-[0.12em] text-muted-foreground uppercase">
         <MapPin className="size-3" />
         Locations used
       </h3>
       {items.length > 0 ? (
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           {items.slice(0, 6).map((item) => (
             <div
               key={`${item.label}-${item.count}`}
-              className="flex items-start justify-between gap-2 rounded-md border border-border/70 bg-muted/20 px-2.5 py-1.5"
+              className="flex items-start justify-between gap-2 rounded-md border border-border/70 bg-muted/20 px-3 py-2"
             >
               <div className="min-w-0">
                 <p className="text-xs font-medium text-foreground">
                   <ProfileLocationSummary item={item} />
                 </p>
                 {item.lastSeenAt ? (
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     Last seen {formatDateTime(item.lastSeenAt)}
                   </p>
                 ) : null}
               </div>
-              <span className="text-[11px] font-medium text-muted-foreground">
+              <span className="text-xs font-medium text-muted-foreground">
                 {item.count}
               </span>
             </div>
           ))}
         </div>
       ) : (
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           No location history available
         </p>
       )}
@@ -109,22 +108,17 @@ function ProfileLocationSummary({
 }: {
   item: NonNullable<ProfileListItem["locationsUsed"]>[number]
 }) {
-  const flag = flagFromIso2(item.countryCode ?? undefined)
-  const parts = [item.city, item.region, item.country]
-    .filter(Boolean)
-    .filter(
-      (value, index, list) =>
-        list.findIndex(
-          (candidate) =>
-            candidate?.toLocaleLowerCase() === value?.toLocaleLowerCase()
-        ) === index
-    )
+  if (!item.city && !item.region && !item.country && !item.countryCode) {
+    return <>{item.label}</>
+  }
 
   return (
-    <>
-      {flag ? <span className="mr-1">{flag}</span> : null}
-      {parts.join(", ") || item.label}
-    </>
+    <ProfileLocationText
+      city={item.city}
+      region={item.region}
+      country={item.country}
+      countryCode={item.countryCode}
+    />
   )
 }
 
@@ -135,31 +129,31 @@ export function TopPagesList({
 }) {
   return (
     <section className="space-y-1.5">
-      <h3 className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
+      <h3 className="flex items-center gap-1.5 text-xs font-semibold tracking-[0.12em] text-muted-foreground uppercase">
         <FileText className="size-3" />
         Top pages
       </h3>
       {items.length > 0 ? (
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           {items.slice(0, 6).map((item) => (
             <a
               key={`${item.label}-${item.count}`}
               href={item.label}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-between gap-2 rounded-md border border-border/70 bg-muted/20 px-2.5 py-1.5 transition-colors hover:bg-muted/40"
+              className="flex items-center justify-between gap-2 rounded-md border border-border/70 bg-muted/20 px-3 py-2 transition-colors hover:bg-muted/40"
             >
               <span className="truncate text-xs text-foreground underline decoration-muted-foreground/30 underline-offset-2">
                 {item.label}
               </span>
-              <span className="text-[11px] font-medium text-muted-foreground">
+              <span className="text-xs font-medium text-muted-foreground">
                 {item.count}
               </span>
             </a>
           ))}
         </div>
       ) : (
-        <p className="text-[11px] text-muted-foreground">No page history yet</p>
+        <p className="text-xs text-muted-foreground">No page history yet</p>
       )}
     </section>
   )
@@ -301,7 +295,7 @@ export function ActivityHeatmap({
       />
       {tooltip ? (
         <div
-          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-md bg-[#1f2328] px-2 py-1 text-[10px] font-medium whitespace-nowrap text-white shadow-sm"
+          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-md bg-[#1f2328] px-2 py-1 text-xs font-medium whitespace-nowrap text-white shadow-sm"
           style={{
             left: Math.max(60, Math.min(tooltip.x, containerWidth - 60)),
             top: tooltip.y - 4,
@@ -312,7 +306,7 @@ export function ActivityHeatmap({
         </div>
       ) : null}
       {selectedDay ? (
-        <p className="mt-1.5 text-[11px] text-muted-foreground sm:hidden">
+        <p className="mt-1.5 text-xs text-muted-foreground sm:hidden">
           <span className="font-medium text-foreground">
             {selectedDay.count}
           </span>{" "}
@@ -353,7 +347,7 @@ export function SessionSourceSummary({
 
   return (
     <section className="rounded-lg border border-border/70 bg-muted/20 px-3 py-3">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs">
         <Search className="size-3.5 text-muted-foreground" />
         <span className="text-muted-foreground">{foundViaLabel}</span>
         <span className="rounded-md border border-border bg-background px-2 py-1 font-medium text-foreground">
@@ -374,7 +368,7 @@ export function SessionSourceSummary({
       {sourceSummary.referringDomain &&
       sourceSummary.referringDomain !== sourceSummary.sourceLabel &&
       sourceSummary.sourceLabel !== "Direct / None" ? (
-        <p className="mt-2 text-[11px] text-muted-foreground">
+        <p className="mt-2 text-xs text-muted-foreground">
           Referring domain: {sourceSummary.referringDomain}
         </p>
       ) : null}
@@ -384,7 +378,7 @@ export function SessionSourceSummary({
           {trackerItems.map((item) => (
             <span
               key={`${item.key}-${item.value}`}
-              className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[11px] text-muted-foreground"
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs text-muted-foreground"
             >
               <Link2 className="size-3" />
               <span>
@@ -398,14 +392,14 @@ export function SessionSourceSummary({
       {searchTerms.length > 0 ? (
         <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_140px] sm:items-start">
           <div>
-            <p className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
+            <p className="text-xs font-semibold tracking-[0.12em] text-muted-foreground uppercase">
               Search Terms Preview
             </p>
             <div className="mt-2 space-y-1.5">
               {searchTerms.map((term) => (
                 <div
                   key={term.label}
-                  className="flex items-center justify-between gap-3 text-[11px]"
+                  className="flex items-center justify-between gap-3 text-xs"
                 >
                   <span className="truncate font-medium text-foreground">
                     {term.label}
