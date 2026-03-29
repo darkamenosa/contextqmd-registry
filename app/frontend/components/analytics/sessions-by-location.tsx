@@ -19,12 +19,12 @@ export function SessionsByLocation({
     return (
       <Card className="gap-0 rounded-lg border border-border bg-card py-0">
         <CardHeader className="px-4 pt-4 pb-2">
-          <CardTitle className="text-sm font-semibold text-muted-foreground">
+          <CardTitle className="text-sm/5 font-semibold text-muted-foreground">
             Sessions by location
           </CardTitle>
         </CardHeader>
         <CardContent className="px-4 pt-2 pb-4">
-          <div className="py-4 text-center text-xs text-muted-foreground">
+          <div className="py-4 text-center text-xs/4 text-muted-foreground">
             No active sessions
           </div>
         </CardContent>
@@ -37,11 +37,11 @@ export function SessionsByLocation({
   return (
     <Card className="gap-0 rounded-lg border border-border bg-card py-0">
       <CardHeader className="px-4 pt-4 pb-2">
-        <CardTitle className="text-sm font-semibold text-muted-foreground">
+        <CardTitle className="text-sm/5 font-semibold text-muted-foreground">
           Sessions by location
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2.5 px-4 pt-2 pb-4">
+      <CardContent className="flex flex-col gap-2.5 px-4 pt-2 pb-4">
         {sessions.map((session, i) => {
           const locationLabel = formatCompactLocation({
             city: session.city,
@@ -54,12 +54,12 @@ export function SessionsByLocation({
           })
 
           return (
-            <div key={i} className="space-y-2">
-              <div className="flex items-center justify-between text-[12px] text-muted-foreground">
+            <div key={i} className="flex flex-col gap-2">
+              <div className="flex items-center justify-between text-xs/4 text-muted-foreground">
                 <span className="truncate font-medium text-foreground">
                   {locationLabel || "Unknown"}
                 </span>
-                <span className="ml-2 flex-shrink-0 text-muted-foreground">
+                <span className="ml-2 shrink-0 text-muted-foreground">
                   {session.visitors}
                 </span>
               </div>

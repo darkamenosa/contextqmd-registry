@@ -5,7 +5,7 @@ import { getConsumer, type Subscription } from "@/lib/cable"
 import { sortInitialEvents } from "../lib/live-utils"
 import type { LiveStats } from "../types"
 
-export function useLiveStats(initialStats: LiveStats) {
+export function useLiveStats(initialStats: LiveStats, siteId?: string | null) {
   const [stats, setStats] = useState(() => sortInitialEvents(initialStats))
   const [connectionStatus, setConnectionStatus] = useState<
     "connected" | "disconnected" | "connecting"
@@ -14,7 +14,7 @@ export function useLiveStats(initialStats: LiveStats) {
   useEffect(() => {
     const consumer = getConsumer()
     const subscription = consumer.subscriptions.create(
-      { channel: "AnalyticsChannel" },
+      { channel: "AnalyticsChannel", site_id: siteId || undefined },
       {
         connected: () => {
           setConnectionStatus("connected")
@@ -40,7 +40,7 @@ export function useLiveStats(initialStats: LiveStats) {
     return () => {
       subscription.unsubscribe()
     }
-  }, [])
+  }, [siteId])
 
   return {
     stats,

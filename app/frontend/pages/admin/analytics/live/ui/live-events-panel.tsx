@@ -141,7 +141,7 @@ export default function LiveEventsPanel({
           setIsCollapsed((collapsed) => !collapsed)
           if (hasNewEvents) setHasNewEvents(false)
         }}
-        className="flex w-full cursor-pointer items-center gap-2.5 border-b border-border/50 px-3.5 py-2.5 transition-colors hover:bg-muted/30"
+        className="flex w-full cursor-pointer items-center gap-2.5 border-b border-border/50 px-3.5 py-3 transition-colors hover:bg-muted/30"
         aria-expanded={!isCollapsed}
         aria-label={
           isCollapsed ? "Expand activity feed" : "Collapse activity feed"
@@ -157,11 +157,11 @@ export default function LiveEventsPanel({
             <span className="relative inline-flex size-2 rounded-full bg-muted-foreground/40" />
           )}
         </div>
-        <span className="flex-1 truncate text-left text-xs font-semibold tracking-wide text-foreground/90">
+        <span className="flex-1 truncate text-left text-xs/4 font-semibold tracking-wide text-foreground/90">
           {title || "Live activity"}
         </span>
         {displayEvents.length > 0 && (
-          <span className="rounded-full bg-muted/60 px-2 py-0.5 text-[10px] font-medium text-muted-foreground tabular-nums">
+          <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs/4 font-medium text-muted-foreground tabular-nums">
             {displayEvents.length}
           </span>
         )}
@@ -177,11 +177,11 @@ export default function LiveEventsPanel({
           <div
             ref={scrollRef}
             onScroll={handleScroll}
-            className={`overflow-y-auto px-2 py-1 ${isOverlay ? "max-h-[14rem] min-h-[6rem]" : "max-h-[16rem] min-h-[3rem]"}`}
+            className={`overflow-y-auto px-2 py-1.5 ${isOverlay ? "max-h-[14rem] min-h-[6rem]" : "max-h-[16rem] min-h-[3rem]"}`}
           >
             <div className="flex min-h-full flex-col justify-end">
               {displayEvents.length > 0 ? (
-                <div className="flex flex-col">
+                <div className="flex flex-col gap-0.5">
                   {displayEvents.map((event) => {
                     const description = liveEventDescription(event)
                     const isLink =
@@ -193,7 +193,7 @@ export default function LiveEventsPanel({
                     return (
                       <div
                         key={event.id}
-                        className={`group flex items-start gap-2.5 rounded-lg px-2 py-2 transition hover:bg-muted/40 ${
+                        className={`group flex items-start gap-2.5 rounded-lg px-2 py-2.5 transition hover:bg-muted/40 ${
                           freshEventIds.includes(event.id)
                             ? "animate-in duration-300 fade-in-0 slide-in-from-bottom-2"
                             : ""
@@ -204,7 +204,7 @@ export default function LiveEventsPanel({
                         </span>
 
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-baseline gap-1 text-[13px] leading-tight">
+                          <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1 text-sm/5">
                             <button
                               type="button"
                               className="shrink-0 font-semibold text-foreground hover:underline hover:underline-offset-2"
@@ -213,19 +213,17 @@ export default function LiveEventsPanel({
                               {event.name || "Visitor"}
                             </button>
                             {location && (
-                              <span className="shrink-0 text-xs text-muted-foreground/60">
+                              <span className="shrink-0 text-xs/4 text-muted-foreground/60">
                                 from{" "}
                                 {flag && (
-                                  <span className="text-xs leading-none">
-                                    {flag}
-                                  </span>
+                                  <span className="text-xs/4">{flag}</span>
                                 )}{" "}
                                 <span className="font-medium text-foreground/80">
                                   {location}
                                 </span>
                               </span>
                             )}
-                            <span className="shrink-0 text-xs text-muted-foreground/60">
+                            <span className="shrink-0 text-xs/4 text-muted-foreground/60">
                               {description.verb}
                             </span>
                             <span className="min-w-0 truncate">
@@ -234,19 +232,19 @@ export default function LiveEventsPanel({
                                   href={description.target}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="rounded bg-muted/80 px-1.5 py-0.5 font-mono text-[11px] text-foreground transition hover:bg-muted"
+                                  className="rounded-md bg-muted/80 px-1.5 py-0.5 font-mono text-xs/4 text-foreground transition hover:bg-muted"
                                 >
                                   {description.target}
                                 </a>
                               ) : (
-                                <span className="rounded bg-muted/80 px-1.5 py-0.5 font-mono text-[11px] text-foreground/80">
+                                <span className="rounded-md bg-muted/80 px-1.5 py-0.5 font-mono text-xs/4 text-foreground/80">
                                   {description.target}
                                 </span>
                               )}
                             </span>
                           </div>
 
-                          <div className="mt-0.5 flex items-center gap-2 text-[10px] text-muted-foreground/50">
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs/4 text-muted-foreground/50">
                             <span className="tabular-nums">
                               {hydrated
                                 ? formatRelativeTime(event.occurredAt)
@@ -293,7 +291,7 @@ export default function LiveEventsPanel({
               ) : (
                 <div className="flex flex-col items-center justify-center py-8 text-center">
                   <Activity className="mb-2 size-4 text-muted-foreground/30" />
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-xs/4 text-muted-foreground">
                     {emptyMessage}
                   </span>
                 </div>
@@ -305,7 +303,7 @@ export default function LiveEventsPanel({
             <button
               type="button"
               onClick={scrollToBottom}
-              className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-medium text-foreground shadow-lg transition hover:bg-muted/80"
+              className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs/4 font-medium text-foreground shadow-lg transition hover:bg-muted/80"
             >
               <ChevronDown className="size-3" />
               New events
@@ -322,7 +320,7 @@ export default function LiveEventsPanel({
               setIsCollapsed(false)
               setHasNewEvents(false)
             }}
-            className="flex items-center gap-1.5 text-[11px] font-medium text-blue-600 transition hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+            className="flex items-center gap-1.5 text-xs/4 font-medium text-blue-600 transition hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
           >
             <span className="relative flex size-1.5">
               <span className="absolute inline-flex size-full animate-ping rounded-full bg-blue-400 opacity-75" />

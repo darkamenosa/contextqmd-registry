@@ -65,15 +65,15 @@ export default function LiveSessionCard({
   return (
     <section className="overflow-hidden rounded-xl border border-border/60 bg-card/90 shadow-lg backdrop-blur-md">
       {/* Identity */}
-      <div className="flex items-start gap-3 px-4 pt-3.5 pb-3">
+      <div className="flex items-start gap-3 px-4 py-3">
         <VisitorAvatar name={session.name} size={40} />
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-bold text-foreground">
+          <div className="flex items-start gap-2">
+            <span className="truncate text-sm/5 font-semibold text-foreground">
               {session.name}
             </span>
             <span
-              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+              className={`shrink-0 rounded-full px-2 py-0.5 text-xs/4 font-medium ${
                 session.active
                   ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
                   : "bg-muted text-muted-foreground"
@@ -90,13 +90,13 @@ export default function LiveSessionCard({
               <X className="size-4" />
             </button>
           </div>
-          <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+          <div className="mt-0.5 truncate text-xs/4 text-muted-foreground">
             {session.identified
               ? session.email || "Identified visitor"
               : "Anonymous visitor"}
           </div>
           {locationLabel && (
-            <div className="mt-1 text-xs text-muted-foreground">
+            <div className="mt-1 text-xs/4 text-muted-foreground">
               <span className="truncate">
                 {locationFlag ? `${locationFlag} ` : ""}
                 {locationLabel}
@@ -108,7 +108,7 @@ export default function LiveSessionCard({
 
       {/* Device environment */}
       {(session.deviceType || session.os || session.browser) && (
-        <div className="flex flex-wrap items-center gap-x-1.5 border-t border-border/40 px-4 py-2 text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-border/40 px-4 py-3 text-xs/4 text-muted-foreground">
           {session.deviceType && (
             <ProfileDeviceInline
               deviceType={session.deviceType}
@@ -140,8 +140,8 @@ export default function LiveSessionCard({
       )}
 
       {sessionsAtCell.length > 1 ? (
-        <div className="border-t border-border/40 px-4 py-2">
-          <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-medium tracking-wide text-muted-foreground/70 uppercase">
+        <div className="flex flex-col gap-2 border-t border-border/40 px-4 py-3">
+          <div className="flex items-center gap-1.5 text-xs/4 font-medium tracking-wide text-muted-foreground/70 uppercase">
             <Users className="size-3" />
             <span>{sessionsAtCell.length} sessions here</span>
           </div>
@@ -150,7 +150,7 @@ export default function LiveSessionCard({
               <button
                 key={item.id}
                 type="button"
-                className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition ${
+                className={`rounded-full border px-2.5 py-1 text-xs/4 font-medium transition ${
                   item.id === session.id
                     ? "border-primary/30 bg-primary/10 text-primary"
                     : "border-border bg-background/50 text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -164,28 +164,28 @@ export default function LiveSessionCard({
         </div>
       ) : null}
 
-      <div className="border-t border-border/40 px-4 py-2">
-        <div className="flex items-center justify-between border-b border-border/30 py-1.5">
-          <span className="text-xs text-muted-foreground">Referrer</span>
-          <span className="truncate pl-3 text-right text-xs font-medium text-foreground">
+      <div className="border-t border-border/40 px-4 py-3">
+        <div className="flex items-center justify-between border-b border-border/30 py-2">
+          <span className="text-xs/4 text-muted-foreground">Referrer</span>
+          <span className="truncate pl-3 text-right text-xs/4 font-medium text-foreground">
             {session.source || "Direct / None"}
           </span>
         </div>
-        <div className="flex items-center justify-between border-b border-border/30 py-1.5">
-          <span className="text-xs text-muted-foreground">Current URL</span>
-          <span className="truncate pl-3 text-right font-mono text-[11px] font-medium text-foreground">
+        <div className="flex items-center justify-between border-b border-border/30 py-2">
+          <span className="text-xs/4 text-muted-foreground">Current URL</span>
+          <span className="truncate pl-3 text-right font-mono text-xs/4 font-medium text-foreground">
             {session.currentPage || "/"}
           </span>
         </div>
-        <div className="flex items-center justify-between border-b border-border/30 py-1.5">
-          <span className="text-xs text-muted-foreground">Session time</span>
-          <span className="text-xs font-medium text-foreground tabular-nums">
+        <div className="flex items-center justify-between border-b border-border/30 py-2">
+          <span className="text-xs/4 text-muted-foreground">Session time</span>
+          <span className="text-xs/4 font-medium text-foreground tabular-nums">
             {formatDuration(liveDuration)}
           </span>
         </div>
-        <div className="flex items-center justify-between py-1.5">
-          <span className="text-xs text-muted-foreground">Total visits</span>
-          <span className="text-xs font-medium text-foreground">
+        <div className="flex items-center justify-between pt-2">
+          <span className="text-xs/4 text-muted-foreground">Total visits</span>
+          <span className="text-xs/4 font-medium text-foreground">
             {session.totalVisits}
           </span>
         </div>
