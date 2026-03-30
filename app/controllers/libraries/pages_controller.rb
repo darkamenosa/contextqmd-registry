@@ -16,6 +16,8 @@ class Libraries::PagesController < InertiaController
     end
 
     page = version.pages.find_by!(page_uid: params[:page_uid])
+    return unless apply_public_cache_headers(library:, version:, page:)
+
     cached = Rails.cache.fetch(
       [
         "public",
@@ -56,6 +58,24 @@ class Libraries::PagesController < InertiaController
   end
 
   private
+
+    def apply_public_cache_headers(library:, version:, page:)
+      return true if request.inertia?
+
+      expires_in CACHE_TTL, public: true
+
+      stale?(
+        etag: [
+          "library-page",
+          library.cache_key_with_version,
+          version.cache_key_with_version,
+          page.cache_key_with_version,
+          params[:version]
+        ],
+        last_modified: [ library.updated_at, version.updated_at, page.updated_at ].compact.max,
+        public: true
+      )
+    end
 
     def library_summary(library)
       {
