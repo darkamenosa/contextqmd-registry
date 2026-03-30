@@ -6,7 +6,7 @@ class Analytics::VisitScope
       query = normalize_query(query_or_filters, advanced_filters:)
       filters = query.filters
       advanced_filters = query.advanced_filters
-      scope = Ahoy::Visit.all
+      scope = Ahoy::Visit.for_analytics_site
 
       if filters.present?
         if (source = filters["source"]).present?
@@ -227,6 +227,7 @@ class Analytics::VisitScope
       exit_page = basic_filters.delete("exit_page")
 
       pageviews = Ahoy::Event
+        .for_analytics_site
         .where(name: "pageview", time: range)
         .joins(:visit)
         .merge(filtered(basic_filters, advanced_filters: advanced_filters))

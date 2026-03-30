@@ -1,3 +1,4 @@
+import { analyticsScopedPath } from "./lib/path-prefix"
 import {
   buildQueryParams,
   mergeReportQueryParams,
@@ -109,7 +110,7 @@ async function fetchJson<T>(
 
 export function fetchTopStats(query: AnalyticsQuery, signal?: AbortSignal) {
   return fetchJson<TopStatsPayload>(
-    "/admin/analytics/top_stats",
+    analyticsScopedPath("/top_stats"),
     query,
     {},
     signal
@@ -122,7 +123,7 @@ export function fetchMainGraph(
   signal?: AbortSignal
 ) {
   return fetchJson<MainGraphPayload>(
-    "/admin/analytics/main_graph",
+    analyticsScopedPath("/main_graph"),
     query,
     extras,
     signal
@@ -135,7 +136,7 @@ export function fetchSources(
   signal?: AbortSignal
 ) {
   return fetchJson<ListPayload>(
-    "/admin/analytics/sources",
+    analyticsScopedPath("/sources"),
     query,
     extras,
     signal
@@ -148,7 +149,7 @@ export function fetchReferrers(
   signal?: AbortSignal
 ) {
   return fetchJson<ListPayload>(
-    "/admin/analytics/referrers",
+    analyticsScopedPath("/referrers"),
     query,
     extras,
     signal
@@ -161,7 +162,7 @@ export function fetchSourceDebug(
   signal?: AbortSignal
 ) {
   return fetchJson<SourceDebugPayload>(
-    "/admin/analytics/source_debug",
+    analyticsScopedPath("/source_debug"),
     query,
     extras,
     signal
@@ -174,7 +175,7 @@ export function fetchSearchTerms(
   signal?: AbortSignal
 ) {
   return fetchJson<ListPayload>(
-    "/admin/analytics/search_terms",
+    analyticsScopedPath("/search_terms"),
     query,
     extras,
     signal
@@ -186,7 +187,12 @@ export function fetchPages(
   extras: { mode?: string } = {},
   signal?: AbortSignal
 ) {
-  return fetchJson<ListPayload>("/admin/analytics/pages", query, extras, signal)
+  return fetchJson<ListPayload>(
+    analyticsScopedPath("/pages"),
+    query,
+    extras,
+    signal
+  )
 }
 
 export function fetchLocations(
@@ -195,7 +201,7 @@ export function fetchLocations(
   signal?: AbortSignal
 ) {
   return fetchJson<MapPayload | ListPayload>(
-    "/admin/analytics/locations",
+    analyticsScopedPath("/locations"),
     query,
     extras,
     signal
@@ -208,7 +214,7 @@ export function fetchDevices(
   signal?: AbortSignal
 ) {
   return fetchJson<DevicesPayload>(
-    "/admin/analytics/devices",
+    analyticsScopedPath("/devices"),
     query,
     extras,
     signal
@@ -221,7 +227,7 @@ export function fetchBehaviors(
   signal?: AbortSignal
 ) {
   return fetchJson<BehaviorsPayload>(
-    "/admin/analytics/behaviors",
+    analyticsScopedPath("/behaviors"),
     query,
     extras,
     signal
@@ -234,7 +240,7 @@ export function fetchProfiles(
   signal?: AbortSignal
 ) {
   return fetchJson<ProfilesPayload>(
-    "/admin/analytics/profiles",
+    analyticsScopedPath("/profiles"),
     query,
     extras,
     signal
@@ -247,7 +253,7 @@ export function fetchProfileJourney(
   signal?: AbortSignal
 ) {
   return fetchJson<ProfileJourneyPayload>(
-    `/admin/analytics/profiles/${encodeURIComponent(profileId)}`,
+    analyticsScopedPath(`/profiles/${encodeURIComponent(profileId)}`),
     query,
     {},
     signal
@@ -263,7 +269,7 @@ export async function fetchProfileSessions(
   if (extras.limit) params.set("limit", String(extras.limit))
   if (extras.page) params.set("page", String(extras.page))
   if (extras.date) params.set("date", extras.date)
-  const url = `/admin/analytics/profiles/${encodeURIComponent(profileId)}/sessions?${params}`
+  const url = `${analyticsScopedPath(`/profiles/${encodeURIComponent(profileId)}/sessions`)}?${params}`
   const response = await fetch(url, {
     headers: { Accept: "application/json" },
     signal,
@@ -279,7 +285,9 @@ export function fetchProfileSession(
   signal?: AbortSignal
 ) {
   return fetchJson<ProfileSessionPayload>(
-    `/admin/analytics/profiles/${encodeURIComponent(profileId)}/sessions/${visitId}`,
+    analyticsScopedPath(
+      `/profiles/${encodeURIComponent(profileId)}/sessions/${visitId}`
+    ),
     query,
     {},
     signal
@@ -291,7 +299,7 @@ export async function fetchBehaviorPropertyKeys(
   signal?: AbortSignal
 ) {
   const payload = await fetchJson<BehaviorsPayload>(
-    "/admin/analytics/behaviors",
+    analyticsScopedPath("/behaviors"),
     query,
     {
       mode: "props",
@@ -313,7 +321,7 @@ export async function fetchBehaviorPropertyValues(
   signal?: AbortSignal
 ) {
   const payload = await fetchJson<BehaviorsPayload>(
-    "/admin/analytics/behaviors",
+    analyticsScopedPath("/behaviors"),
     query,
     {
       mode: "props",

@@ -7,7 +7,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react"
 import { createPortal } from "react-dom"
-import { X } from "lucide-react"
+import { ExternalLink, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -23,7 +23,7 @@ import type {
   ListMetricKey,
   ListPayload,
 } from "../types"
-import { FORMATTERS, METRIC_LABELS, renderFlag } from "./list-table"
+import { FORMATTERS, isPathLike, METRIC_LABELS, renderFlag } from "./list-table"
 
 type SortState = {
   key: "name" | ListMetricKey
@@ -315,7 +315,7 @@ export default function RemoteDetailsDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[60] flex items-start justify-center bg-background/80 p-4 pt-10 backdrop-blur-xs md:pt-12 lg:pt-16"
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-background/80 backdrop-blur-xs sm:items-start sm:p-4 sm:pt-10 md:pt-12 lg:pt-16"
       onClick={handleClose}
     >
       <div
@@ -323,141 +323,162 @@ export default function RemoteDetailsDialog({
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
-        className="relative mx-auto flex h-[84vh] max-h-[84vh] w-full max-w-6xl flex-col rounded-xl border border-border bg-card shadow-xl outline-hidden"
+        className="relative mx-auto flex h-full w-full flex-col bg-card shadow-xl outline-hidden sm:h-[84vh] sm:max-h-[84vh] sm:max-w-6xl sm:rounded-xl sm:border sm:border-border"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={onDialogKeyDown}
       >
-        <header className="flex flex-col gap-2 border-b border-border px-6 py-4 sm:flex-row sm:items-center sm:justify-between md:px-8 md:py-5">
-          <div>
-            <h2 className="text-xl font-semibold text-foreground">{title}</h2>
+        <header className="shrink-0 border-b border-border px-4 py-3 sm:px-6 sm:py-4 md:px-8 md:py-5">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="min-w-0 truncate text-lg font-semibold text-foreground sm:text-xl">
+              {title}
+            </h2>
+            <div className="flex shrink-0 items-center gap-2">
+              <Input
+                ref={inputRef}
+                placeholder="Search…"
+                value={search}
+                onChange={handleSearchChange}
+                className="hidden h-9 w-56 sm:block"
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleClose}
+                aria-label="Close details dialog"
+                className="size-8 sm:size-9"
+              >
+                <X className="size-4 sm:size-5" />
+              </Button>
+            </div>
           </div>
-          <div className="flex w-full items-center gap-3 sm:w-auto">
-            <Input
-              ref={inputRef}
-              placeholder="Press / to search"
-              value={search}
-              onChange={handleSearchChange}
-              className="h-9 w-full sm:w-56"
-            />
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleClose}
-              aria-label="Close details dialog"
-            >
-              <X className="size-5" />
-            </Button>
-          </div>
+          <Input
+            placeholder="Search…"
+            value={search}
+            onChange={handleSearchChange}
+            className="mt-2 h-9 w-full sm:hidden"
+          />
         </header>
 
-        <div className="flex-1 overflow-y-auto p-0 md:p-0">
-          <table className="min-w-full table-fixed">
-            <thead className="sticky top-0 z-10 bg-background/95">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                  {sortable ? (
-                    <button
-                      type="button"
-                      className="flex items-center gap-1 text-left"
-                      onClick={() => toggleSort("name")}
-                    >
-                      {firstColumnLabel}
-                      <span className="text-[11px]/3 text-muted-foreground">
-                        {sort.key === "name"
-                          ? sort.direction === "asc"
-                            ? "▲"
-                            : "▼"
-                          : ""}
-                      </span>
-                    </button>
-                  ) : (
-                    <span className="flex items-center gap-1 text-left">
-                      {firstColumnLabel}
-                    </span>
-                  )}
-                </th>
+        <div className="flex-1 overflow-y-auto">
+          <div className="overflow-x-auto">
+            <table
+              className="w-full table-fixed"
+              style={{ minWidth: metrics.length * 100 + 240 }}
+            >
+              <colgroup>
+                <col className="w-[40%] sm:w-[45%]" />
                 {metrics.map((metric) => (
-                  <th
-                    key={metric}
-                    className="px-6 py-3 text-right text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-                  >
+                  <col key={metric} style={{ width: 100 }} />
+                ))}
+              </colgroup>
+              <thead className="sticky top-0 z-10 bg-background/95 backdrop-blur-xs">
+                <tr className="border-b border-border">
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase sm:px-6 sm:py-3">
                     {sortable ? (
                       <button
                         type="button"
-                        className="flex w-full items-center justify-end gap-1"
-                        onClick={() => toggleSort(metric as SortState["key"])}
+                        className="inline-flex items-center gap-1 text-left"
+                        onClick={() => toggleSort("name")}
                       >
-                        {metricLabels[metric] ??
-                          METRIC_LABELS[metric] ??
-                          metric}
-                        <span className="text-[11px]/3 text-muted-foreground">
-                          {sort.key === metric
-                            ? sort.direction === "asc"
-                              ? "▲"
-                              : "▼"
-                            : ""}
-                        </span>
+                        {firstColumnLabel}
+                        <SortArrow
+                          active={sort.key === "name"}
+                          direction={sort.direction}
+                        />
                       </button>
                     ) : (
-                      <span className="flex w-full items-center justify-end gap-1">
-                        {metricLabels[metric] ??
-                          METRIC_LABELS[metric] ??
-                          metric}
-                      </span>
+                      firstColumnLabel
                     )}
                   </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border bg-card text-sm">
-              {items.map((item) => (
-                <tr
-                  key={item.name}
-                  className={`transition hover:bg-accent ${onRowClick ? "cursor-pointer" : ""}`}
-                  onClick={() => onRowClick?.(item)}
-                >
-                  <td className="px-6 py-3">
-                    <div className="flex items-center gap-2">
-                      {renderLeading ? renderLeading(item) : renderFlag(item)}
-                      {getExternalLinkUrl ? (
-                        (() => {
-                          const href = getExternalLinkUrl(item)
-                          return href ? (
-                            <a
-                              href={href}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="font-medium break-all whitespace-normal text-foreground underline decoration-muted-foreground/30 hover:decoration-foreground/50"
-                            >
-                              {item.name}
-                            </a>
-                          ) : (
-                            <span className="font-medium text-foreground">
-                              {item.name}
-                            </span>
-                          )
-                        })()
+                  {metrics.map((metric) => (
+                    <th
+                      key={metric}
+                      className="px-3 py-2.5 text-right text-xs font-semibold tracking-wide whitespace-nowrap text-muted-foreground uppercase sm:px-6 sm:py-3"
+                    >
+                      {sortable ? (
+                        <button
+                          type="button"
+                          className="inline-flex w-full items-center justify-end gap-1"
+                          onClick={() => toggleSort(metric as SortState["key"])}
+                        >
+                          {metricLabels[metric] ??
+                            METRIC_LABELS[metric] ??
+                            metric}
+                          <SortArrow
+                            active={sort.key === metric}
+                            direction={sort.direction}
+                          />
+                        </button>
                       ) : (
-                        <span className="font-medium text-foreground">
-                          {item.name}
+                        <span>
+                          {metricLabels[metric] ??
+                            METRIC_LABELS[metric] ??
+                            metric}
                         </span>
                       )}
-                    </div>
-                  </td>
-                  {metrics.map((metric) => (
-                    <td key={metric} className="px-6 py-3 text-right">
-                      <span className="text-foreground tabular-nums">
-                        {formatCell(metric, item[metric])}
-                      </span>
-                    </td>
+                    </th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-border bg-card text-sm">
+                {items.map((item) => {
+                  const isPath = isPathLike(item.name)
+                  const externalHref = getExternalLinkUrl
+                    ? getExternalLinkUrl(item)
+                    : isPath
+                      ? String(item.name)
+                      : null
+
+                  return (
+                    <tr
+                      key={item.name}
+                      className={`group transition hover:bg-accent ${onRowClick ? "cursor-pointer" : ""}`}
+                      onClick={() => onRowClick?.(item)}
+                    >
+                      <td className="overflow-hidden px-4 py-2.5 sm:px-6 sm:py-3">
+                        <div className="flex items-center gap-2">
+                          {renderLeading
+                            ? renderLeading(item)
+                            : renderFlag(item)}
+                          <span
+                            className="min-w-0 flex-1 truncate font-medium text-foreground"
+                            title={String(item.name)}
+                          >
+                            {item.name}
+                          </span>
+                          {externalHref ? (
+                            <a
+                              href={externalHref}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="shrink-0 text-muted-foreground hover:text-foreground"
+                              onClick={(e) => e.stopPropagation()}
+                              title={String(item.name)}
+                            >
+                              <ExternalLink className="size-3.5" />
+                            </a>
+                          ) : null}
+                        </div>
+                      </td>
+                      {metrics.map((metric) => (
+                        <td
+                          key={metric}
+                          className="px-3 py-2.5 text-right whitespace-nowrap sm:px-6 sm:py-3"
+                        >
+                          <span className="text-foreground tabular-nums">
+                            {formatCell(metric, item[metric])}
+                          </span>
+                        </td>
+                      ))}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
 
-        <footer className="flex shrink-0 items-center justify-between border-t border-border px-6 py-3 text-sm md:px-8 md:py-4">
+        <footer className="flex shrink-0 items-center justify-between border-t border-border px-4 py-2.5 text-sm sm:px-6 sm:py-3 md:px-8 md:py-4">
           <div className="text-muted-foreground">
             {loading
               ? "Loading…"
@@ -474,6 +495,21 @@ export default function RemoteDetailsDialog({
       </div>
     </div>,
     document.body
+  )
+}
+
+function SortArrow({
+  active,
+  direction,
+}: {
+  active: boolean
+  direction: "asc" | "desc"
+}) {
+  if (!active) return <span className="text-[11px]/3 text-transparent">▼</span>
+  return (
+    <span className="text-[11px]/3 text-muted-foreground">
+      {direction === "asc" ? "▲" : "▼"}
+    </span>
   )
 }
 

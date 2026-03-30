@@ -72,6 +72,7 @@ export default function TopBar({ showCurrentVisitors }: TopBarProps) {
 }
 
 function CurrentVisitors() {
+  const site = useSiteContext()
   const { payload } = useTopStatsContext()
   const current = useMemo(() => {
     const live = payload.topStats.find(
@@ -84,7 +85,7 @@ function CurrentVisitors() {
 
   return (
     <a
-      href="/admin/analytics/live"
+      href={site.paths?.live || "/admin/analytics/live"}
       className="flex items-center gap-2 rounded-full bg-muted px-3 py-1.5 text-sm font-semibold transition hover:bg-muted/80"
     >
       <span

@@ -21,6 +21,7 @@ class AnalyticsProfile::Resolution
 
       profile = AnalyticsProfile.transaction do
         profile = resolve_candidate_profile(
+          site: visit.analytics_site,
           browser_id: browser_id,
           strong_keys: normalized_keys,
           occurred_at: activity_time,
@@ -40,10 +41,10 @@ class AnalyticsProfile::Resolution
     end
 
     private
-      def resolve_candidate_profile(browser_id:, strong_keys:, occurred_at:, current_profile_id:)
-        strong_profiles = AnalyticsProfileKey.matching_profiles(strong_keys).to_a
-        browser_profile = profile_for_last_browser_visit(browser_id)
-        current_profile = current_profile_id.present? ? AnalyticsProfile.find_by(id: current_profile_id) : nil
+      def resolve_candidate_profile(site:, browser_id:, strong_keys:, occurred_at:, current_profile_id:)
+        strong_profiles = AnalyticsProfileKey.matching_profiles(strong_keys, site: site).to_a
+        browser_profile = profile_for_last_browser_visit(browser_id, site: site)
+        current_profile = current_profile_id.present? ? AnalyticsProfile.for_analytics_site(site).find_by(id: current_profile_id) : nil
 
         if strong_profiles.any?
           canonical = choose_canonical_profile(strong_profiles)
@@ -67,6 +68,7 @@ class AnalyticsProfile::Resolution
           current_profile
         else
           AnalyticsProfile.create!(
+            analytics_site: site,
             status: AnalyticsProfile::STATUS_ANONYMOUS,
             first_seen_at: occurred_at,
             last_seen_at: occurred_at,
@@ -75,10 +77,11 @@ class AnalyticsProfile::Resolution
         end
       end
 
-      def profile_for_last_browser_visit(browser_id)
+      def profile_for_last_browser_visit(browser_id, site:)
         return nil if browser_id.blank?
 
         profile_id = Ahoy::Visit
+          .for_analytics_site(site)
           .where(browser_id: browser_id)
           .where.not(analytics_profile_id: nil)
           .where(started_at: AnalyticsProfile::BROWSER_CONTINUITY_WINDOW.ago..)
@@ -86,7 +89,7 @@ class AnalyticsProfile::Resolution
           .limit(1)
           .pick(:analytics_profile_id)
 
-        profile_id ? AnalyticsProfile.canonical.find_by(id: profile_id) : nil
+        profile_id ? AnalyticsProfile.canonical.for_analytics_site(site).find_by(id: profile_id) : nil
       end
 
       def should_merge_browser_profile?(browser_profile, canonical:, current_profile:, occurred_at:)

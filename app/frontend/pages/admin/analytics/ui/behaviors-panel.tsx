@@ -1,6 +1,7 @@
 import { Input } from "@/components/ui/input"
 
 import { useBehaviorsPanelController } from "../hooks/use-behaviors-panel-controller"
+import { analyticsScopedPath } from "../lib/path-prefix"
 import type { BottomPanelPayload, ListMetricKey } from "../types"
 import FunnelSteps from "./behaviors-panel/funnel-steps"
 import ProfilesList from "./behaviors-panel/profiles-list"
@@ -214,7 +215,7 @@ export default function BehaviorsPanel({
           open={detailsOpen}
           onOpenChange={setDetailsDialogOpen}
           title={activeTitle}
-          endpoint="/admin/analytics/behaviors"
+          endpoint={analyticsScopedPath("/behaviors")}
           extras={{
             mode,
             funnel: selectedFunnel,

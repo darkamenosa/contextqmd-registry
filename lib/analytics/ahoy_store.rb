@@ -1,52 +1,14 @@
-require Rails.root.join("lib/client_ip")
-require Rails.root.join("lib/analytics/country")
-require Rails.root.join("lib/analytics_anonymous_identity")
-require Rails.root.join("lib/analytics_browser_identity")
-require Rails.root.join("lib/analytics_visit_boundary")
+# frozen_string_literal: true
 
-module AhoyServerOwnedIdentity
-  private
-    def visit_token_helper
-      return super if Ahoy.cookies?
+require_relative "../client_ip"
+require_relative "country"
+require_relative "anonymous_identity"
+require_relative "browser_identity"
+require_relative "visit_boundary"
 
-      @visit_token_helper ||= begin
-        if AnalyticsVisitBoundary.force_new_visit?(request)
-          generate_id unless Ahoy.api_only
-        else
-          super()
-        end
-      end
-    end
-
-    def existing_visit_token
-      return super if Ahoy.cookies?
-
-      nil
-    end
-
-    def existing_visitor_token
-      return super if Ahoy.cookies?
-
-      nil
-    end
-
-    def visitor_token_helper
-      return super if Ahoy.cookies?
-
-      @visitor_token_helper ||= begin
-        token = AnalyticsAnonymousIdentity.current(request)
-        token ||= generate_id unless Ahoy.api_only
-        token
-      end
-    end
-end
-
-Ahoy::Tracker.prepend(AhoyServerOwnedIdentity)
-Ahoy.user_method = :current_identity
-
-class Ahoy::Store < Ahoy::DatabaseStore
+class Analytics::AhoyStore < Ahoy::DatabaseStore
   def visit_columns
-    super + %i[hostname screen_size browser_version browser_id country_code]
+    super + %i[hostname screen_size browser_version browser_id country_code analytics_site_id analytics_site_boundary_id]
   end
 
   def visit
@@ -75,7 +37,7 @@ class Ahoy::Store < Ahoy::DatabaseStore
     attrs = normalize_visit_attrs(data)
 
     visit = super(attrs)
-    AnalyticsVisitBoundary.consume_force_new_visit!(Current.request) if Current.request
+    Analytics::VisitBoundary.consume_force_new_visit!(Current.request) if Current.request
     visit = repair_existing_visit_after_conflict!(visit, attrs)
     resolve_analytics_profile(visit, occurred_at: visit&.started_at)
     Analytics::LiveState.broadcast_later
@@ -85,8 +47,6 @@ class Ahoy::Store < Ahoy::DatabaseStore
   def track_event(data)
     data = data.with_indifferent_access
 
-    # Plausible-style engagement only extends an active session. It should not
-    # open a brand new visit on its own after the session window has expired.
     return nil if data[:name].to_s == "engagement" && visit.nil?
 
     visit = visit_or_create(started_at: data[:time])
@@ -97,6 +57,8 @@ class Ahoy::Store < Ahoy::DatabaseStore
 
     event = event_model.new(slice_data(event_model, data))
     event.visit = visit
+    event.analytics_site_id ||= visit.analytics_site_id if event.respond_to?(:analytics_site_id)
+    event.analytics_site_boundary_id ||= visit.analytics_site_boundary_id if event.respond_to?(:analytics_site_boundary_id)
     event.time = visit.started_at if event.time < visit.started_at
 
     begin
@@ -106,7 +68,8 @@ class Ahoy::Store < Ahoy::DatabaseStore
       return nil
     end
 
-    repair_visit_from_event!(visit, event)
+    repair_visit_from_event!(visit, event, site_token: data[:site_token])
+    sync_event_site_scope!(event, visit)
     resolve_analytics_profile(visit, occurred_at: event.time)
     Analytics::LiveState.broadcast_later
     event
@@ -126,8 +89,8 @@ class Ahoy::Store < Ahoy::DatabaseStore
       req = Current.request
 
       if req
-        attrs[:visitor_token] = AnalyticsAnonymousIdentity.current(req) || attrs[:visitor_token]
-        attrs[:browser_id] ||= AnalyticsBrowserIdentity.current(req)
+        attrs[:visitor_token] = Analytics::AnonymousIdentity.current(req) || attrs[:visitor_token]
+        attrs[:browser_id] ||= Analytics::BrowserIdentity.current(req)
         attrs[:hostname] ||= req.host
         enrich_visit_technology!(attrs, req)
         normalize_request_landing_page!(attrs, req)
@@ -138,6 +101,8 @@ class Ahoy::Store < Ahoy::DatabaseStore
         attrs[:hostname] ||= host_from_url(attrs[:landing_page] || data[:landing_page])
         canonicalize_country!(attrs)
       end
+
+      merge_resolved_site_scope!(attrs, req:)
 
       attrs
     rescue StandardError
@@ -160,6 +125,7 @@ class Ahoy::Store < Ahoy::DatabaseStore
       updates[:os] = attrs[:os] if existing_visit.os.blank? && attrs[:os].present?
       updates[:os_version] = attrs[:os_version] if existing_visit.os_version.blank? && attrs[:os_version].present?
       updates[:device_type] = attrs[:device_type] if existing_visit.device_type.blank? && attrs[:device_type].present?
+      merge_resolved_site_scope!(updates, req: Current.request, fallback_visit: existing_visit) if site_scope_missing?(existing_visit)
       if normalized_internal_referrer?(existing_visit.referring_domain, updates[:hostname] || existing_visit.hostname)
         updates[:referrer] = nil if existing_visit.referrer.present?
         updates[:referring_domain] = nil if existing_visit.referring_domain.present?
@@ -172,11 +138,10 @@ class Ahoy::Store < Ahoy::DatabaseStore
       )
       existing_visit
     rescue StandardError
-      # never block tracking
       visit
     end
 
-    def repair_visit_from_event!(visit, event)
+    def repair_visit_from_event!(visit, event, site_token: nil)
       props = event.properties.to_h.with_indifferent_access
       updates = {}
       enrich_visit_technology!(updates, Current.request) if Current.request && visit_technology_missing?(visit)
@@ -187,9 +152,18 @@ class Ahoy::Store < Ahoy::DatabaseStore
       end
 
       url = props[:url]
-      if url.present? && visit_needs_landing_page_fix?(visit)
-        updates[:landing_page] = url
-        updates[:hostname] = host_from_url(url) if visit.hostname.blank?
+      if url.present?
+        updates[:landing_page] = url if visit_needs_landing_page_fix?(visit) || site_token.present?
+        if site_token.present? || visit.hostname.blank?
+          resolved_host = host_from_url(url)
+          updates[:hostname] = resolved_host if resolved_host.present?
+        end
+      end
+
+      if updates.key?(:landing_page) || updates.key?(:hostname) || site_scope_missing?(visit) || site_token.present?
+        updates[:site_token] = site_token if site_token.present?
+        merge_resolved_site_scope!(updates, req: Current.request, fallback_visit: visit)
+        updates.delete(:site_token)
       end
 
       persist_visit_repairs!(
@@ -198,7 +172,7 @@ class Ahoy::Store < Ahoy::DatabaseStore
         refresh_source_dimensions: updates.key?(:landing_page) || updates.key?(:hostname)
       )
     rescue StandardError
-      # never block ingestion
+      nil
     end
 
     def persist_visit_repairs!(visit, updates, refresh_source_dimensions: false)
@@ -293,14 +267,15 @@ class Ahoy::Store < Ahoy::DatabaseStore
       visit.source_label.blank? || visit.source_kind.blank? || visit.source_channel.blank?
     end
 
+    def site_scope_missing?(visit)
+      visit.respond_to?(:analytics_site_id) && visit.analytics_site_id.blank?
+    end
+
     def normalized_device_type(detector)
       case detector.device_type
-      when "smartphone"
-        "Mobile"
-      when "tv"
-        "TV"
-      else
-        detector.device_type.to_s.presence&.titleize
+      when "smartphone" then "Mobile"
+      when "tv" then "TV"
+      else detector.device_type.to_s.presence&.titleize
       end
     end
 
@@ -335,19 +310,17 @@ class Ahoy::Store < Ahoy::DatabaseStore
 
     def same_site_host?(ref_host, site_host)
       return false if ref_host.to_s.strip.empty? || site_host.to_s.strip.empty?
-      a = ref_host.to_s.downcase.sub(/^www\./, "")
-      b = site_host.to_s.downcase.sub(/^www\./, "")
-      a == b
+
+      ref_host.to_s.downcase.sub(/^www\./, "") == site_host.to_s.downcase.sub(/^www\./, "")
     end
 
     def local_host?(host)
       h = host.to_s.downcase
       return true if h == "localhost"
-      begin
-        ip = IPAddr.new(h) rescue nil
-        return true if ip && (ip.loopback? || ip.to_s == "0.0.0.0" || ip.to_s == "::1")
-      rescue StandardError
-      end
+
+      ip = IPAddr.new(h) rescue nil
+      ip && (ip.loopback? || ip.to_s == "0.0.0.0" || ip.to_s == "::1")
+    rescue StandardError
       false
     end
 
@@ -357,8 +330,98 @@ class Ahoy::Store < Ahoy::DatabaseStore
     end
 
     def anonymous_visitor_tokens
-      tokens = AnalyticsAnonymousIdentity.tokens(request)
+      tokens = Analytics::AnonymousIdentity.tokens(request)
       tokens.presence || [ ahoy.visitor_token ].compact
+    end
+
+    def merge_resolved_site_scope!(attrs, req: nil, fallback_visit: nil)
+      tracked_url = attrs[:landing_page].presence || fallback_visit&.landing_page
+      resolved = resolved_site_scope(
+        host: host_from_url(tracked_url) || attrs[:hostname].presence || fallback_visit&.hostname || req&.host,
+        url: tracked_url,
+        path: attrs[:path],
+        site_token: attrs[:site_token].presence
+      )
+      return attrs if resolved.blank?
+
+      attrs[:analytics_site_id] ||= resolved.fetch(:analytics_site_id)
+      attrs[:analytics_site_boundary_id] ||= resolved.fetch(:analytics_site_boundary_id)
+      attrs
+    end
+
+    def resolved_site_scope(host:, url: nil, path: nil, site_token: nil)
+      normalized_path = path.presence || path_from_url(url)
+      boundary_resolution = Analytics::TrackingSiteResolver.resolve(host:, path: normalized_path, url:)
+
+      if site_token.present?
+        token_resolution = Analytics::TrackerSiteToken.verify(
+          site_token,
+          host: host,
+          path: normalized_path,
+          environment: Rails.env
+        )
+
+        if token_resolution.blank?
+          log_invalid_site_token(host:, path: normalized_path)
+          return {}
+        end
+
+        if boundary_resolution.present? && boundary_resolution.site != token_resolution.site
+          log_site_token_mismatch(
+            token_site: token_resolution.site,
+            boundary_site: boundary_resolution.site,
+            host: host,
+            path: normalized_path
+          )
+          return {}
+        end
+
+        resolution = boundary_resolution.presence || token_resolution
+      else
+        resolution = boundary_resolution
+      end
+
+      return {} unless resolution
+
+      {
+        analytics_site_id: resolution.site.id,
+        analytics_site_boundary_id: resolution.boundary&.id
+      }
+    end
+
+    def path_from_url(url)
+      return nil if url.blank?
+
+      URI.parse(url.to_s).path
+    rescue URI::InvalidURIError
+      nil
+    end
+
+    def log_invalid_site_token(host:, path:)
+      Rails.logger.warn("[analytics] rejected invalid site token for host=#{host.inspect} path=#{path.inspect}")
+    end
+
+    def log_site_token_mismatch(token_site:, boundary_site:, host:, path:)
+      Rails.logger.warn(
+        "[analytics] rejected mismatched site token token_site=#{token_site.public_id.inspect} boundary_site=#{boundary_site.public_id.inspect} host=#{host.inspect} path=#{path.inspect}"
+      )
+    end
+
+    def sync_event_site_scope!(event, visit)
+      return unless event.respond_to?(:analytics_site_id)
+      return if event.analytics_site_id.present? && event.analytics_site_boundary_id.present?
+
+      updates = {}
+      updates[:analytics_site_id] = visit.analytics_site_id if event.analytics_site_id.blank? && visit.analytics_site_id.present?
+      if event.analytics_site_boundary_id.blank? && visit.analytics_site_boundary_id.present?
+        updates[:analytics_site_boundary_id] = visit.analytics_site_boundary_id
+      end
+      return if updates.empty?
+
+      event.update_columns(updates)
+      event.assign_attributes(updates)
+    rescue StandardError
+      nil
     end
 
     def resolve_analytics_profile(visit, occurred_at:)
@@ -371,25 +434,19 @@ class Ahoy::Store < Ahoy::DatabaseStore
         identity_snapshot: identity_snapshot_for(visit)
       )
     rescue StandardError
-      # never block tracking
+      nil
     end
 
     def browser_id_for(visit)
-      browser_id = AnalyticsBrowserIdentity.current(request)
+      browser_id = Analytics::BrowserIdentity.current(request)
       return browser_id if browser_id.present?
 
-      if visit.respond_to?(:has_attribute?) && visit.has_attribute?(:browser_id)
-        visit.browser_id
-      end
+      visit.browser_id if visit.respond_to?(:has_attribute?) && visit.has_attribute?(:browser_id)
     end
 
     def strong_keys_for(visit)
       keys = {}
-
-      if visit.user_id.present?
-        keys[:identity_id] = visit.user_id
-      end
-
+      keys[:identity_id] = visit.user_id if visit.user_id.present?
       keys
     end
 
@@ -399,8 +456,6 @@ class Ahoy::Store < Ahoy::DatabaseStore
           visit.user
         elsif Current.identity.present? && Current.identity.id == visit.user_id
           Current.identity
-        else
-          nil
         end
 
       return {} if identity.blank?
@@ -414,50 +469,6 @@ class Ahoy::Store < Ahoy::DatabaseStore
     end
 
     def force_new_visit_boundary?
-      request.present? && AnalyticsVisitBoundary.force_new_visit?(request)
+      request.present? && Analytics::VisitBoundary.force_new_visit?(request)
     end
-end
-
-# JavaScript tracking enabled
-Ahoy.api = true
-Ahoy.cookies = :none
-Ahoy.mask_ips = true
-Ahoy.track_bots = false
-Ahoy.geocode = false
-Ahoy.visit_duration = 30.minutes
-Ahoy.quiet = false
-Ahoy.server_side_visits = :when_needed
-
-Ahoy.exclude_method = lambda do |controller, request|
-  req = request || controller&.request
-  return true if req.nil?
-  path = req.path.to_s
-
-  # Allow Ahoy API events/visits to be recorded
-  return false if path.start_with?("/ahoy")
-
-  # Exclude admin area and internal paths
-  path.start_with?("/admin", "/rails/", "/assets/", "/up", "/jobs", "/webhooks")
-end
-
-# Ensure Ahoy controllers skip CSRF
-Rails.application.config.to_prepare do
-  if defined?(Ahoy::VisitsController)
-    Ahoy::VisitsController.skip_forgery_protection
-    Ahoy::VisitsController.before_action do
-      AnalyticsBrowserIdentity.ensure!(request, cookies:)
-    end
-    Ahoy::VisitsController.around_action do |controller, action|
-      Current.set(request: controller.request) { action.call }
-    end
-  end
-  if defined?(Ahoy::EventsController)
-    Ahoy::EventsController.skip_forgery_protection
-    Ahoy::EventsController.before_action do
-      AnalyticsBrowserIdentity.ensure!(request, cookies:)
-    end
-    Ahoy::EventsController.around_action do |controller, action|
-      Current.set(request: controller.request) { action.call }
-    end
-  end
 end

@@ -9,6 +9,7 @@ import {
 } from "react"
 import { Bug, Mail } from "lucide-react"
 
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 
 import {
@@ -40,6 +41,7 @@ import {
   hasPanelModeSearchParam,
   inferSourcesModeFromFilters,
 } from "../lib/panel-mode"
+import { analyticsScopedPath } from "../lib/path-prefix"
 import {
   analyticsPreferenceKey,
   writeAnalyticsPreference,
@@ -177,8 +179,11 @@ export default function SourcesPanel({
   const [termsData, setTermsData] = useState<ListPayload | null>(null)
   const [termsLoading, setTermsLoading] = useState(false)
   const [termsError, setTermsError] = useState<string | null>(null)
+  const [termsErrorCode, setTermsErrorCode] = useState<string | null>(null)
   const refRequestIdRef = useRef(0)
   const termsRequestIdRef = useRef(0)
+  const searchTermsStatus = termsData?.meta.searchConsole
+  const selectedSearchTermsPage = query.filters.page?.trim() || null
 
   useEffect(() => {
     if (mode !== "all" || !activeSource) {
@@ -210,6 +215,7 @@ export default function SourcesPanel({
     if (mode !== "all" || !isGoogleActive) {
       startTransition(() => setTermsData(null))
       startTransition(() => setTermsError(null))
+      startTransition(() => setTermsErrorCode(null))
       startTransition(() => setTermsLoading(false))
       return
     }
@@ -218,16 +224,19 @@ export default function SourcesPanel({
     termsRequestIdRef.current = requestId
     startTransition(() => setTermsLoading(true))
     startTransition(() => setTermsError(null))
+    startTransition(() => setTermsErrorCode(null))
     fetchSearchTerms(baseQuery, {}, controller.signal)
       .then((payload) => {
         if (termsRequestIdRef.current !== requestId) return
         setTermsData(payload)
         setTermsError(null)
+        setTermsErrorCode(null)
       })
       .catch((error) => {
         if (error.name !== "AbortError") {
           if (termsRequestIdRef.current !== requestId) return
           setTermsData(null)
+          setTermsErrorCode(analyticsApiErrorCode(error))
           setTermsError(searchTermsErrorMessage(error))
           console.error(error)
         }
@@ -243,6 +252,38 @@ export default function SourcesPanel({
     () => (data.metrics.includes("visitors") ? "visitors" : data.metrics[0]),
     [data.metrics]
   )
+
+  const limitedTermsData = useMemo((): ListPayload | null => {
+    if (!termsData) return null
+
+    const metricKey = termsData.metrics[0] ?? "visitors"
+    const sorted = [...termsData.results].sort((a, b) => {
+      const av = Number(a[metricKey] ?? 0)
+      const bv = Number(b[metricKey] ?? 0)
+      if (av === bv) return String(a.name).localeCompare(String(b.name))
+      return bv - av
+    })
+
+    return {
+      ...termsData,
+      results: sorted.slice(0, 9),
+      meta: { ...termsData.meta, hasMore: termsData.results.length > 9 },
+    }
+  }, [termsData])
+
+  const setLast30Days = useCallback(() => {
+    updateQuery((current) => ({
+      ...current,
+      period: "30d",
+      comparison: null,
+      date: null,
+      from: null,
+      to: null,
+      compareFrom: null,
+      compareTo: null,
+      matchDayOfWeek: false,
+    }))
+  }, [updateQuery])
 
   // Card title follows Plausible: "Top Channels" on card, but modal uses
   // "Top Acquisition Channels". For other tabs, both are identical.
@@ -397,8 +438,19 @@ export default function SourcesPanel({
           <PanelListSkeleton firstColumnLabel="Search term" />
         ) : termsData && termsData.results.length > 0 ? (
           <>
+            {searchTermsStatusNote(searchTermsStatus)}
             <MetricTable
-              data={{ ...termsData, metrics: ["visitors"] as ListMetricKey[] }}
+              data={
+                limitedTermsData
+                  ? {
+                      ...limitedTermsData,
+                      metrics: ["visitors"],
+                    }
+                  : {
+                      ...termsData,
+                      metrics: ["visitors"],
+                    }
+              }
               firstColumnLabel="Search term"
               displayBars={false}
               barColorTheme="cyan"
@@ -425,10 +477,41 @@ export default function SourcesPanel({
           <PanelEmptyState>
             <div className="flex flex-col items-center gap-4 text-center">
               <div className="text-lg font-semibold text-foreground">
-                Search Terms
+                {termsErrorCode === "period_too_recent"
+                  ? "Select a different period"
+                  : "Search Terms"}
               </div>
               <div className="max-w-prose text-sm text-muted-foreground">
                 {termsError}
+              </div>
+              {termsErrorCode === "period_too_recent" ? (
+                <Button onClick={setLast30Days}>Search last 30 days</Button>
+              ) : null}
+            </div>
+          </PanelEmptyState>
+        ) : searchTermsStatus?.syncInProgress ? (
+          <PanelEmptyState>
+            <div className="flex flex-col items-center gap-4 text-center">
+              <div className="text-lg font-semibold text-foreground">
+                Search Terms
+              </div>
+              <div className="max-w-prose text-sm text-muted-foreground">
+                Search Console sync is in progress for{" "}
+                {searchTermsStatus.refreshWindowFrom ?? "?"} to{" "}
+                {searchTermsStatus.refreshWindowTo ?? "?"}. Results will appear
+                after the sync completes.
+              </div>
+            </div>
+          </PanelEmptyState>
+        ) : searchTermsStatus?.syncStale ? (
+          <PanelEmptyState>
+            <div className="flex flex-col items-center gap-4 text-center">
+              <div className="text-lg font-semibold text-foreground">
+                Search Terms
+              </div>
+              <div className="max-w-prose text-sm text-muted-foreground">
+                Search Console data for this site needs a refresh. Open
+                analytics settings to retry the sync, then come back here.
               </div>
             </div>
           </PanelEmptyState>
@@ -436,11 +519,24 @@ export default function SourcesPanel({
           <PanelEmptyState>
             <div className="flex flex-col items-center gap-4 text-center">
               <div className="text-lg font-semibold text-foreground">
-                Search Terms
+                {selectedSearchTermsPage
+                  ? "No keywords found for filtered paths"
+                  : "Search Terms"}
               </div>
               <div className="max-w-prose text-sm text-muted-foreground">
-                No search terms found for this period. This feature is in
-                development.
+                {selectedSearchTermsPage ? (
+                  <>
+                    No search terms rank for the selected path:
+                    <br />
+                    <span className="font-medium text-foreground">
+                      {selectedSearchTermsPage}
+                    </span>
+                    <br />
+                    Try a different path or remove the filter.
+                  </>
+                ) : (
+                  "No Google search terms matched this period and filter set."
+                )}
               </div>
             </div>
           </PanelEmptyState>
@@ -551,20 +647,24 @@ export default function SourcesPanel({
             // Ignore history errors when syncing modal state.
           }
         }}
-        title={isGoogleActive ? "Google Search Terms" : dialogTitle}
+        title={isGoogleActive ? "Google search terms" : dialogTitle}
         endpoint={
           isGoogleActive
-            ? "/admin/analytics/search_terms"
-            : "/admin/analytics/sources"
+            ? analyticsScopedPath("/search_terms")
+            : analyticsScopedPath("/sources")
         }
         extras={isGoogleActive ? {} : { mode }}
         firstColumnLabel={isGoogleActive ? "Search term" : firstColumnLabel}
-        defaultSortKey={isGoogleActive ? undefined : "visitors"}
-        onRowClick={(item) => {
-          const filterKey = filterKeyForMode(mode)
-          applyFilter(filterKey, String(item.name))
-          closeDialog()
-        }}
+        defaultSortKey={isGoogleActive ? "visitors" : "visitors"}
+        onRowClick={
+          isGoogleActive
+            ? undefined
+            : (item) => {
+                const filterKey = filterKeyForMode(mode)
+                applyFilter(filterKey, String(item.name))
+                closeDialog()
+              }
+        }
         renderLeading={
           isGoogleActive
             ? undefined
@@ -572,7 +672,7 @@ export default function SourcesPanel({
               ? renderSourceIcon
               : undefined
         }
-        sortable={!isGoogleActive}
+        sortable
       />
 
       {/* Referrer Details modal */}
@@ -594,7 +694,7 @@ export default function SourcesPanel({
             }
           }}
           title={"Referrer Drilldown"}
-          endpoint={"/admin/analytics/referrers"}
+          endpoint={analyticsScopedPath("/referrers")}
           extras={{ source: activeSource }}
           firstColumnLabel={"Referrer"}
           defaultSortKey={"visitors"}
@@ -632,12 +732,52 @@ function searchTermsErrorMessage(error: unknown) {
     case "not_configured":
       return "Google Search Console is not configured yet. Enable it in analytics settings to load search terms."
     case "unsupported_filters":
-      return "Search terms do not support the current filters. Remove source, referrer, UTM, or page filters and try again."
+      return "Google search terms support page, country, and device filters only. Remove entry page, exit page, referrer, UTM, browser, OS, custom property, or other non-Google dimensions and try again."
     case "period_too_recent":
-      return "Search terms are not available for very recent periods. Try a date range that starts at least three days ago."
+      return "Google search terms are not available for very recent periods. Try a date range ending at least three days ago."
     default:
       return analyticsApiErrorMessage(error) ?? "Failed to load search terms."
   }
+}
+
+function searchTermsStatusNote(
+  status: ListPayload["meta"]["searchConsole"] | undefined
+) {
+  if (!status?.configured) return null
+
+  if (status.syncInProgress) {
+    return (
+      <Alert>
+        <AlertDescription>
+          Search Console sync is in progress for{" "}
+          {status.refreshWindowFrom ?? "?"} to {status.refreshWindowTo ?? "?"}.
+        </AlertDescription>
+      </Alert>
+    )
+  }
+
+  if (status.syncError) {
+    return (
+      <Alert>
+        <AlertDescription>
+          Search Console sync last failed: {status.syncError}
+        </AlertDescription>
+      </Alert>
+    )
+  }
+
+  if (status.syncStale) {
+    return (
+      <Alert>
+        <AlertDescription>
+          Search Console data is stale. The latest refresh window ends on{" "}
+          {status.refreshWindowTo ?? "?"}.
+        </AlertDescription>
+      </Alert>
+    )
+  }
+
+  return null
 }
 
 function shouldShowIcon(mode: string) {

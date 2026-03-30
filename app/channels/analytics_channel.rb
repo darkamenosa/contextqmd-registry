@@ -7,14 +7,15 @@ class AnalyticsChannel < ApplicationCable::Channel
       return
     end
 
-    stream_from Analytics::LiveState.broadcast_stream(site: resolved_site)
-  end
+    stream = Analytics::LiveState.resolve_subscription_stream(
+      params[:subscription_token]
+    )
 
-  private
-    def resolved_site
-      site_id = params[:site_id].presence
-      return nil if site_id.blank?
-
-      Analytics::Site.find_by(public_id: site_id)
+    if stream.blank?
+      reject
+      return
     end
+
+    stream_from stream
+  end
 end

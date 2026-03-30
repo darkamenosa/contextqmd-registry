@@ -43,15 +43,18 @@ export function SessionsByLocation({
       </CardHeader>
       <CardContent className="flex flex-col gap-2.5 px-4 pt-2 pb-4">
         {sessions.map((session, i) => {
-          const locationLabel = formatCompactLocation({
-            city: session.city,
-            region: session.region,
-            country:
-              session.country && session.country !== "Unknown"
-                ? session.country
-                : null,
-            countryCode: session.countryCode,
-          })
+          const locationLabel = formatCompactLocation(
+            {
+              city: session.city,
+              region: session.region,
+              country:
+                session.country && session.country !== "Unknown"
+                  ? session.country
+                  : null,
+              countryCode: session.countryCode,
+            },
+            { appendCountryCode: true }
+          )
 
           return (
             <div key={i} className="flex flex-col gap-2">

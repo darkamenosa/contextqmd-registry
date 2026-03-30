@@ -16,6 +16,8 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
   setup do
     Ahoy::Event.delete_all
     Ahoy::Visit.delete_all
+    Analytics::SiteBoundary.delete_all
+    Analytics::Site.delete_all
   end
 
   test "cookieless event ingestion reuses the recent server-side visit without client tokens" do
@@ -64,7 +66,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :success
-    assert_includes response.headers["Set-Cookie"].to_s, AnalyticsBrowserIdentity::COOKIE_NAME
+    assert_includes response.headers["Set-Cookie"].to_s, Analytics::BrowserIdentity::COOKIE_NAME
   end
 
   test "signed-in visits persist identity name and email on the analytics profile" do
@@ -158,6 +160,47 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     assert_equal "Mac", visit.os
     assert_equal "10.15.7", visit.os_version
     assert_equal "Desktop", visit.device_type
+  end
+
+  test "server-side tracking assigns analytics site scope from the request host" do
+    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    boundary = site.boundaries.find_by!(primary: true)
+
+    host! "docs.example.test"
+
+    perform_analytics_jobs do
+      get root_path, headers: BROWSER_HEADERS
+    end
+
+    assert_response :success
+
+    visit = Ahoy::Visit.order(:id).last
+    event = Ahoy::Event.order(:id).last
+
+    assert_equal site.id, visit.analytics_site_id
+    assert_equal boundary.id, visit.analytics_site_boundary_id
+    assert_equal site.id, event.analytics_site_id
+    assert_equal boundary.id, event.analytics_site_boundary_id
+  end
+
+  test "server-side tracking uses the bootstrapped default analytics site in singleton mode" do
+    host! "localhost:3000"
+    site = Analytics::Bootstrap.ensure_default_site!(host: "localhost")
+
+    perform_analytics_jobs do
+      get root_path, headers: BROWSER_HEADERS
+    end
+
+    assert_response :success
+
+    visit = Ahoy::Visit.order(:id).last
+    event = Ahoy::Event.order(:id).last
+
+    assert_not_nil site
+    assert_equal "localhost", site.canonical_hostname
+    assert_equal site.id, visit.analytics_site_id
+    assert_equal site.id, event.analytics_site_id
+    assert_equal site.boundaries.find_by(primary: true)&.id, visit.analytics_site_boundary_id
   end
 
   test "separate browsers with the same ip and user agent get distinct anonymous visits" do
@@ -268,7 +311,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
       headers: BROWSER_HEADERS
 
     assert_response :success
-    assert_includes response.headers["Set-Cookie"].to_s, AnalyticsBrowserIdentity::COOKIE_NAME
+    assert_includes response.headers["Set-Cookie"].to_s, Analytics::BrowserIdentity::COOKIE_NAME
   end
 
   test "cookieless event ingestion reuses the recent visit across daily rotation" do

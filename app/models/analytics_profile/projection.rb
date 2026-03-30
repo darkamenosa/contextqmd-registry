@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "uri"
-require Rails.root.join("lib/analytics/country")
 
 class AnalyticsProfile::Projection
   class << self
@@ -32,7 +31,7 @@ class AnalyticsProfile::Projection
       return unless available?
       return if profile.blank?
 
-      visits = Ahoy::Visit.where(analytics_profile_id: profile.id).order(started_at: :desc, id: :desc).to_a
+      visits = Ahoy::Visit.for_analytics_site(profile.analytics_site).where(analytics_profile_id: profile.id).order(started_at: :desc, id: :desc).to_a
       visit_ids = visits.map(&:id)
 
       visits.each { |visit| upsert_session!(visit) }
@@ -50,7 +49,7 @@ class AnalyticsProfile::Projection
       return if profile.blank?
 
       summary = AnalyticsProfileSummary.find_by(analytics_profile_id: profile.id)
-      session_count = AnalyticsProfileSession.where(analytics_profile_id: profile.id).count
+      session_count = AnalyticsProfileSession.for_analytics_site(profile.analytics_site).where(analytics_profile_id: profile.id).count
 
       if summary.nil? ||
           summary.total_sessions != session_count ||
@@ -66,6 +65,7 @@ class AnalyticsProfile::Projection
 
       AnalyticsProfileSession.where(analytics_profile_id: from_profile_id).update_all(
         analytics_profile_id: to_profile_id,
+        analytics_site_id: AnalyticsProfile.find_by(id: to_profile_id)&.analytics_site_id,
         updated_at: Time.current
       )
       AnalyticsProfileSummary.where(analytics_profile_id: from_profile_id).delete_all
@@ -96,6 +96,7 @@ class AnalyticsProfile::Projection
           country_code: visit.respond_to?(:country_code) ? visit.country_code : nil
         )
         session.analytics_profile_id = visit.analytics_profile_id
+        session.analytics_site_id = visit.analytics_site_id
         session.started_at = visit.started_at || last_event_at || Time.current
         session.last_event_at = last_event_at
         session.country = resolved_country.name
@@ -123,9 +124,9 @@ class AnalyticsProfile::Projection
         profile = AnalyticsProfile.find_by(id: profile_id)
         return if profile.blank?
 
-        sessions = AnalyticsProfileSession.where(analytics_profile_id: profile_id).order(started_at: :desc, id: :desc).to_a
+        sessions = AnalyticsProfileSession.for_analytics_site(profile.analytics_site).where(analytics_profile_id: profile_id).order(started_at: :desc, id: :desc).to_a
         if sessions.empty?
-          AnalyticsProfileSummary.where(analytics_profile_id: profile_id).delete_all
+          AnalyticsProfileSummary.for_analytics_site(profile.analytics_site).where(analytics_profile_id: profile_id).delete_all
           return
         end
 
@@ -134,11 +135,12 @@ class AnalyticsProfile::Projection
         top_pages = top_pages_for_visits(visit_ids)
 
         summary = AnalyticsProfileSummary.find_or_initialize_by(analytics_profile_id: profile_id)
+        summary.analytics_site_id = profile.analytics_site_id
         summary.first_seen_at = [ profile.first_seen_at, sessions.map(&:started_at).compact.min ].compact.min || profile.first_seen_at || Time.current
         summary.last_seen_at = [ profile.last_seen_at, sessions.map(&:started_at).compact.max ].compact.max || profile.last_seen_at || Time.current
         summary.last_event_at = [ profile.last_event_at, sessions.map(&:last_event_at).compact.max ].compact.max
         summary.latest_visit_id = latest_session.visit_id
-        summary.total_visits = Ahoy::Visit.where(analytics_profile_id: profile_id).count
+        summary.total_visits = Ahoy::Visit.for_analytics_site(profile.analytics_site).where(analytics_profile_id: profile_id).count
         summary.total_sessions = sessions.length
         summary.total_pageviews = sessions.sum(&:pageviews_count)
         summary.total_events = sessions.sum(&:events_count)
@@ -178,6 +180,7 @@ class AnalyticsProfile::Projection
         return [] if visit_ids.empty?
 
         Ahoy::Event
+          .for_analytics_site(::Analytics::Current.site)
           .where(visit_id: visit_ids, name: "pageview")
           .group(Arel.sql("ahoy_events.properties->>'page'"))
           .order(Arel.sql("COUNT(*) DESC"))

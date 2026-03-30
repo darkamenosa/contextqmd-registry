@@ -9,7 +9,7 @@ class Analytics::ProfileSessionsDatasetQuery::Postgres < Analytics::DatasetQuery
 
   def page_records
     @page_records ||= begin
-      scope = AnalyticsProfileSession.where(analytics_profile_id: profile.id)
+      scope = AnalyticsProfileSession.for_analytics_site(profile.analytics_site).where(analytics_profile_id: profile.id)
       scope = scope.where(started_at: date.beginning_of_day..date.end_of_day) if date
       records, @has_more = fetch_page(
         scope.order(started_at: :desc, id: :desc)

@@ -80,3 +80,31 @@ test("LiveEventsPanel shows only the latest 50 events", async () => {
   assert.match(markup, /\/page-11"/)
   assert.match(markup, /\/page-60"/)
 })
+
+test("LiveEventsPanel includes the country code next to flagged locations", async () => {
+  const markup = await renderLiveEventsPanel([
+    {
+      id: 1,
+      sessionId: "session-1",
+      visitId: 1,
+      profileId: null,
+      name: "magenta perch",
+      status: "anonymous",
+      identified: false,
+      active: true,
+      eventName: "pageview",
+      label: "Viewed page /libraries/googletwo",
+      occurredAt: "2026-03-28T10:00:00Z",
+      page: "/libraries/googletwo",
+      city: "Warsaw",
+      region: "Mazovia",
+      country: "Poland",
+      countryCode: "PL",
+      totalVisits: 1,
+      scopedVisits: 1,
+    },
+  ])
+
+  assert.match(markup, /🇵🇱/)
+  assert.match(markup, /Warsaw, Mazovia, PL/)
+})

@@ -69,14 +69,13 @@
     <%= vite_client_tag %>
     <%= vite_typescript_tag "inertia.tsx" %>
     <script>
-      window.analyticsConfig = <%= raw({
-        useCookies: Rails.configuration.x.analytics.use_cookies,
-        visitDurationMinutes: Rails.configuration.x.analytics.visit_duration_minutes,
-        useBeaconForEvents: Rails.configuration.x.analytics.use_beacon_for_events,
-        trackVisits: false,
-        initialPageviewTracked: analytics_initial_pageview_tracked?,
-        initialPageKey: analytics_initial_page_key
-      }.to_json) %>;
+      window.analyticsConfig = <%= raw(
+        Analytics::TrackerBootstrap.build(
+          request: request,
+          initial_pageview_tracked: analytics_initial_pageview_tracked?,
+          initial_page_key: analytics_initial_page_key
+        ).to_json
+      ) %>;
     </script>
     <%= vite_typescript_tag "analytics.ts" %>
     <%= inertia_ssr_head %>

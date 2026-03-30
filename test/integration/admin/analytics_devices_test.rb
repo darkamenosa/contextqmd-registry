@@ -8,6 +8,8 @@ class Admin::AnalyticsDevicesTest < ActionDispatch::IntegrationTest
   setup do
     Ahoy::Event.delete_all
     Ahoy::Visit.delete_all
+    Analytics::SiteBoundary.delete_all
+    Analytics::Site.delete_all
   end
 
   test "devices endpoint returns real browser version rows with browser metadata" do
@@ -16,6 +18,7 @@ class Admin::AnalyticsDevicesTest < ActionDispatch::IntegrationTest
       name: "Staff Devices Browser"
     )
     staff_identity.update!(staff: true)
+    site = Analytics::Bootstrap.ensure_default_site!(host: "localhost")
 
     Ahoy::Visit.create!(
       visit_token: SecureRandom.hex(16),
@@ -34,7 +37,7 @@ class Admin::AnalyticsDevicesTest < ActionDispatch::IntegrationTest
 
     sign_in(staff_identity)
 
-    get "/admin/analytics/devices",
+    get devices_path_for(site),
         params: { period: "day", mode: "browser-versions", with_imported: "false" },
         headers: { "ACCEPT" => "application/json" }
 
@@ -56,6 +59,7 @@ class Admin::AnalyticsDevicesTest < ActionDispatch::IntegrationTest
       name: "Staff Devices Distinct Versions"
     )
     staff_identity.update!(staff: true)
+    site = Analytics::Bootstrap.ensure_default_site!(host: "localhost")
 
     Ahoy::Visit.create!(
       visit_token: SecureRandom.hex(16),
@@ -74,7 +78,7 @@ class Admin::AnalyticsDevicesTest < ActionDispatch::IntegrationTest
 
     sign_in(staff_identity)
 
-    get "/admin/analytics/devices",
+    get devices_path_for(site),
         params: { period: "day", mode: "browser-versions", with_imported: "false" },
         headers: { "ACCEPT" => "application/json" }
 
@@ -94,6 +98,7 @@ class Admin::AnalyticsDevicesTest < ActionDispatch::IntegrationTest
       name: "Staff Devices Version Filters"
     )
     staff_identity.update!(staff: true)
+    site = Analytics::Bootstrap.ensure_default_site!(host: "localhost")
 
     Ahoy::Visit.create!(
       visit_token: SecureRandom.hex(16),
@@ -116,14 +121,14 @@ class Admin::AnalyticsDevicesTest < ActionDispatch::IntegrationTest
 
     sign_in(staff_identity)
 
-    get "/admin/analytics/devices?period=day&mode=browser-versions&f=is,browser_version,136.0",
+    get "#{devices_path_for(site)}?period=day&mode=browser-versions&f=is,browser_version,136.0",
         headers: { "ACCEPT" => "application/json" }
 
     assert_response :success
     browser_rows = JSON.parse(response.body).fetch("results")
     assert_equal [ "136.0" ], browser_rows.map { |row| row.fetch("name") }
 
-    get "/admin/analytics/devices?period=day&mode=operating-system-versions&f=is,os_version,14.4",
+    get "#{devices_path_for(site)}?period=day&mode=operating-system-versions&f=is,os_version,14.4",
         headers: { "ACCEPT" => "application/json" }
 
     assert_response :success
@@ -140,6 +145,7 @@ class Admin::AnalyticsDevicesTest < ActionDispatch::IntegrationTest
       name: "Staff Devices Base Modes"
     )
     staff_identity.update!(staff: true)
+    site = Analytics::Bootstrap.ensure_default_site!(host: "localhost")
 
     Ahoy::Visit.create!(
       visit_token: SecureRandom.hex(16),
@@ -160,7 +166,7 @@ class Admin::AnalyticsDevicesTest < ActionDispatch::IntegrationTest
 
     sign_in(staff_identity)
 
-    get "/admin/analytics/devices",
+    get devices_path_for(site),
         params: { period: "day", mode: "operating-systems", with_imported: "false" },
         headers: { "ACCEPT" => "application/json" }
 
@@ -168,7 +174,7 @@ class Admin::AnalyticsDevicesTest < ActionDispatch::IntegrationTest
     os_rows = JSON.parse(response.body).fetch("results")
     assert_equal [ "Mac", "iOS" ], os_rows.map { |row| row.fetch("name") }.sort
 
-    get "/admin/analytics/devices",
+    get devices_path_for(site),
         params: { period: "day", mode: "screen-sizes", with_imported: "false" },
         headers: { "ACCEPT" => "application/json" }
 
@@ -178,4 +184,9 @@ class Admin::AnalyticsDevicesTest < ActionDispatch::IntegrationTest
   ensure
     Current.reset
   end
+
+  private
+    def devices_path_for(site)
+      "/admin/analytics/sites/#{site.public_id}/devices"
+    end
 end

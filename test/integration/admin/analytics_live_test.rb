@@ -17,6 +17,8 @@ class Admin::AnalyticsLiveTest < ActionDispatch::IntegrationTest
     Ahoy::Visit.delete_all
     AnalyticsProfileSession.delete_all if defined?(AnalyticsProfileSession)
     AnalyticsProfileSummary.delete_all if defined?(AnalyticsProfileSummary)
+    Analytics::SiteBoundary.delete_all if defined?(Analytics::SiteBoundary)
+    Analytics::Site.delete_all if defined?(Analytics::Site)
     AnalyticsProfileKey.delete_all
     AnalyticsProfile.delete_all
   end
@@ -27,10 +29,11 @@ class Admin::AnalyticsLiveTest < ActionDispatch::IntegrationTest
       name: "Staff Live"
     )
     staff_identity.update!(staff: true)
+    site = Analytics::Bootstrap.ensure_default_site!(host: "localhost")
 
     sign_in(staff_identity)
 
-    get "/admin/analytics/live", headers: INERTIA_HEADERS
+    get live_path_for(site), headers: INERTIA_HEADERS
 
     assert_response :success
 
@@ -40,12 +43,78 @@ class Admin::AnalyticsLiveTest < ActionDispatch::IntegrationTest
     refute props.key?("initial_stats")
 
     stats = props.fetch("initialStats")
+    assert props.key?("liveSubscriptionToken")
+    assert_equal(
+      "analytics:#{props.fetch("site").fetch("id")}",
+      Analytics::LiveState.resolve_subscription_stream(props.fetch("liveSubscriptionToken"))
+    )
     assert_equal 0, stats.fetch("currentVisitors")
     assert_equal 0, stats.fetch("todaySessions").fetch("count")
     assert_equal [], stats.fetch("sessionsByLocation")
     assert_equal [], stats.fetch("visitorDots")
     assert_equal [], stats.fetch("liveSessions")
     assert_equal [], stats.fetch("recentEvents")
+  ensure
+    Current.reset
+  end
+
+  test "singleton live route stays on the generic live shell" do
+    staff_identity, = create_tenant(
+      email: "staff-live-redirect-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Live Redirect"
+    )
+    staff_identity.update!(staff: true)
+
+    site = Analytics::Bootstrap.ensure_default_site!(host: "localhost")
+
+    sign_in(staff_identity)
+
+    get "/admin/analytics/live", headers: INERTIA_HEADERS
+
+    assert_response :success
+  ensure
+    Current.reset
+  end
+
+  test "legacy live route redirects ambiguous multi-site traffic to analytics settings" do
+    staff_identity, = create_tenant(
+      email: "staff-live-ambiguous-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Live Ambiguous"
+    )
+    staff_identity.update!(staff: true)
+
+    Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    Analytics::Site.create!(name: "App", canonical_hostname: "app.example.test")
+
+    sign_in(staff_identity)
+
+    get "/admin/analytics/live", headers: INERTIA_HEADERS
+
+    assert_redirected_to "/admin/settings/analytics"
+  ensure
+    Current.reset
+  end
+
+  test "live view exposes site-scoped reports and settings paths" do
+    staff_identity, = create_tenant(
+      email: "staff-live-site-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Live Site"
+    )
+    staff_identity.update!(staff: true)
+
+    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test", time_zone: "UTC")
+    Analytics::Site.create!(name: "App", canonical_hostname: "app.example.test", time_zone: "UTC")
+
+    sign_in(staff_identity)
+
+    get "/admin/analytics/sites/#{site.public_id}/live", headers: INERTIA_HEADERS
+
+    assert_response :success
+
+    site_payload = JSON.parse(response.body).fetch("props").fetch("site")
+    assert_equal site.public_id, site_payload.fetch("id")
+    assert_equal "/admin/analytics/sites/#{site.public_id}", site_payload.fetch("paths").fetch("reports")
+    assert_equal "/admin/settings/analytics?site=#{site.public_id}", site_payload.fetch("paths").fetch("settings")
   ensure
     Current.reset
   end
@@ -57,7 +126,10 @@ class Admin::AnalyticsLiveTest < ActionDispatch::IntegrationTest
     )
     staff_identity.update!(staff: true)
 
+    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+
     profile = AnalyticsProfile.create!(
+      analytics_site: site,
       status: AnalyticsProfile::STATUS_ANONYMOUS,
       traits: { display_name: "turquoise scorpion" },
       first_seen_at: 20.minutes.ago,
@@ -67,6 +139,7 @@ class Admin::AnalyticsLiveTest < ActionDispatch::IntegrationTest
     visit = Ahoy::Visit.create!(
       visit_token: SecureRandom.hex(16),
       visitor_token: SecureRandom.hex(16),
+      analytics_site: site,
       analytics_profile: profile,
       browser_id: SecureRandom.uuid,
       started_at: 4.minutes.ago.change(usec: 0),
@@ -84,18 +157,21 @@ class Admin::AnalyticsLiveTest < ActionDispatch::IntegrationTest
 
     Ahoy::Event.create!(
       visit: visit,
+      analytics_site: site,
       name: "scroll_to_pricing",
       properties: { page: "/" },
       time: 1.minute.ago.change(usec: 0)
     )
     Ahoy::Event.create!(
       visit: visit,
+      analytics_site: site,
       name: "pageview",
       properties: { page: "/" },
       time: 45.seconds.ago.change(usec: 0)
     )
     Ahoy::Event.create!(
       visit: visit,
+      analytics_site: site,
       name: "engagement",
       properties: { page: "/" },
       time: 50.seconds.ago.change(usec: 0)
@@ -103,7 +179,7 @@ class Admin::AnalyticsLiveTest < ActionDispatch::IntegrationTest
 
     sign_in(staff_identity)
 
-    get "/admin/analytics/live", headers: INERTIA_HEADERS
+    get live_path_for(site), headers: INERTIA_HEADERS
 
     assert_response :success
 
@@ -128,4 +204,9 @@ class Admin::AnalyticsLiveTest < ActionDispatch::IntegrationTest
   ensure
     Current.reset
   end
+
+  private
+    def live_path_for(site)
+      Analytics::Site.sole_active == site ? "/admin/analytics/live" : "/admin/analytics/sites/#{site.public_id}/live"
+    end
 end

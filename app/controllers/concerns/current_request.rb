@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require Rails.root.join("lib/client_ip")
-
 module CurrentRequest
   extend ActiveSupport::Concern
 

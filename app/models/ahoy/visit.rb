@@ -4,8 +4,12 @@ class Ahoy::Visit < AnalyticsRecord
   has_many :events, class_name: "Ahoy::Event"
   belongs_to :user, class_name: "::Identity", optional: true
   belongs_to :analytics_profile, class_name: "AnalyticsProfile", optional: true
+  belongs_to :analytics_site, class_name: "Analytics::Site", optional: true
+  belongs_to :analytics_site_boundary, class_name: "Analytics::SiteBoundary", optional: true
   scope :with_coordinates, -> { where.not(latitude: nil, longitude: nil) }
+  scope :for_analytics_site, ->(site = ::Analytics::Current.site_or_default) { Analytics::Scope.apply(all, site:) }
   before_validation :assign_source_dimensions
+  before_validation :assign_analytics_site_scope, on: :create
 
   # Analytics concerns
   include Ahoy::Visit::Constants
@@ -78,4 +82,10 @@ class Ahoy::Visit < AnalyticsRecord
       source_match_strategy: source_match_strategy
     }
   end
+
+  private
+    def assign_analytics_site_scope
+      self.analytics_site ||= ::Analytics::Current.site_or_default
+      self.analytics_site_boundary ||= ::Analytics::Current.site_boundary_or_default if analytics_site.present?
+    end
 end

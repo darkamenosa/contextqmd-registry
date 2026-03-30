@@ -2,6 +2,8 @@
 
 module Identities
   class SessionsController < Devise::SessionsController
+    PRIVATE_SIGN_OUT_PATH_PREFIXES = %w[/admin /app /login /logout /register /rails].freeze
+
     include InertiaFlash
     rate_limit to: 10, within: 3.minutes, only: :create
 
@@ -14,7 +16,7 @@ module Identities
       self.resource = warden.authenticate!(auth_options)
       set_flash_message!(:notice, :signed_in)
       sign_in(resource_name, resource)
-      AnalyticsVisitBoundary.mark_sign_in!(
+      Analytics::VisitBoundary.mark_sign_in!(
         session: session,
         previous_identity_id: previous_identity_id,
         next_identity_id: resource.id
@@ -26,7 +28,7 @@ module Identities
       previous_identity_id = current_identity&.id
       clear_stored_location_for(resource_name)
       signed_out = (Devise.sign_out_all_scopes ? sign_out : sign_out(resource_name))
-      AnalyticsVisitBoundary.mark_sign_out!(session: session, identity_id: previous_identity_id) if signed_out
+      Analytics::VisitBoundary.mark_sign_out!(session: session, identity_id: previous_identity_id) if signed_out
       set_flash_message!(:notice, :signed_out) if signed_out
       redirect_to after_sign_out_path_for(resource_name), status: :see_other
     end
@@ -63,6 +65,9 @@ module Identities
       end
 
       def public_sign_out_path?(path)
+        return false unless path.start_with?("/")
+        return false if PRIVATE_SIGN_OUT_PATH_PREFIXES.any? { |prefix| path.start_with?(prefix) }
+
         route = Rails.application.routes.recognize_path(path, method: :get)
 
         case route[:controller]
@@ -81,7 +86,7 @@ module Identities
         else
           false
         end
-      rescue ActionController::RoutingError
+      rescue ActionController::RoutingError, NoMethodError
         false
       end
   end

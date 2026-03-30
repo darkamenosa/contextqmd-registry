@@ -27,6 +27,7 @@ import type { ListItem, ListMetricKey, ListPayload } from "../types"
 // eslint-disable-next-line react-refresh/only-export-components
 export const METRIC_LABELS: Record<ListMetricKey, string> = {
   visitors: "Visitors",
+  clicks: "Clicks",
   events: "Events",
   visits: "Visits",
   percentage: "%",
@@ -49,6 +50,7 @@ export const FORMATTERS: Partial<
   Record<ListMetricKey, (value: number | null | undefined) => string>
 > = {
   visitors: (value) => numberShortFormatter(value ?? 0),
+  clicks: (value) => numberShortFormatter(value ?? 0),
   events: (value) => numberShortFormatter(value ?? 0),
   uniques: (value) => numberShortFormatter(value ?? 0),
   total: (value) => numberShortFormatter(value ?? 0),
@@ -132,6 +134,10 @@ export function MetricTable({
     const len = String(title).length
     return len >= 16 ? 144 : len >= 12 ? 120 : BASE_NUM_COL_MIN_PX
   }
+  const compactMetricsWidth = metrics.reduce((sum, metric, index) => {
+    const gap = index === 0 ? 0 : 16
+    return sum + metricWidth(metric) + gap
+  }, 0)
 
   // Use new DevicesPanel styling when displayBars is false
   if (!displayBars) {
@@ -141,9 +147,13 @@ export function MetricTable({
         data-testid={testId ? `${testId}-wrap` : undefined}
       >
         <table
-          className="min-w-full text-sm"
+          className="w-full table-fixed text-sm"
           data-testid={testId ? `${testId}-table` : undefined}
         >
+          <colgroup>
+            <col />
+            <col style={{ width: compactMetricsWidth }} />
+          </colgroup>
           <thead>
             <tr className="border-b border-border">
               <th
@@ -154,13 +164,7 @@ export function MetricTable({
               </th>
               <th scope="col" className="pb-2 text-right">
                 {primaryMetric ? (
-                  <span
-                    className="inline-block text-right text-xs font-semibold tracking-wide whitespace-nowrap text-muted-foreground uppercase"
-                    style={{
-                      minWidth: metricWidth(primaryMetric),
-                      width: metricWidth(primaryMetric),
-                    }}
-                  >
+                  <span className="inline-block text-right text-xs font-semibold tracking-wide whitespace-nowrap text-muted-foreground uppercase">
                     {(resolvedMetricLabels &&
                       resolvedMetricLabels[primaryMetric]) ??
                       METRIC_LABELS[normalizeMetricKey(primaryMetric)] ??
@@ -195,89 +199,74 @@ export function MetricTable({
                   data-testid={testId ? `${testId}-row` : undefined}
                   data-name={String(item.name)}
                 >
-                  <td className="" colSpan={2}>
-                    {/* Two-layer layout so the bar respects the left content width and doesn't sit under the numbers */}
-                    <div className="relative flex items-center justify-between">
-                      {/* Left content with its own relative box for the bar; reserve icon column only when present */}
+                  <td className="overflow-hidden pr-3">
+                    <div
+                      className={`relative flex min-w-0 items-center gap-3 ${hasLeading ? "pl-8" : "pl-2"}`}
+                    >
                       <div
-                        className={`relative flex min-w-0 flex-1 items-center gap-3 pr-3 ${hasLeading ? "pl-8" : "pl-2"}`}
-                      >
-                        {/* Background bar sized to left content width */}
-                        <div
-                          className={`absolute inset-y-[1px] left-0 rounded-xs ${barColor}`}
-                          style={{ width: `${barWidth}%` }}
-                          aria-hidden="true"
-                        />
-                        {/* Fixed icon column so bars never overlap icons (only when present) */}
-                        {hasLeading ? (
-                          <span className="absolute left-1 z-10 inline-flex size-6 items-center justify-center">
-                            {leadingEl}
-                          </span>
-                        ) : null}
-                        <span className="relative z-10 font-medium break-all whitespace-normal text-foreground">
-                          <span className="inline-flex items-center gap-1">
-                            <span>{item.name}</span>
-                            {isPathLike(item.name) ? (
-                              <a
-                                href={String(item.name)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-muted-foreground opacity-0 transition group-hover:opacity-100 hover:text-foreground"
-                                onClick={(e) => e.stopPropagation()}
-                                aria-label="Open page in new tab"
-                                title="Open page"
-                              >
-                                <ExternalLink className="size-3.5" />
-                              </a>
-                            ) : null}
-                          </span>
+                        className={`absolute inset-y-[1px] left-0 rounded-xs ${barColor}`}
+                        style={{ width: `${barWidth}%` }}
+                        aria-hidden="true"
+                      />
+                      {hasLeading ? (
+                        <span className="absolute left-1 z-10 inline-flex size-6 items-center justify-center">
+                          {leadingEl}
                         </span>
-                      </div>
-                      {/* Right metrics untouched by the bar */}
-                      <div className="flex shrink-0 items-center justify-end">
-                        {primaryMetric ? (
-                          <span
-                            className="text-right font-semibold whitespace-nowrap text-foreground tabular-nums"
-                            style={{
-                              minWidth: metricWidth(primaryMetric),
-                              width: metricWidth(primaryMetric),
-                            }}
+                      ) : null}
+                      <span className="relative z-10 flex min-w-0 flex-1 items-center gap-1 font-medium text-foreground">
+                        <span className="truncate" title={String(item.name)}>
+                          {item.name}
+                        </span>
+                        {isPathLike(item.name) ? (
+                          <a
+                            href={String(item.name)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="shrink-0 text-muted-foreground hover:text-foreground"
+                            onClick={(e) => e.stopPropagation()}
+                            aria-label="Open page in new tab"
+                            title={String(item.name)}
                           >
-                            <MetricValueCell
-                              item={item}
-                              metric={primaryMetric}
-                              meta={data.meta}
-                            />
-                          </span>
+                            <ExternalLink className="size-3.5" />
+                          </a>
                         ) : null}
-                        {secondaryMetrics.length > 0 ? (
-                          <div
-                            className={[
-                              "ml-4 flex items-center gap-4 overflow-hidden",
-                              revealSecondaryMetricsOnHover
-                                ? "transition-all duration-150 md:ml-0 md:max-w-0 md:translate-x-3 md:opacity-0 md:group-hover/report:ml-4 md:group-hover/report:max-w-[20rem] md:group-hover/report:translate-x-0 md:group-hover/report:opacity-100"
-                                : "",
-                            ].join(" ")}
-                          >
-                            {secondaryMetrics.map((metric) => (
-                              <span
-                                key={metric}
-                                className="text-right font-semibold whitespace-nowrap text-muted-foreground tabular-nums"
-                                style={{
-                                  minWidth: metricWidth(metric),
-                                  width: metricWidth(metric),
-                                }}
-                              >
-                                <MetricValueCell
-                                  item={item}
-                                  metric={metric}
-                                  meta={data.meta}
-                                />
-                              </span>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
+                      </span>
+                    </div>
+                  </td>
+                  <td className="text-right">
+                    <div className="flex shrink-0 items-center justify-end">
+                      {primaryMetric ? (
+                        <span className="font-semibold whitespace-nowrap text-foreground tabular-nums">
+                          <MetricValueCell
+                            item={item}
+                            metric={primaryMetric}
+                            meta={data.meta}
+                          />
+                        </span>
+                      ) : null}
+                      {secondaryMetrics.length > 0 ? (
+                        <div
+                          className={[
+                            "ml-4 flex shrink-0 items-center gap-4 overflow-hidden",
+                            revealSecondaryMetricsOnHover
+                              ? "transition-all duration-150 md:ml-0 md:max-w-0 md:translate-x-3 md:opacity-0 md:group-hover/report:ml-4 md:group-hover/report:max-w-[20rem] md:group-hover/report:translate-x-0 md:group-hover/report:opacity-100"
+                              : "",
+                          ].join(" ")}
+                        >
+                          {secondaryMetrics.map((metric) => (
+                            <span
+                              key={metric}
+                              className="font-semibold whitespace-nowrap text-muted-foreground tabular-nums"
+                            >
+                              <MetricValueCell
+                                item={item}
+                                metric={metric}
+                                meta={data.meta}
+                              />
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
@@ -344,23 +333,23 @@ export function MetricTable({
                   ) : null}
                   <span className="relative z-10 flex items-center gap-2">
                     {renderLeading ? renderLeading(item) : renderFlag(item)}
-                    <span className="font-medium break-all whitespace-normal text-foreground">
-                      <span className="inline-flex items-center gap-1">
-                        <span>{item.name}</span>
-                        {isPathLike(item.name) ? (
-                          <a
-                            href={String(item.name)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-muted-foreground opacity-0 transition group-hover:opacity-100 hover:text-foreground"
-                            onClick={(e) => e.stopPropagation()}
-                            aria-label="Open page in new tab"
-                            title="Open page"
-                          >
-                            <ExternalLink className="size-3.5" />
-                          </a>
-                        ) : null}
+                    <span className="flex min-w-0 flex-1 items-center gap-1 font-medium text-foreground">
+                      <span className="truncate" title={String(item.name)}>
+                        {item.name}
                       </span>
+                      {isPathLike(item.name) ? (
+                        <a
+                          href={String(item.name)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="shrink-0 text-muted-foreground hover:text-foreground"
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label="Open page in new tab"
+                          title={String(item.name)}
+                        >
+                          <ExternalLink className="size-3.5" />
+                        </a>
+                      ) : null}
                     </span>
                   </span>
                 </div>
@@ -493,7 +482,8 @@ export function formatMetric(metric: string, value: ListItem[keyof ListItem]) {
   return value == null ? "—" : String(value)
 }
 
-function isPathLike(name: unknown): boolean {
+// eslint-disable-next-line react-refresh/only-export-components
+export function isPathLike(name: unknown): boolean {
   const s = String(name || "")
   return s.startsWith("/") && !s.startsWith("//")
 }

@@ -9,9 +9,14 @@ class Admin::AnalyticsBreakdownComparisonTest < ActiveSupport::TestCase
     Rails.cache.clear
     Ahoy::Event.delete_all
     Ahoy::Visit.delete_all
-    AnalyticsSetting.delete_all
-    Goal.delete_all
-    Funnel.delete_all
+    Analytics::GoogleSearchConsole::QueryRow.delete_all
+    Analytics::GoogleSearchConsole::Sync.delete_all
+    Analytics::GoogleSearchConsoleConnection.delete_all
+    Analytics::SiteBoundary.delete_all
+    Analytics::Site.delete_all
+    Analytics::Setting.delete_all
+    Analytics::Goal.delete_all
+    Analytics::Funnel.delete_all
   end
 
   test "sources rows include comparison values and change when comparison is enabled" do
@@ -673,26 +678,59 @@ class Admin::AnalyticsBreakdownComparisonTest < ActiveSupport::TestCase
 
   test "search terms comparison values are attached when comparison is enabled" do
     travel_to Time.zone.parse("2026-03-25 14:00:00") do
-      Ahoy::Visit.create!(
-        visit_token: SecureRandom.hex(16),
-        visitor_token: "current-search-a",
-        started_at: Time.zone.parse("2026-03-25 09:00:00"),
-        referring_domain: "google.com",
-        referrer: "https://google.com/search?q=rails"
+      site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+      connection = Analytics::GoogleSearchConsoleConnection.rotate_for_site!(
+        site: site,
+        attributes: {
+          google_uid: "google-user-#{SecureRandom.hex(4)}",
+          google_email: "owner@example.com",
+          access_token: "access-token",
+          refresh_token: "refresh-token",
+          expires_at: 1.hour.from_now,
+          scopes: Analytics::GoogleSearchConsole::Client::SCOPES,
+          metadata: {},
+          property_identifier: "sc-domain:docs.example.test",
+          property_type: "domain",
+          permission_level: "siteOwner",
+          last_verified_at: Time.current
+        }
       )
-      Ahoy::Visit.create!(
-        visit_token: SecureRandom.hex(16),
-        visitor_token: "current-search-b",
-        started_at: Time.zone.parse("2026-03-25 10:00:00"),
-        referring_domain: "google.com",
-        referrer: "https://google.com/search?q=rails"
+      sync = connection.syncs.create!(
+        property_identifier: connection.property_identifier,
+        search_type: "web",
+        from_date: Date.new(2026, 3, 24),
+        to_date: Date.new(2026, 3, 25),
+        started_at: Time.current,
+        finished_at: Time.current,
+        status: Analytics::GoogleSearchConsole::Sync::STATUS_SUCCEEDED
       )
-      Ahoy::Visit.create!(
-        visit_token: SecureRandom.hex(16),
-        visitor_token: "previous-search",
-        started_at: Time.zone.parse("2026-03-24 09:00:00"),
-        referring_domain: "google.com",
-        referrer: "https://google.com/search?q=rails"
+      ::Analytics::Current.site = site
+
+      Analytics::GoogleSearchConsole::QueryRow.create!(
+        analytics_site: site,
+        sync: sync,
+        date: Date.new(2026, 3, 25),
+        search_type: "web",
+        query: "rails",
+        page: "https://docs.example.test/docs/install",
+        country: "VNM",
+        device: "desktop",
+        clicks: 2,
+        impressions: 10,
+        position_impressions_sum: 34
+      )
+      Analytics::GoogleSearchConsole::QueryRow.create!(
+        analytics_site: site,
+        sync: sync,
+        date: Date.new(2026, 3, 24),
+        search_type: "web",
+        query: "rails",
+        page: "https://docs.example.test/docs/install",
+        country: "VNM",
+        device: "desktop",
+        clicks: 1,
+        impressions: 8,
+        position_impressions_sum: 28
       )
 
       controller = build_controller_for_payloads

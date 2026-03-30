@@ -97,6 +97,7 @@ class AnalyticsProfile::Live
 
     def recent_activity_events
       Ahoy::Event
+        .for_analytics_site
         .where("time >= ?", now - recent_window)
         .order(time: :desc, id: :desc)
         .limit(200)
@@ -109,6 +110,7 @@ class AnalyticsProfile::Live
 
       if event_visit_ids.any?
         visits += Ahoy::Visit
+          .for_analytics_site
           .where(id: event_visit_ids)
           .where.not(analytics_profile_id: nil)
           .to_a
@@ -121,13 +123,13 @@ class AnalyticsProfile::Live
       profile_ids = visits.map(&:analytics_profile_id).compact.uniq
       return {} if profile_ids.empty?
 
-      AnalyticsProfile.where(id: profile_ids).index_by(&:id)
+      AnalyticsProfile.for_analytics_site.where(id: profile_ids).index_by(&:id)
     end
 
     def total_visits_by_profile(profile_ids)
       return {} if profile_ids.empty?
 
-      Ahoy::Visit.where(analytics_profile_id: profile_ids).group(:analytics_profile_id).count
+      Ahoy::Visit.for_analytics_site.where(analytics_profile_id: profile_ids).group(:analytics_profile_id).count
     end
 
     def last_seen_by_visit(recent_events_by_visit, visits_by_id)

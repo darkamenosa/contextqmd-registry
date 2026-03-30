@@ -18,6 +18,7 @@ import {
   parseDialogFromPath,
 } from "../lib/dialog-path"
 import { getLocationsModeAfterFilterChange } from "../lib/panel-mode"
+import { analyticsScopedPath } from "../lib/path-prefix"
 import {
   analyticsPreferenceKey,
   writeAnalyticsPreference,
@@ -398,7 +399,7 @@ export default function LocationsPanel({
             }
           }}
           title={`Top ${activeTitle}`}
-          endpoint={"/admin/analytics/locations"}
+          endpoint={analyticsScopedPath("/locations")}
           extras={{ mode: mode === "map" ? "countries" : mode }}
           firstColumnLabel={firstColumnLabel}
           renderLeading={

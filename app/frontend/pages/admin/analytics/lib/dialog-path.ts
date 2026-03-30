@@ -1,6 +1,6 @@
 // Central helpers for building and parsing analytics dialog deep-links
 
-const REPORTS_BASE_PATH = "/admin/analytics/reports"
+import { analyticsReportsPath } from "./path-prefix"
 
 export type SourcesMode =
   | "channels"
@@ -20,6 +20,7 @@ export type DialogSegment =
   | "utm_contents"
   | "utm_terms"
   | "pages"
+  | "seo-pages"
   | "entry-pages"
   | "exit-pages"
   | "browsers"
@@ -73,6 +74,9 @@ const SEGMENT_NORMALIZE: Record<string, DialogSegment> = {
   utm_terms: "utm_terms",
   // other panels
   pages: "pages",
+  "seo-pages": "seo-pages",
+  seo_pages: "seo-pages",
+  seo: "seo-pages",
   "entry-pages": "entry-pages",
   entry_pages: "entry-pages",
   entry: "entry-pages",
@@ -104,10 +108,14 @@ export type ParsedDialog =
   | { type: "none" }
 
 export function parseDialogFromPath(pathname: string): ParsedDialog {
-  // Canonical: /admin/analytics/reports/_/referrers/:source
-  // Legacy: /admin/analytics/_/referrers/:source
+  // Canonical:
+  //   /admin/analytics/_/referrers/:source
+  //   /admin/analytics/sites/:site/_/referrers/:source
+  // Legacy:
+  //   /admin/analytics/reports/_/referrers/:source
+  //   /admin/analytics/sites/:site/reports/_/referrers/:source
   const ref = pathname.match(
-    /\/admin\/analytics(?:\/reports)?\/_\/referrers\/(.+)$/
+    /\/admin\/analytics(?:\/sites\/[^/]+)?(?:\/reports)?\/_\/referrers\/(.+)$/
   )
   if (ref && ref[1]) {
     try {
@@ -117,7 +125,7 @@ export function parseDialogFromPath(pathname: string): ParsedDialog {
     }
   }
   const m = pathname.match(
-    /\/admin\/analytics(?:\/reports)?\/_\/([a-z0-9_-]+)$/
+    /\/admin\/analytics(?:\/sites\/[^/]+)?(?:\/reports)?\/_\/([a-z0-9_-]+)$/
   )
   if (m && m[1]) {
     const raw = m[1]
@@ -129,19 +137,25 @@ export function parseDialogFromPath(pathname: string): ParsedDialog {
 
 export function buildDialogPath(
   segment: DialogSegment,
-  qs: string = ""
+  qs: string = "",
+  pathname?: string
 ): string {
-  const base = `${REPORTS_BASE_PATH}/_/${segment}`
+  const base = `${analyticsReportsPath(pathname)}/_/${segment}`
   return qs ? `${base}?${qs}` : base
 }
 
-export function buildReferrersPath(source: string, qs: string = ""): string {
-  const base = `${REPORTS_BASE_PATH}/_/referrers/${encodeURIComponent(source)}`
+export function buildReferrersPath(
+  source: string,
+  qs: string = "",
+  pathname?: string
+): string {
+  const base = `${analyticsReportsPath(pathname)}/_/referrers/${encodeURIComponent(source)}`
   return qs ? `${base}?${qs}` : base
 }
 
-export function baseAnalyticsPath(qs: string = ""): string {
-  return qs ? `${REPORTS_BASE_PATH}?${qs}` : REPORTS_BASE_PATH
+export function baseAnalyticsPath(qs: string = "", pathname?: string): string {
+  const reportsPath = analyticsReportsPath(pathname)
+  return qs ? `${reportsPath}?${qs}` : reportsPath
 }
 
 // Map dialog segment back to the Sources panel mode
@@ -167,10 +181,12 @@ export function modeForSegment(segment: DialogSegment): SourcesMode | null {
 }
 
 // Pages mapping helpers
-export type PagesMode = "pages" | "entry" | "exit"
+export type PagesMode = "pages" | "seo" | "entry" | "exit"
 
 export function pagesSegmentForMode(mode: PagesMode): DialogSegment {
   switch (mode) {
+    case "seo":
+      return "seo-pages"
     case "entry":
       return "entry-pages"
     case "exit":
@@ -185,6 +201,8 @@ export function pagesModeForSegment(segment: DialogSegment): PagesMode | null {
   switch (segment) {
     case "pages":
       return "pages"
+    case "seo-pages":
+      return "seo"
     case "entry-pages":
       return "entry"
     case "exit-pages":

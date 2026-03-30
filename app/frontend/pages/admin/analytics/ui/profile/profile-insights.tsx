@@ -390,30 +390,33 @@ export function SessionSourceSummary({
       ) : null}
 
       {searchTerms.length > 0 ? (
-        <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_140px] sm:items-start">
-          <div>
-            <p className="text-xs font-semibold tracking-[0.12em] text-muted-foreground uppercase">
-              Search Terms Preview
-            </p>
-            <div className="mt-2 space-y-1.5">
-              {searchTerms.map((term) => (
-                <div
-                  key={term.label}
-                  className="flex items-center justify-between gap-3 text-xs"
-                >
-                  <span className="truncate font-medium text-foreground">
+        <div className="mt-3 rounded-lg border border-border/70 bg-background px-3 py-3">
+          <div className="flex items-start gap-2">
+            <Search className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+                Likely search queries
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Inferred from Search Console for this visit source. Useful for
+                SEO context, not exact per-visitor truth.
+              </p>
+            </div>
+          </div>
+          <div className="mt-3 space-y-2">
+            {searchTerms.map((term) => (
+              <div key={term.label} className="space-y-1.5">
+                <div className="flex items-center justify-between gap-3 text-xs">
+                  <span
+                    className="truncate font-medium text-foreground"
+                    title={term.label}
+                  >
                     {term.label}
                   </span>
                   <span className="shrink-0 text-muted-foreground">
                     {term.probability}%
                   </span>
                 </div>
-              ))}
-            </div>
-          </div>
-          <div className="space-y-1.5 pt-5 sm:pt-0">
-            {searchTerms.map((term) => (
-              <div key={`${term.label}-bar`} className="space-y-1">
                 <div className="h-1.5 overflow-hidden rounded-full bg-border/70">
                   <div
                     className="h-full rounded-full bg-foreground/80"

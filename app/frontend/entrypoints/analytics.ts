@@ -13,6 +13,8 @@
 interface AnalyticsConfig {
   // Ahoy endpoints
   eventsEndpoint: string
+  siteToken?: string
+  domainHint?: string
   // Filters
   excludePaths: string[]
   includePaths?: string[] // if provided, only paths matching any will be tracked (plausible-style)
@@ -30,7 +32,27 @@ interface AnalyticsConfig {
 declare global {
   interface Window {
     __analyticsInitialized?: boolean
-    analyticsConfig?: Partial<AnalyticsConfig>
+    analyticsConfig?: Partial<AnalyticsConfig> & {
+      version?: number
+      transport?: {
+        eventsEndpoint?: string
+      }
+      site?: {
+        token?: string | null
+        domainHint?: string | null
+      }
+      tracking?: {
+        hashBasedRouting?: boolean
+        initialPageviewTracked?: boolean
+        initialPageKey?: string
+      }
+      filters?: {
+        includePaths?: string[]
+        excludePaths?: string[]
+        excludeAssets?: string[]
+      }
+      debug?: boolean
+    }
   }
 }
 
@@ -101,7 +123,7 @@ class StandaloneAnalytics {
     try {
       const overrides = window.analyticsConfig
       if (overrides && typeof overrides === "object") {
-        this.config = { ...this.config, ...overrides }
+        this.config = { ...this.config, ...this.normalizeConfig(overrides) }
       }
     } catch {
       // Ignore malformed runtime overrides and keep the default config.
@@ -323,6 +345,7 @@ class StandaloneAnalytics {
 
     const event = {
       name: properties.name,
+      site_token: this.config.siteToken,
       properties: {
         page: properties.page,
         url: properties.url,
@@ -577,8 +600,14 @@ class StandaloneAnalytics {
         )
       if (!el) return
 
+      const siteToken = el.getAttribute("data-site-token")
+      const domainHint = el.getAttribute("data-domain")
+      const eventsEndpoint = el.getAttribute("data-api")
       const includeAttr = el.getAttribute("data-include")
       const excludeAttr = el.getAttribute("data-exclude")
+      if (siteToken) this.config.siteToken = siteToken
+      if (domainHint) this.config.domainHint = domainHint
+      if (eventsEndpoint) this.config.eventsEndpoint = eventsEndpoint
       if (includeAttr)
         this.config.includePaths = includeAttr
           .split(",")
@@ -595,6 +624,77 @@ class StandaloneAnalytics {
     } catch {
       // Ignore malformed tracker script attributes.
     }
+  }
+
+  private normalizeConfig(
+    overrides: Window["analyticsConfig"]
+  ): Partial<AnalyticsConfig> {
+    if (!overrides) return {}
+
+    const normalized: Partial<AnalyticsConfig> = {}
+    const transport = overrides.transport
+    const site = overrides.site
+    const tracking = overrides.tracking
+    const filters = overrides.filters
+
+    if (typeof overrides.eventsEndpoint === "string") {
+      normalized.eventsEndpoint = overrides.eventsEndpoint
+    } else if (typeof transport?.eventsEndpoint === "string") {
+      normalized.eventsEndpoint = transport.eventsEndpoint
+    }
+
+    if (typeof overrides.siteToken === "string") {
+      normalized.siteToken = overrides.siteToken
+    } else if (typeof site?.token === "string") {
+      normalized.siteToken = site.token
+    }
+
+    if (typeof overrides.domainHint === "string") {
+      normalized.domainHint = overrides.domainHint
+    } else if (typeof site?.domainHint === "string") {
+      normalized.domainHint = site.domainHint
+    }
+
+    if (Array.isArray(overrides.includePaths))
+      normalized.includePaths = overrides.includePaths
+    else if (Array.isArray(filters?.includePaths))
+      normalized.includePaths = filters.includePaths
+
+    if (Array.isArray(overrides.excludePaths))
+      normalized.excludePaths = overrides.excludePaths
+    else if (Array.isArray(filters?.excludePaths))
+      normalized.excludePaths = filters.excludePaths
+
+    if (Array.isArray(overrides.excludeAssets))
+      normalized.excludeAssets = overrides.excludeAssets
+    else if (Array.isArray(filters?.excludeAssets))
+      normalized.excludeAssets = filters.excludeAssets
+
+    if (typeof overrides.useBeaconForEvents === "boolean") {
+      normalized.useBeaconForEvents = overrides.useBeaconForEvents
+    }
+
+    if (typeof overrides.hashBasedRouting === "boolean") {
+      normalized.hashBasedRouting = overrides.hashBasedRouting
+    } else if (typeof tracking?.hashBasedRouting === "boolean") {
+      normalized.hashBasedRouting = tracking.hashBasedRouting
+    }
+
+    if (typeof overrides.initialPageviewTracked === "boolean") {
+      normalized.initialPageviewTracked = overrides.initialPageviewTracked
+    } else if (typeof tracking?.initialPageviewTracked === "boolean") {
+      normalized.initialPageviewTracked = tracking.initialPageviewTracked
+    }
+
+    if (typeof overrides.initialPageKey === "string") {
+      normalized.initialPageKey = overrides.initialPageKey
+    } else if (typeof tracking?.initialPageKey === "string") {
+      normalized.initialPageKey = tracking.initialPageKey
+    }
+
+    if (typeof overrides.debug === "boolean") normalized.debug = overrides.debug
+
+    return normalized
   }
 
   // Wildcard matching similar to Plausible tracker

@@ -14,11 +14,11 @@ class Analytics::ProfilesDatasetQuery::Postgres < Analytics::DatasetQuery
   end
 
   def summaries_by_profile
-    @summaries_by_profile ||= AnalyticsProfileSummary.where(analytics_profile_id: profile_ids).index_by(&:analytics_profile_id)
+    @summaries_by_profile ||= AnalyticsProfileSummary.for_analytics_site.where(analytics_profile_id: profile_ids).index_by(&:analytics_profile_id)
   end
 
   def latest_visits_by_profile
-    @latest_visits_by_profile ||= Ahoy::Visit.where(id: latest_visit_ids).index_by(&:id)
+    @latest_visits_by_profile ||= Ahoy::Visit.for_analytics_site.where(id: latest_visit_ids).index_by(&:id)
   end
 
   def total_visits_by_profile
@@ -28,7 +28,7 @@ class Analytics::ProfilesDatasetQuery::Postgres < Analytics::DatasetQuery
       missing_ids = totals.select { |_, total| total.nil? }.keys
       next if missing_ids.empty?
 
-      Ahoy::Visit.where(analytics_profile_id: missing_ids).group(:analytics_profile_id).count.each do |profile_id, count|
+      Ahoy::Visit.for_analytics_site.where(analytics_profile_id: missing_ids).group(:analytics_profile_id).count.each do |profile_id, count|
         totals[profile_id] = count
       end
 
@@ -50,6 +50,7 @@ class Analytics::ProfilesDatasetQuery::Postgres < Analytics::DatasetQuery
 
     def page_relation
       relation = AnalyticsProfile
+        .for_analytics_site
         .with(
           scoped_profiles: scoped_profile_aggregates_relation,
           latest_scoped_visits: latest_scoped_visits_relation

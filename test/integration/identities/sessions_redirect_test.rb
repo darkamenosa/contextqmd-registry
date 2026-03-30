@@ -157,6 +157,31 @@ class Identities::SessionsRedirectTest < ActionDispatch::IntegrationTest
     assert_redirected_to root_path
   end
 
+  test "inertia sign out from admin falls back to login" do
+    identity, = create_tenant(
+      email: "session-admin-inertia-sign-out-#{SecureRandom.hex(4)}@example.com",
+      name: "Session Admin Inertia Sign Out"
+    )
+    identity.update!(staff: true)
+
+    post identity_session_path, params: {
+      identity: {
+        email: identity.email,
+        password: "password123"
+      }
+    }
+
+    assert_redirected_to app_path
+
+    delete destroy_identity_session_path, headers: {
+      "X-Inertia" => "true",
+      "X-Requested-With" => "XMLHttpRequest",
+      "Referer" => admin_dashboard_url
+    }
+
+    assert_redirected_to new_identity_session_path
+  end
+
   test "inertia sign out redirects to login to avoid host redirect issues" do
     identity, = create_tenant(
       email: "session-inertia-sign-out-#{SecureRandom.hex(4)}@example.com",

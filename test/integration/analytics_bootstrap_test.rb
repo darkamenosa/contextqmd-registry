@@ -20,6 +20,9 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
       assert_includes response.body, "\"trackVisits\":false"
       assert_includes response.body, "\"useBeaconForEvents\":false"
       assert_includes response.body, "\"useCookies\":false"
+      assert_includes response.body, "\"version\":1"
+      assert_includes response.body, "\"transport\":{\"eventsEndpoint\":\"/ahoy/events\"}"
+      assert_includes response.body, "\"siteToken\":null"
       assert_includes response.body, "\"initialPageviewTracked\":true"
       assert_includes response.body, "\"initialPageKey\":\"/\""
       refute_includes response.body, "meta name=\"ahoy-visit\""
@@ -37,6 +40,7 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
 
       assert_response :success
       assert_includes response.body, "\"trackVisits\":false"
+      assert_includes response.body, "\"version\":1"
       assert_includes response.body, "\"initialPageviewTracked\":false"
       refute_includes response.body, "meta name=\"ahoy-visit\""
       refute_includes response.body, "meta name=\"ahoy-visitor\""
@@ -52,6 +56,7 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
       end
 
       assert_response :success
+      assert_includes response.body, "\"siteToken\":null"
       assert_includes response.body, "\"initialPageviewTracked\":true"
       assert_includes response.body, "\"initialPageKey\":\"/login\""
       refute_includes response.body, "meta name=\"ahoy-visit\""
@@ -92,10 +97,12 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
 
   private
     def with_server_visits(enabled)
-      original = Rails.configuration.x.analytics.server_visits
-      Rails.configuration.x.analytics.server_visits = enabled
+      original = Analytics.config.server_visits
+      Analytics.config.server_visits = enabled
+      Analytics.install!
       yield
     ensure
-      Rails.configuration.x.analytics.server_visits = original
+      Analytics.config.server_visits = original
+      Analytics.install!
     end
 end

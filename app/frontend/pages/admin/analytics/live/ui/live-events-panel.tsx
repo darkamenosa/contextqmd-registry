@@ -177,9 +177,9 @@ export default function LiveEventsPanel({
           <div
             ref={scrollRef}
             onScroll={handleScroll}
-            className={`overflow-y-auto px-2 py-1.5 ${isOverlay ? "max-h-[14rem] min-h-[6rem]" : "max-h-[16rem] min-h-[3rem]"}`}
+            className={`flex flex-col overflow-y-auto px-2 py-1.5 ${isOverlay ? "max-h-[14rem] min-h-[6rem]" : "max-h-[16rem] min-h-[3rem]"}`}
           >
-            <div className="flex min-h-full flex-col justify-end">
+            <div className="mt-auto">
               {displayEvents.length > 0 ? (
                 <div className="flex flex-col gap-0.5">
                   {displayEvents.map((event) => {

@@ -45,12 +45,15 @@ export function resolveLiveGlobeLabel({
   name?: string | null
 }) {
   const formattedLocation = formatProfileLocation({ city, region, country })
-  const compactLocation = formatCompactLocation({
-    city,
-    region,
-    country,
-    countryCode,
-  })
+  const compactLocation = formatCompactLocation(
+    {
+      city,
+      region,
+      country,
+      countryCode,
+    },
+    { appendCountryCode: true }
+  )
 
   return (
     compactLocation ||

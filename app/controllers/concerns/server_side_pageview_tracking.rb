@@ -35,6 +35,7 @@ module ServerSidePageviewTracking
     def prepare_server_side_pageview_tracking
       return unless analytics_bootstrap_enabled?
 
+      Analytics::BrowserIdentity.ensure!(request, cookies:)
       @analytics_initial_pageview_tracked = true
       @analytics_initial_page_key = analytics_page_key
     end
@@ -52,7 +53,7 @@ module ServerSidePageviewTracking
     end
 
     def analytics_bootstrap_enabled?
-      return false unless Rails.configuration.x.analytics.server_visits
+      return false unless Analytics::Configuration.server_visits?
 
       # Be explicit here: HEAD is routed like GET in Rails, but we only want
       # full HTML document renders to bootstrap/track analytics.

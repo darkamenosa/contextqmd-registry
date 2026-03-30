@@ -195,11 +195,11 @@ class Analytics::BehaviorsDatasetQuery::Postgres
 
     def funnels_payload
       visits = Analytics::VisitScope.visits(range, query)
-      names = Funnel.order(:name).pluck(:name)
+      names = Analytics::Funnel.effective_scope.order(:name).pluck(:name)
       active_name = query.funnel.presence || names.first
       return { funnels: names, active: { name: "", steps: [] } } if active_name.blank?
 
-      funnel = Funnel.find_by(name: active_name)
+      funnel = Analytics::Funnel.effective_find_by_name(active_name)
       return { funnels: names, active: { name: "", steps: [] } } unless funnel
 
       event_rows = Ahoy::Event

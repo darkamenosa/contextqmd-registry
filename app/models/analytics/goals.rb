@@ -4,11 +4,11 @@ module Analytics::Goals
   class << self
     def available_names
       if managed_definitions?
-        Goal.order(:display_name).pluck(:display_name)
+        Analytics::Goal.effective_scope.order(:display_name).pluck(:display_name)
       else
-        legacy = AnalyticsSetting.get_json("goals", fallback: :missing)
+        legacy = Analytics::Setting.get_json("goals", fallback: :missing)
         if legacy == :missing
-          Ahoy::Event.where.not(name: [ "pageview", "engagement" ]).distinct.order(:name).pluck(:name)
+          Ahoy::Event.for_analytics_site.where.not(name: [ "pageview", "engagement" ]).distinct.order(:name).pluck(:name)
         else
           Analytics::Lists.normalize_strings(legacy)
         end
@@ -17,11 +17,11 @@ module Analytics::Goals
 
     def available?
       if managed_definitions?
-        Goal.exists?
+        Analytics::Goal.effective_scope.exists?
       else
-        legacy = AnalyticsSetting.get_json("goals", fallback: :missing)
+        legacy = Analytics::Setting.get_json("goals", fallback: :missing)
         if legacy == :missing
-          Ahoy::Event.where.not(name: [ "pageview", "engagement" ]).limit(1).exists?
+          Ahoy::Event.for_analytics_site.where.not(name: [ "pageview", "engagement" ]).limit(1).exists?
         else
           Analytics::Lists.normalize_strings(legacy).any?
         end
@@ -31,7 +31,7 @@ module Analytics::Goals
     def configured(name)
       return unless managed_definitions?
 
-      Goal.find_by(display_name: name.to_s)
+      Analytics::Goal.effective_find_by_display_name(name)
     end
 
     def apply(events, goal)
@@ -51,7 +51,7 @@ module Analytics::Goals
     end
 
     def managed_definitions?
-      Goal.exists? || AnalyticsSetting.get_bool("goals_managed", fallback: false)
+      Analytics::Goal.effective_scope.exists? || Analytics::Setting.get_bool("goals_managed", fallback: false)
     end
 
     def apply_custom_properties(events, custom_props)

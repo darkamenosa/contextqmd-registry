@@ -10,6 +10,7 @@ import {
   Globe,
   Loader2,
   Route,
+  Search,
   Share2,
   Smartphone,
   Zap,
@@ -89,7 +90,7 @@ function EventLabel({
   if (pagePath) {
     const prefix = label.replace(pagePath, "").trimEnd()
     return (
-      <span className={className}>
+      <span className={`${className} block truncate`} title={pagePath}>
         {prefix ? `${prefix} ` : ""}
         <a
           href={pagePath}
@@ -549,6 +550,8 @@ export default function ProfileJourneySheet({
                       const isSessionLoading = sessionLoadingIds.includes(
                         session.visitId
                       )
+                      const topSearchTerm =
+                        sessionPayload?.sourceSummary?.searchTerms?.[0]
 
                       return (
                         <article
@@ -573,6 +576,20 @@ export default function ProfileJourneySheet({
                                       source={session.source}
                                       iconClassName="size-3.5"
                                     />
+                                  </span>
+                                ) : null}
+                                {topSearchTerm ? (
+                                  <span
+                                    className="inline-flex max-w-full items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs text-amber-900"
+                                    title={`${topSearchTerm.label} (${topSearchTerm.probability}% inferred confidence)`}
+                                  >
+                                    <Search className="size-3.5 shrink-0" />
+                                    <span className="truncate">
+                                      {topSearchTerm.label}
+                                    </span>
+                                    <span className="shrink-0 text-amber-700">
+                                      {topSearchTerm.probability}%
+                                    </span>
                                   </span>
                                 ) : null}
                               </div>
@@ -604,38 +621,35 @@ export default function ProfileJourneySheet({
 
                               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                                 <span>
-                                  <span className="text-xs tracking-[0.12em] uppercase">
-                                    Duration
-                                  </span>{" "}
-                                  <span className="font-medium text-foreground">
+                                  Duration{" "}
+                                  <span className="font-medium text-foreground tabular-nums">
                                     {formatProfileDuration(
                                       session.durationSeconds
                                     )}
                                   </span>
                                 </span>
                                 <span>
-                                  <span className="text-xs tracking-[0.12em] uppercase">
-                                    Pageviews
-                                  </span>{" "}
-                                  <span className="font-medium text-foreground">
+                                  Pageviews{" "}
+                                  <span className="font-medium text-foreground tabular-nums">
                                     {session.pageviewsCount}
                                   </span>
                                 </span>
                                 <span>
-                                  <span className="text-xs tracking-[0.12em] uppercase">
-                                    Events
-                                  </span>{" "}
-                                  <span className="font-medium text-foreground">
+                                  Events{" "}
+                                  <span className="font-medium text-foreground tabular-nums">
                                     {session.eventsCount}
                                   </span>
                                 </span>
                               </div>
 
-                              <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                                <span className="inline-flex items-center gap-1">
-                                  <Route className="size-3" />
-                                  <span>
-                                    {session.entryPage || "—"} {"->"}{" "}
+                              <div className="flex min-w-0 flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                                <span className="inline-flex max-w-full min-w-0 items-center gap-1">
+                                  <Route className="size-3 shrink-0" />
+                                  <span
+                                    className="truncate"
+                                    title={`${session.entryPage || "—"} → ${session.exitPage || session.currentPage || "—"}`}
+                                  >
+                                    {session.entryPage || "—"} {"→"}{" "}
                                     {session.exitPage ||
                                       session.currentPage ||
                                       "—"}
@@ -707,7 +721,10 @@ export default function ProfileJourneySheet({
                                             item.label,
                                             item.page
                                           ) ? (
-                                            <p className="mt-0.5 text-xs text-muted-foreground">
+                                            <p
+                                              className="mt-0.5 truncate text-xs text-muted-foreground"
+                                              title={item.page!}
+                                            >
                                               <a
                                                 href={item.page!}
                                                 target="_blank"

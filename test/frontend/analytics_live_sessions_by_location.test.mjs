@@ -103,7 +103,7 @@ test("SessionsByLocation renders compact labels for known locations", async () =
     },
   ])
 
-  assert.match(markup, />San Francisco, CA</)
+  assert.match(markup, />San Francisco, CA, US</)
   assert.doesNotMatch(markup, /California/)
   assert.doesNotMatch(markup, /United States/)
 })
@@ -119,5 +119,19 @@ test("SessionsByLocation preserves compact region disambiguation", async () => {
     },
   ])
 
-  assert.match(markup, />Portland, OR</)
+  assert.match(markup, />Portland, OR, US</)
+})
+
+test("SessionsByLocation appends country code for non-US rows", async () => {
+  const markup = await renderSessionsByLocation([
+    {
+      country: "Poland",
+      city: "Warsaw",
+      region: "Mazovia",
+      countryCode: "PL",
+      visitors: 2,
+    },
+  ])
+
+  assert.match(markup, />Warsaw, Mazovia, PL</)
 })

@@ -244,6 +244,25 @@ class Analytics::LiveStateTest < ActiveSupport::TestCase
     end
   end
 
+  test "live subscription tokens resolve back to the scoped analytics stream" do
+    site = Analytics::Site.create!(
+      name: "Docs",
+      canonical_hostname: "docs.example.test",
+      time_zone: "UTC"
+    )
+
+    token = Analytics::LiveState.subscription_token(site: site)
+
+    assert_equal(
+      "analytics:#{site.public_id}",
+      Analytics::LiveState.resolve_subscription_stream(token)
+    )
+  end
+
+  test "live subscription stream resolution rejects invalid tokens" do
+    assert_nil Analytics::LiveState.resolve_subscription_stream("invalid-token")
+  end
+
   test "live broadcast job resolves the scoped site before broadcasting" do
     site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test", time_zone: "UTC")
     captured_site = :unset

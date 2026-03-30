@@ -126,7 +126,11 @@ class Analytics::Query
   end
 
   def order_by
-    Array(self[:order_by])
+    value = self[:order_by]
+    return [] if value.blank?
+    return Array(value.first) if value.is_a?(Array) && value.first.is_a?(Array)
+
+    Array(value)
   end
 
   def group_by
@@ -361,16 +365,21 @@ class Analytics::Query
     end
 
     def normalize_order_by(value)
-      Array(value).filter_map do |entry|
-        next unless entry.is_a?(Array) && entry.length >= 2
+      entry =
+        if value.is_a?(Array) && value.first.is_a?(Array)
+          value.first
+        elsif value.is_a?(Array)
+          value
+        end
 
-        field, direction = entry
-        normalized_field = field.to_s.strip
-        normalized_direction = direction.to_s.strip.downcase
-        next if normalized_field.blank? || normalized_direction.blank?
+      return [] unless entry.is_a?(Array) && entry.length >= 2
 
-        [ normalized_field.to_sym, normalized_direction.to_sym ]
-      end
+      field, direction = entry
+      normalized_field = field.to_s.strip
+      normalized_direction = direction.to_s.strip.downcase
+      return [] if normalized_field.blank? || normalized_direction.blank?
+
+      [ normalized_field, normalized_direction ]
     end
 
     def normalize_names(value)

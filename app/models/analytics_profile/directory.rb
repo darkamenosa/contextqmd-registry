@@ -81,14 +81,14 @@ class AnalyticsProfile::Directory
       profile_ids = aggregates.map(&:first).compact
       return [] if profile_ids.empty?
 
-      profiles = AnalyticsProfile.where(id: profile_ids).index_by(&:id)
+      profiles = AnalyticsProfile.for_analytics_site.where(id: profile_ids).index_by(&:id)
       summaries =
         if AnalyticsProfile::Projection.available?
-          AnalyticsProfileSummary.where(analytics_profile_id: profile_ids).index_by(&:analytics_profile_id)
+          AnalyticsProfileSummary.for_analytics_site.where(analytics_profile_id: profile_ids).index_by(&:analytics_profile_id)
         else
           {}
         end
-      total_visits = Ahoy::Visit.where(analytics_profile_id: profile_ids).group(:analytics_profile_id).count
+      total_visits = Ahoy::Visit.for_analytics_site.where(analytics_profile_id: profile_ids).group(:analytics_profile_id).count
       latest_visits = latest_visits_by_profile(visits).index_by(&:analytics_profile_id)
 
       aggregates.map do |profile_id, last_seen_at, scoped_visits|

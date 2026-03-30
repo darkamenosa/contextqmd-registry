@@ -56,16 +56,16 @@ const FLOATING_CONTROL_CLASSNAME =
 
 export default function LiveAnalytics({
   initialStats,
-  site,
+  liveSubscriptionToken,
 }: {
   initialStats?: LiveStats
-  site?: { id?: string | null }
+  liveSubscriptionToken?: string | null
 }) {
   const hydrated = useHydrated()
   const resolvedInitialStats = initialStats ?? EMPTY_STATS
   const { stats, connectionStatus } = useLiveStats(
     resolvedInitialStats,
-    site?.id
+    liveSubscriptionToken
   )
   const { Component: VisitorGlobeComponent } = useClientComponent(
     loadVisitorGlobeComponent,

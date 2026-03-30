@@ -8,6 +8,9 @@ module Admin
   module Analytics
     # Holds shared analytics querying logic so subcontrollers stay thin.
     class BaseController < ::Admin::BaseController
+      include GoogleSearchConsoleContext
+      include SiteContext
+
       before_action :prepare_query
 
       private
@@ -37,25 +40,38 @@ module Admin
           ::Analytics::Ordering.parsed_order_by(params[:order_by])
         end
 
-        def analytics_funnels_payload
-          Funnel.order(:name).pluck(:name, :steps).map { |(name, steps)| { name:, steps: } }
-        end
-
-        def analytics_settings_payload
-          {
-            gsc_configured: AnalyticsSetting.get_bool("gsc_configured", fallback: false),
-            goals: ::Analytics::Goals.available_names,
-            goal_definitions: Goal.definition_payloads,
-            allowed_event_props: ::Analytics::Properties.available_keys
-          }
-        end
-
         def shell_props(query)
           {
             site: site_context,
             query: query_payload(query),
             "defaultQuery" => query_payload(default_query)
           }
+        end
+
+        def ensure_canonical_shell_path!(view:, dialog: nil)
+          resolution = ::Analytics::AdminSiteResolver.resolve(request: request, explicit_site_id: params[:site])
+
+          if resolution&.site.present?
+            paths = ::Analytics::Paths.new(site: resolution.site, helpers: self)
+            target = view == :reports ? paths.reports(dialog:) : paths.live
+            destination = append_query_string(target)
+            return if same_shell_destination?(destination)
+
+            redirect_to destination
+          else
+            redirect_to admin_settings_analytics_path
+          end
+        end
+
+        def same_shell_destination?(destination)
+          destination == request.fullpath || destination == request.path
+        end
+
+        def append_query_string(path)
+          return path if request.query_string.blank?
+
+          separator = path.include?("?") ? "&" : "?"
+          "#{path}#{separator}#{request.query_string}"
         end
 
         def dashboard_boot_payload(query, site: site_context)
@@ -139,32 +155,6 @@ module Admin
           )
         end
 
-        def site_context
-          has_goals = ::Analytics::Goals.available?
-          has_props = ::Analytics::Properties.available?
-
-          {
-            domain: request.host,
-            timezone: Time.zone.name,
-            has_goals: has_goals,
-            has_props: has_props,
-            funnels_available: Funnel.exists?,
-            props_available: has_props,
-            profiles_available: AnalyticsProfile.available?,
-            segments: SEGMENTS,
-            flags: {
-              dbip: defined?(MaxmindGeo) && MaxmindGeo.available?
-            }
-          }
-        end
-
-        def user_context
-          {
-            role: "super_admin",
-            email: Current.identity&.email
-          }
-        end
-
         def devices_payload(query, limit: nil, page: nil, search: nil)
           payload = ::Analytics::DevicesDatasetQuery.payload(query: query_for_dataset(query, :devices), limit: limit, page: page, search: search)
           attach_list_comparison(payload, query, search:) do |comparison_query|
@@ -223,8 +213,17 @@ module Admin
 
         def pages_payload(query, limit: nil, page: nil, search: nil)
           payload = ::Analytics::PagesDatasetQuery.payload(query: query_for_dataset(query, :pages), limit: limit, page: page, search: search)
-          attach_list_comparison(payload, query, search:) do |comparison_query|
+          payload = attach_list_comparison(payload, query, search:) do |comparison_query|
             ::Analytics::PagesDatasetQuery.payload(query: query_for_dataset(comparison_query, :pages), limit: MAX_LIMIT, page: 1, search: search)
+          end
+
+          if ::Analytics::Query.wrap(query).mode.to_s == "seo"
+            attach_google_search_console_status_meta(
+              payload,
+              unsupported_filters: ::Analytics::GoogleSearchConsole.unsupported_pages_filters?(query)
+            )
+          else
+            payload
           end
         end
 
@@ -244,7 +243,13 @@ module Admin
         end
 
         def search_terms_payload(query, limit:, page:, search: nil)
-          ::Analytics::SearchTermsDatasetQuery.payload(query: query_for_dataset(query, :search_terms), limit: limit, page: page, search: search)
+          ::Analytics::SearchTermsDatasetQuery.payload(
+            query: query_for_dataset(query, :search_terms),
+            limit: limit,
+            page: page,
+            search: search,
+            order_by: parsed_order_by
+          )
         end
 
         def search_terms_response(query, limit:, page:, search: nil)
@@ -252,21 +257,29 @@ module Admin
 
           if !gsc_configured?
             [ { errorCode: "not_configured", isAdmin: true }, :unprocessable_entity ]
-          elsif unsupported_gsc_filters?(query)
+          elsif ::Analytics::GoogleSearchConsole.unsupported_search_terms_filters?(query)
             [ { errorCode: "unsupported_filters" }, :unprocessable_entity ]
           else
-            payload = cache_for([ :search_terms, limit, page, search, params[:order_by] ]) do
-              search_terms_payload(query, limit:, page:, search:)
-            end
-            payload = attach_list_comparison(payload, query, search:) do |comparison_query|
-              search_terms_payload(comparison_query, limit: MAX_LIMIT, page: 1, search:)
-            end
+            begin
+              ensure_google_search_console_search_terms_coverage!(query)
 
-            range, = ::Analytics::Ranges.range_and_interval_for(query.time_range_key, nil, query)
-            if payload[:results].blank? && (Time.zone.now - range.begin < 72.hours)
-              [ { errorCode: "period_too_recent" }, :unprocessable_entity ]
-            else
-              [ camelize_keys(payload), :ok ]
+              payload = cache_for([ :search_terms, limit, page, search, params[:order_by], google_search_console_cache_version ]) do
+                search_terms_payload(query, limit:, page:, search:)
+              end
+              payload = attach_list_comparison(payload, query, search:) do |comparison_query|
+                ensure_google_search_console_search_terms_coverage!(comparison_query)
+                search_terms_payload(comparison_query, limit: MAX_LIMIT, page: 1, search:)
+              end
+              payload = attach_search_terms_status_meta(payload)
+
+              range, = ::Analytics::Ranges.range_and_interval_for(query.time_range_key, nil, query)
+              if payload[:results].blank? && (Time.zone.now - range.begin < 72.hours)
+                [ { errorCode: "period_too_recent" }, :unprocessable_entity ]
+              else
+                [ analytics_json(payload), :ok ]
+              end
+            rescue ::Analytics::GoogleSearchConsole::Client::Error => e
+              [ { errorCode: "request_failed", message: e.message }, :unprocessable_entity ]
             end
           end
         end
@@ -278,32 +291,9 @@ module Admin
           end
         end
 
-        def gsc_configured?
-          # Prefer DB flag when available, then Rails config, then ENV
-          db = AnalyticsSetting.get_bool("gsc_configured", fallback: nil)
-
-          if db.nil?
-            v = Rails.configuration.x.analytics&.gsc_configured
-            v = ENV["ANALYTICS_GSC_CONFIGURED"] if v.nil?
-            ActiveModel::Type::Boolean.new.cast(v)
-          else
-            db
-          end
-        end
-
-        def unsupported_gsc_filters?(query)
-          disallowed = %w[channel referrer utm_source utm_medium utm_campaign utm_content utm_term entry_page exit_page]
-
-          if query.filter_dimensions.any? { |dimension| disallowed.include?(dimension) }
-            true
-          else
-            query.filter_clauses.any? { |operator, _dimension, _value| operator != :eq }
-          end
-        end
-
         # --- Query helpers ---
         def cache_for(key)
-          digest = Digest::SHA256.hexdigest(JSON.dump([ key, query_payload(@query), Ahoy::Visit.analytics_data_version ]))
+          digest = Digest::SHA256.hexdigest(JSON.dump([ key, ::Analytics::Current.site&.public_id, query_payload(@query), Ahoy::Visit.analytics_data_version ]))
           Rails.cache.fetch([ :analytics, action_name, digest ], expires_in: 5.minutes) { yield }
         end
 
@@ -315,17 +305,12 @@ module Admin
           ::Analytics::Query.wrap(query).for_dataset(dataset)
         end
 
+        def analytics_json(value)
+          ::Analytics::JsonSerializer.call(value)
+        end
+
         def camelize_keys(value)
-          case value
-          when Array
-            value.map { |item| camelize_keys(item) }
-          when Hash
-            value.each_with_object({}) do |(key, val), memo|
-              memo[key.to_s.camelize(:lower)] = camelize_keys(val)
-            end
-          else
-            value
-          end
+          analytics_json(value)
         end
 
         def skip_imported_reason
@@ -427,10 +412,6 @@ module Admin
           end
         end
 
-        SEGMENTS = [
-          { id: "all", name: "All visitors" }
-        ].freeze
-
         def normalized_ui_param(key)
           value = params[key].to_s.strip
           return nil if value.blank? || %w[undefined null].include?(value)
@@ -481,7 +462,7 @@ module Admin
 
         def requested_pages_mode(query)
           requested = normalized_ui_param(:pages_mode) || normalized_ui_param(:mode)
-          return requested if requested.in?(%w[pages entry exit])
+          return requested if requested.in?(%w[pages entry exit seo])
 
           case normalized_dialog_segment
           when "entry-pages"

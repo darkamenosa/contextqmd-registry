@@ -13,7 +13,7 @@ module Identities
       if identity.active_for_authentication?
         previous_identity_id = warden.user(:identity)&.id
         sign_in(:identity, identity)
-        AnalyticsVisitBoundary.mark_sign_in!(
+        Analytics::VisitBoundary.mark_sign_in!(
           session: session,
           previous_identity_id: previous_identity_id,
           next_identity_id: identity.id

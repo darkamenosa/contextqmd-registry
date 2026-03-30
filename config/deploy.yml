@@ -45,6 +45,8 @@ env:
     - CLOUDFLARE_R2_SECRET_ACCESS_KEY
     - GOOGLE_CLIENT_ID
     - GOOGLE_CLIENT_SECRET
+    - GOOGLE_SEARCH_CONSOLE_CLIENT_ID
+    - GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET
   clear:
     # Dedicated job container handles queue processing.
     SOLID_QUEUE_IN_PUMA: false

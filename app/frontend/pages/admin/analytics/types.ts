@@ -37,8 +37,15 @@ export type AnalyticsQuery = {
 }
 
 export type SiteContextValue = {
+  id?: string | null
+  name?: string | null
   domain: string
   timezone: string
+  paths: {
+    reports?: string
+    live?: string
+    settings?: string
+  }
   hasGoals: boolean
   hasProps: boolean
   funnelsAvailable: boolean
@@ -46,6 +53,91 @@ export type SiteContextValue = {
   profilesAvailable: boolean
   segments: Array<{ id: string; name: string }>
   flags: { dbip: boolean }
+}
+
+export type GoalDefinition = {
+  displayName: string
+  eventName?: string | null
+  pagePath?: string | null
+  scrollThreshold?: number | null
+  customProps?: Record<string, string>
+}
+
+export type GoogleSearchConsoleProperty = {
+  identifier: string
+  type: string
+  permissionLevel: string
+  label: string
+}
+
+export type GoogleSearchConsoleSettings = {
+  available: boolean
+  connected: boolean
+  configured: boolean
+  callbackPath?: string | null
+  callbackUrl?: string | null
+  accountEmail?: string | null
+  propertyIdentifier?: string | null
+  propertyType?: string | null
+  permissionLevel?: string | null
+  connectedAt?: string | null
+  lastVerifiedAt?: string | null
+  syncStatus?: string | null
+  syncError?: string | null
+  syncInProgress?: boolean
+  syncStale?: boolean
+  lastSyncedAt?: string | null
+  syncedFrom?: string | null
+  syncedTo?: string | null
+  refreshWindowFrom?: string | null
+  refreshWindowTo?: string | null
+  propertiesError?: string | null
+  properties: GoogleSearchConsoleProperty[]
+}
+
+export type AnalyticsTrackerSnippet = {
+  scriptUrl: string
+  eventsEndpoint: string
+  siteToken: string
+  domainHint: string
+  publicOrigin: string
+  snippetHtml: string
+}
+
+export type AnalyticsSettingsPayload = {
+  gscConfigured: boolean
+  goals: string[]
+  goalDefinitions: GoalDefinition[]
+  allowedEventProps: string[]
+  tracker?: AnalyticsTrackerSnippet | null
+  googleSearchConsole: GoogleSearchConsoleSettings
+}
+
+export type AnalyticsSettingsPaths = {
+  reports?: string
+  live?: string
+  settings?: string
+  settingsData?: string
+  googleSearchConsoleConnect?: string
+  googleSearchConsole?: string
+  googleSearchConsoleSync?: string
+}
+
+export type AnalyticsSettingsSiteOption = {
+  id: string
+  name: string
+  domain?: string | null
+  settingsPath: string
+}
+
+export type AnalyticsInitializationState = {
+  mode: string
+  initialized: boolean
+  singleSite: boolean
+  canBootstrap: boolean
+  bootstrapPath: string
+  suggestedHost?: string | null
+  suggestedName?: string | null
 }
 
 export type TopStat = {
@@ -103,6 +195,7 @@ export type ListMetricKey =
   | "timeOnPage"
   | "pageviews"
   // Google Search Console style metrics (used by Search Terms dialog)
+  | "clicks"
   | "impressions"
   | "ctr"
   | "position"
@@ -167,6 +260,20 @@ export type ListPayload = {
     metricLabels?: Record<string, string>
     dateRangeLabel?: string
     comparisonDateRangeLabel?: string
+    searchConsole?: {
+      connected: boolean
+      configured: boolean
+      unsupportedFilters?: boolean
+      syncStatus?: string | null
+      syncError?: string | null
+      syncInProgress?: boolean
+      syncStale?: boolean
+      lastSyncedAt?: string | null
+      syncedFrom?: string | null
+      syncedTo?: string | null
+      refreshWindowFrom?: string | null
+      refreshWindowTo?: string | null
+    }
   }
 }
 
@@ -371,4 +478,20 @@ export type AnalyticsPageProps = {
   query: AnalyticsQuery
   defaultQuery: AnalyticsQuery
   boot: AnalyticsDashboardBoot
+}
+
+export type AnalyticsSettingsPageProps = {
+  site: SiteContextValue | null
+  sites: AnalyticsSettingsSiteOption[]
+  initialization: AnalyticsInitializationState
+  user: {
+    role: string
+    email?: string | null
+  }
+  funnels: Array<{
+    name: string
+    steps: Array<Record<string, unknown>>
+  }>
+  settings: AnalyticsSettingsPayload
+  paths: AnalyticsSettingsPaths
 }

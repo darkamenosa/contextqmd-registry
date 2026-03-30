@@ -8,9 +8,12 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
   setup do
     Ahoy::Event.delete_all
     Ahoy::Visit.delete_all
-    AnalyticsSetting.delete_all
-    Goal.delete_all
-    Funnel.delete_all
+    Analytics::SiteBoundary.delete_all
+    Analytics::Site.delete_all
+    Analytics::Setting.delete_all
+    Analytics::Goal.delete_all
+    Analytics::Funnel.delete_all
+    Analytics::Bootstrap.ensure_default_site!(host: "localhost")
   end
 
   test "behaviors props endpoint returns real property keys and selected value breakdown" do
@@ -52,7 +55,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
 
     sign_in(staff_identity)
 
-    get "/admin/analytics/behaviors",
+    get behaviors_path,
         params: { period: "day", mode: "props", property: "plan", with_imported: "false" },
         headers: { "ACCEPT" => "application/json" }
 
@@ -99,7 +102,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
 
     sign_in(staff_identity)
 
-    get "/admin/analytics/behaviors?period=day&mode=props&property=plan&f=is,prop:plan,Pro",
+    get "#{behaviors_path}?period=day&mode=props&property=plan&f=is,prop:plan,Pro",
         headers: { "ACCEPT" => "application/json" }
 
     assert_response :success
@@ -138,7 +141,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
 
     sign_in(staff_identity)
 
-    get "/admin/analytics/behaviors?period=day&mode=props&property=plan&f=is_not,prop:plan,Pro",
+    get "#{behaviors_path}?period=day&mode=props&property=plan&f=is_not,prop:plan,Pro",
         headers: { "ACCEPT" => "application/json" }
 
     assert_response :success
@@ -175,7 +178,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
 
     sign_in(staff_identity)
 
-    get "/admin/analytics/behaviors",
+    get behaviors_path,
         params: { period: "day", mode: "conversions", with_imported: "false" },
         headers: { "ACCEPT" => "application/json" }
 
@@ -199,7 +202,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
     )
     staff_identity.update!(staff: true)
 
-    Goal.create!(display_name: "Signup", event_name: "Signup", custom_props: {})
+    Analytics::Goal.create!(display_name: "Signup", event_name: "Signup", custom_props: {})
 
     visit = Ahoy::Visit.create!(
       visit_token: SecureRandom.hex(16),
@@ -216,7 +219,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
 
     sign_in(staff_identity)
 
-    get "/admin/analytics/behaviors",
+    get behaviors_path,
         params: { period: "day", mode: "conversions", with_imported: "false" },
         headers: { "ACCEPT" => "application/json" }
 
@@ -237,8 +240,8 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
     )
     staff_identity.update!(staff: true)
 
-    Goal.create!(display_name: "Visit /blog*", page_path: "/blog*", scroll_threshold: -1, custom_props: {})
-    Goal.create!(display_name: "Scroll Docs", page_path: "/docs/getting-started", scroll_threshold: 60, custom_props: {})
+    Analytics::Goal.create!(display_name: "Visit /blog*", page_path: "/blog*", scroll_threshold: -1, custom_props: {})
+    Analytics::Goal.create!(display_name: "Scroll Docs", page_path: "/docs/getting-started", scroll_threshold: 60, custom_props: {})
 
     page_visit = Ahoy::Visit.create!(
       visit_token: SecureRandom.hex(16),
@@ -266,7 +269,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
 
     sign_in(staff_identity)
 
-    get "/admin/analytics/behaviors",
+    get behaviors_path,
         params: { period: "day", mode: "conversions", with_imported: "false" },
         headers: { "ACCEPT" => "application/json" }
 
@@ -286,7 +289,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
     )
     staff_identity.update!(staff: true)
 
-    Goal.create!(display_name: "Visit /blog*", page_path: "/blog*", scroll_threshold: -1, custom_props: {})
+    Analytics::Goal.create!(display_name: "Visit /blog*", page_path: "/blog*", scroll_threshold: -1, custom_props: {})
 
     matching_visit = Ahoy::Visit.create!(
       visit_token: SecureRandom.hex(16),
@@ -314,7 +317,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
 
     sign_in(staff_identity)
 
-    get "/admin/analytics/behaviors?period=day&mode=props&property=plan&with_imported=false&f=is,goal,Visit%20%2Fblog*",
+    get "#{behaviors_path}?period=day&mode=props&property=plan&with_imported=false&f=is,goal,Visit%20%2Fblog*",
         headers: { "ACCEPT" => "application/json" }
 
     assert_response :success
@@ -367,7 +370,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
 
     sign_in(staff_identity)
 
-    get "/admin/analytics/behaviors?period=day&mode=props&property=plan&with_imported=false&f=is,goal,Signup",
+    get "#{behaviors_path}?period=day&mode=props&property=plan&with_imported=false&f=is,goal,Signup",
         headers: { "ACCEPT" => "application/json" }
 
     assert_response :success
@@ -389,7 +392,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
     )
     staff_identity.update!(staff: true)
 
-    AnalyticsSetting.set_json("allowed_event_props", [ "plan" ])
+    Analytics::Setting.set_json("allowed_event_props", [ "plan" ])
 
     visit = Ahoy::Visit.create!(
       visit_token: SecureRandom.hex(16),
@@ -406,7 +409,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
 
     sign_in(staff_identity)
 
-    get "/admin/analytics/behaviors",
+    get behaviors_path,
         params: { period: "day", mode: "props", with_imported: "false" },
         headers: { "ACCEPT" => "application/json" }
 
@@ -455,7 +458,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
 
       sign_in(staff_identity)
 
-      get "/admin/analytics/behaviors",
+      get behaviors_path,
           params: { period: "day", mode: "props", property: "plan", comparison: "previous_period", match_day_of_week: "false", with_imported: "false" },
           headers: { "ACCEPT" => "application/json" }
 
@@ -506,7 +509,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
 
       sign_in(staff_identity)
 
-      get "/admin/analytics/behaviors",
+      get behaviors_path,
           params: { period: "day", mode: "conversions", comparison: "previous_period", match_day_of_week: "false", with_imported: "false" },
           headers: { "ACCEPT" => "application/json" }
 
@@ -556,7 +559,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
 
     sign_in(staff_identity)
 
-    get "/admin/analytics/behaviors?period=day&mode=props&property=plan&f=is_not,browser,Chrome",
+    get "#{behaviors_path}?period=day&mode=props&property=plan&f=is_not,browser,Chrome",
         headers: { "ACCEPT" => "application/json" }
 
     assert_response :success
@@ -574,7 +577,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
     )
     staff_identity.update!(staff: true)
 
-    Funnel.create!(
+    Analytics::Funnel.create!(
       name: "Signup Funnel",
       steps: [
         { name: "Signup", type: "event", match: "equals", value: "Signup" }
@@ -609,7 +612,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
 
     sign_in(staff_identity)
 
-    get "/admin/analytics/behaviors?period=day&mode=funnels&funnel=Signup+Funnel&f=is_not,browser,Chrome",
+    get "#{behaviors_path}?period=day&mode=funnels&funnel=Signup+Funnel&f=is_not,browser,Chrome",
         headers: { "ACCEPT" => "application/json" }
 
     assert_response :success
@@ -627,7 +630,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
     )
     staff_identity.update!(staff: true)
 
-    Funnel.create!(
+    Analytics::Funnel.create!(
       name: "Signup Funnel",
       steps: [
         { name: "View pricing", type: "page", match: "equals", value: "/pricing" },
@@ -680,7 +683,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
 
     sign_in(staff_identity)
 
-    get "/admin/analytics/behaviors?period=day&mode=funnels&funnel=Signup+Funnel",
+    get "#{behaviors_path}?period=day&mode=funnels&funnel=Signup+Funnel",
         headers: { "ACCEPT" => "application/json" }
 
     assert_response :success
@@ -712,4 +715,9 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
   ensure
     Current.reset
   end
+
+  private
+    def behaviors_path
+      "/admin/analytics/sites/#{Analytics::Site.sole_active.public_id}/behaviors"
+    end
 end

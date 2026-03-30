@@ -97,7 +97,7 @@ export function liveEventLocation(event: LiveEvent) {
       country: event.country,
       countryCode: event.countryCode,
     },
-    { flagShown: true }
+    { flagShown: true, appendCountryCode: true }
   )
 
   return compact || event.locationLabel?.trim() || null

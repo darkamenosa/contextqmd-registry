@@ -205,10 +205,14 @@ test("analytics tracker still posts the pageview when the server has not pre-tra
 test("analytics tracker skips the server-tracked initial pageview and seeds follow-up state", async () => {
   installBrowserStubs()
   globalThis.window.analyticsConfig = {
-    initialPageviewTracked: true,
-    initialPageKey: "/about",
-    trackVisits: false,
-    useBeaconForEvents: false,
+    tracking: {
+      initialPageviewTracked: true,
+      initialPageKey: "/about",
+    },
+    site: {
+      token: "signed-site-token",
+      domainHint: "localhost",
+    },
   }
 
   const requests = []
@@ -227,7 +231,34 @@ test("analytics tracker skips the server-tracked initial pageview and seeds foll
     assert.equal(requests.length, 0)
     assert.equal(analytics["lastTrackedPageKey"], "/about")
     assert.equal(analytics["lastTrackedHref"], "http://localhost/about")
+    assert.equal(analytics["config"].siteToken, "signed-site-token")
     assert.ok(analytics["runningEngagementStart"] > 0)
+  } finally {
+    cleanupBrowserStubs()
+  }
+})
+
+test("analytics tracker includes the signed site token on client events", async () => {
+  installBrowserStubs()
+  globalThis.window.analyticsConfig = {
+    site: { token: "signed-site-token" },
+  }
+
+  const { StandaloneAnalytics } = await loadTrackerModule()
+  const analytics = new StandaloneAnalytics()
+
+  const requests = []
+  globalThis.fetch = async (url, options = {}) => {
+    requests.push({ url, options })
+    return { ok: true }
+  }
+
+  try {
+    analytics.init()
+    await Promise.resolve()
+
+    const body = JSON.parse(requests[0].options.body)
+    assert.equal(body.events[0].site_token, "signed-site-token")
   } finally {
     cleanupBrowserStubs()
   }

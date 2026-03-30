@@ -1,11 +1,10 @@
 # frozen_string_literal: true
 
-require Rails.root.join("lib/analytics/country")
-
 class Analytics::LiveState
   LIVE_WINDOW = 5.minutes
   CACHE_KEY = "analytics:live:broadcast:scheduled".freeze
   COALESCE_WINDOW = 1.second
+  SUBSCRIPTION_PURPOSE = "analytics-live-subscription".freeze
 
   class << self
     def build(now: Time.zone.now, camelize: true)
@@ -13,17 +12,18 @@ class Analytics::LiveState
       camelize ? payload.deep_transform_keys { |key| key.to_s.camelize(:lower) } : payload
     end
 
-    def broadcast_later(site: Current.analytics_site)
+    def broadcast_later(site: ::Analytics::Current.site)
       site_key = site_public_id(site)
       Analytics::LiveBroadcastJob.perform_later(site_key) if should_enqueue_broadcast?(site_key:)
     rescue StandardError
       nil
     end
 
-    def broadcast_now(now: Time.zone.now, site: Current.analytics_site)
+    def broadcast_now(now: Time.zone.now, site: ::Analytics::Current.site)
       resolved_site = resolve_site(site)
+      resolved_boundary = resolved_site&.boundaries&.find_by(primary: true)
 
-      Current.set(analytics_site: resolved_site) do
+      ::Analytics::Current.set(site: resolved_site, site_boundary: resolved_boundary) do
         ActionCable.server.broadcast(
           broadcast_stream(site: resolved_site),
           build(now:, camelize: true)
@@ -43,9 +43,32 @@ class Analytics::LiveState
       Analytics::Realtime.active_visits_with_coordinates(now:, window:)
     end
 
-    def broadcast_stream(site: Current.analytics_site)
+    def broadcast_stream(site: ::Analytics::Current.site_or_default)
       site_key = site_public_id(site)
       site_key.present? ? "analytics:#{site_key}" : "analytics"
+    end
+
+    def subscription_token(site: ::Analytics::Current.site_or_default)
+      subscription_verifier.generate(
+        { "site_public_id" => site_public_id(site) },
+        purpose: SUBSCRIPTION_PURPOSE,
+        expires_in: 1.day
+      )
+    end
+
+    def resolve_subscription_stream(token)
+      return nil if token.blank?
+
+      payload = subscription_verifier.verified(
+        token,
+        purpose: SUBSCRIPTION_PURPOSE
+      )
+      return nil unless payload.is_a?(Hash) && payload.key?("site_public_id")
+
+      site_key = payload["site_public_id"]
+      return nil if site_key != nil && !site_key.is_a?(String)
+
+      broadcast_stream(site: site_key.presence)
     end
 
     private
@@ -90,6 +113,10 @@ class Analytics::LiveState
         else
           Analytics::Site.find_by(public_id: site.to_s)
         end
+      end
+
+      def subscription_verifier
+        Rails.application.message_verifier(SUBSCRIPTION_PURPOSE)
       end
   end
 

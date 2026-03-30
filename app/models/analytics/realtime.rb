@@ -5,21 +5,23 @@ module Analytics::Realtime
     def active_visits(now: Time.zone.now, window: 5.minutes)
       window_start = now - window
 
-      Ahoy::Visit.where(started_at: window_start..now)
-        .or(Ahoy::Visit.where(id: recent_event_visit_ids(window_start)))
+      Ahoy::Visit
+        .for_analytics_site
+        .where(started_at: window_start..now)
+        .or(Ahoy::Visit.for_analytics_site.where(id: recent_event_visit_ids(window_start)))
         .distinct
     end
 
     def live_visitors_count(now: Time.zone.now, window: 5.minutes)
       cutoff = now - window
-      recent_event_visitors = Ahoy::Visit.where(id: recent_event_visit_ids(cutoff))
+      recent_event_visitors = Ahoy::Visit.for_analytics_site.where(id: recent_event_visit_ids(cutoff))
         .distinct
         .count(:visitor_token)
 
       if recent_event_visitors.positive?
         recent_event_visitors
       else
-        Ahoy::Visit.where(started_at: cutoff..now).distinct.count(:visitor_token)
+        Ahoy::Visit.for_analytics_site.where(started_at: cutoff..now).distinct.count(:visitor_token)
       end
     end
 
@@ -34,6 +36,7 @@ module Analytics::Realtime
         .limit(limit)
 
       event_times = Ahoy::Event
+        .for_analytics_site
         .where(visit_id: visits.map(&:id))
         .where("time >= ?", window_start)
         .group(:visit_id)
@@ -120,7 +123,7 @@ module Analytics::Realtime
     end
 
     def recent_event_visit_ids(window_start)
-      Ahoy::Event.where("time >= ?", window_start).select(:visit_id).distinct
+      Ahoy::Event.for_analytics_site.where("time >= ?", window_start).select(:visit_id).distinct
     end
   end
 end

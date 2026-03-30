@@ -2,14 +2,145 @@
 
 This document describes the self-hosted analytics system in this repo. It covers the data model, request pipeline, client-side tracker, live view, and the conventions needed to extend it safely.
 
+## Developer Onboarding
+
+If you are new to this codebase, the simplest mental model is:
+
+- `Analytics::Site` is the root object
+- visits and events are the raw facts
+- profiles are analytics-side identity read models
+- `analytics_profile_keys` is the long-term identity map
+- goals, funnels, and allowed event properties are site-scoped config
+- search providers are site-scoped external integrations
+- commerce providers are site-scoped external integrations
+- revenue and attribution should be modeled as first-class facts, not hidden inside profile state
+
+One practical strategy note:
+
+- build the architecture broadly
+- ship only the providers and UI this app actually uses now
+- add future providers in vertical slices
+- extract to an internal engine later instead of trying to publish a reusable package too early
+
+### System Map
+
+```text
+host app
+  -> Analytics::HostIntegration
+  -> server-side pageview bootstrap
+  -> Ahoy endpoints
+  -> Analytics::AhoyStore
+  -> analytics DB
+  -> Analytics::* dataset queries
+  -> Admin::Analytics::* controllers
+  -> /admin/analytics UI
+```
+
+### Database Shape
+
+```text
+analytics_sites
+  -> analytics_site_boundaries
+  -> ahoy_visits
+       -> ahoy_events
+       -> analytics_profiles
+            -> analytics_profile_keys
+            -> analytics_profile_sessions
+            -> analytics_profile_summaries
+  -> analytics_goals
+  -> analytics_funnels
+  -> analytics_allowed_event_properties
+  -> search provider accounts / bindings / syncs / query facts
+  -> commerce accounts / site bindings / customers / orders / payments / subscriptions
+  -> attribution facts
+```
+
+### Directory Guide
+
+- `app/models/analytics/`
+  domain objects, resolvers, path builders, dataset queries, GSC logic
+- `app/controllers/admin/analytics/`
+  reports/live shell controllers and JSON dataset endpoints
+- `app/controllers/concerns/admin/analytics/`
+  shared site and GSC controller context
+- `app/controllers/concerns/analytics/`
+  host-app integration boundary
+- `lib/analytics/`
+  low-level tracking/runtime integration such as Ahoy store, browser identity, visit boundary
+- `app/jobs/analytics/`
+  profile projection, live broadcast, GSC sync jobs
+- `app/frontend/pages/admin/analytics/`
+  reports/live frontend
+- `app/frontend/pages/admin/settings/analytics/`
+  analytics settings UI
+
+### Routing Modes
+
+Single-site mode:
+
+- one active `Analytics::Site`
+- backend resolves that site automatically
+- user-facing shell stays clean:
+  - `/admin/analytics`
+  - `/admin/analytics/live`
+  - `/admin/settings/analytics`
+
+Multi-site mode:
+
+- more than one active `Analytics::Site`
+- admin shell becomes explicit:
+  - `/admin/analytics/sites/:site`
+  - `/admin/analytics/sites/:site/live`
+  - `/admin/settings/analytics?site=:site`
+- tracking resolves by `host + path prefix`
+
+Important distinction:
+
+- shell pages may be singleton-style in single-site mode
+- data/API routes remain site-scoped internally
+
+### How To Extend It
+
+When adding a new feature, decide which bucket it belongs to:
+
+- identity
+- report/query logic
+- site config
+- tracking/runtime behavior
+- external integration
+- commerce outcome
+- attribution
+
+Then follow these rules:
+
+- put ownership on `analytics_site_id`
+- prefer typed tables over generic settings blobs
+- put report queries in `app/models/analytics/*_dataset_query`
+- keep controllers thin
+- put low-level tracking logic in `lib/analytics/`
+- avoid making the host app know analytics internals
+- keep business outcome facts separate from profile read models
+- normalize reporting facts above provider-specific ingestion where practical
+
+### Key Files To Read First
+
+- [app/models/analytics/site.rb](../app/models/analytics/site.rb)
+- [app/models/analytics/site_boundary.rb](../app/models/analytics/site_boundary.rb)
+- [app/models/analytics/bootstrap.rb](../app/models/analytics/bootstrap.rb)
+- [app/models/analytics/admin_site_resolver.rb](../app/models/analytics/admin_site_resolver.rb)
+- [app/models/analytics/tracking_site_resolver.rb](../app/models/analytics/tracking_site_resolver.rb)
+- [lib/analytics/ahoy_store.rb](../lib/analytics/ahoy_store.rb)
+- [lib/analytics/ahoy_integration.rb](../lib/analytics/ahoy_integration.rb)
+- [app/models/analytics/paths.rb](../app/models/analytics/paths.rb)
+
 ## Overview
 
-A Plausible-style analytics dashboard built on Ahoy. Ahoy visit/session ownership remains cookieless, while an app-owned first-party browser cookie provides weak continuity for analytics profile resolution. Runs in a dedicated PostgreSQL database isolated from primary app data. The admin dashboard at `/admin/analytics/reports` shows traffic stats; `/admin/analytics/live` shows real-time visitors on a 3D globe.
+A Plausible-style analytics dashboard built on Ahoy. Ahoy visit/session ownership remains cookieless, while an app-owned first-party browser cookie provides weak continuity for analytics profile resolution. Runs in a dedicated PostgreSQL database isolated from primary app data. The admin dashboard at `/admin/analytics` shows traffic stats; `/admin/analytics/live` shows real-time visitors on a 3D globe.
 
 ```text
 Browser → analytics.ts tracker → /ahoy/visits + /ahoy/events
                                         ↓
-                              Ahoy::Store (ahoy.rb initializer)
+                      Ahoy::Store (installed via Analytics.setup)
                                         ↓
                               analytics database (ahoy_visits, ahoy_events, analytics_profiles, analytics_profile_keys, analytics_profile_sessions, analytics_profile_summaries)
                                         ↓
@@ -31,7 +162,13 @@ class AnalyticsRecord < ActiveRecord::Base
 end
 ```
 
-**Tables**: `ahoy_visits`, `ahoy_events`, `analytics_funnels`, `analytics_settings`, `analytics_profiles`, `analytics_profile_keys`, `analytics_profile_sessions`, `analytics_profile_summaries`
+**Tables today**: `ahoy_visits`, `ahoy_events`, `analytics_funnels`, `analytics_settings`, `analytics_profiles`, `analytics_profile_keys`, `analytics_profile_sessions`, `analytics_profile_summaries`
+
+**Tables planned next**:
+
+- search provider accounts / bindings / syncs / normalized query facts
+- commerce accounts / site bindings / customers / orders / order line items / payments / subscriptions
+- attribution facts
 
 **Migrations** live in `db/analytics_migrate/`, not `db/migrate/`.
 
@@ -104,6 +241,29 @@ Strong identity keys that can safely stitch visits to a profile across sessions 
 
 `browser_id` is intentionally not stored here. It is a weak browser-continuity signal stored on `ahoy_visits`, not a canonical identity key.
 
+Longer term, this table should become the universal identity map for analytics. Good future `kind` values include:
+
+- `identity_id`
+- `email_hash`
+- `app_user_id`
+- `stripe_customer_id`
+- `paddle_customer_id`
+- `lemonsqueezy_customer_id`
+- `shopify_customer_id`
+
+Recommended matching order for future commerce/search linking:
+
+1. exact visit/session/browser metadata supplied during checkout
+2. strong app identity like `app_user_id`
+3. provider customer id
+4. verified email or email hash
+5. unresolved facts remain unlinked until later reconciliation
+
+Important rule:
+
+- unresolved orders or payments are acceptable
+- forcing weak profile links too early is worse than leaving a fact unresolved temporarily
+
 ### analytics_profile_sessions
 
 One row per projected profile-owned session, keyed back to the original `ahoy_visits` row. This is the profile journey read model used by profile-specific views.
@@ -147,6 +307,215 @@ Important implications:
 
 If product semantics need person-level counts, that change should happen in the reporting query layer by counting a merged identity key based on `analytics_profile_id` with fallback to `visitor_token`. Tracking and raw data collection do not need to change for that.
 
+## Future Commerce and Revenue Layer
+
+This repo does not yet persist first-class revenue facts, but the architecture is intentionally moving that way.
+
+Best future shape:
+
+```text
+analytics_sites
+  -> profiles / profile_keys          # who
+  -> visits / events                  # behavior
+  -> search query facts               # search demand and SEO performance
+  -> orders / payments / subscriptions # business outcomes
+  -> attribution facts                # why value is assigned to traffic
+```
+
+Important rule:
+
+- profiles should show orders and payments in the journey UI
+- orders and payments should still be stored as first-class facts
+- attribution should remain a derived reporting layer
+
+### Why orders and payments both matter
+
+Do not assume every provider is Stripe-like.
+
+- Stripe, Paddle, and Lemon Squeezy are payment/subscription oriented
+- Shopify is storefront/order oriented
+
+So the right long-term commerce model is:
+
+- commerce accounts
+- commerce site bindings
+- customers
+- orders
+- order line items
+- payments
+- subscriptions
+
+This gives the reporting layer enough structure to answer:
+
+- who purchased
+- where they came from
+- which pages convert
+- which campaigns and sources bring revenue
+- what products or plans are working
+
+### Recommended future commerce tables
+
+```text
+analytics_commerce_accounts
+analytics_commerce_site_bindings
+analytics_customers
+analytics_orders
+analytics_order_line_items
+analytics_payments
+analytics_subscriptions
+analytics_attribution_facts
+```
+
+Recommended interpretation:
+
+- `analytics_orders`
+  business transaction truth
+- `analytics_commerce_site_bindings`
+  maps an external store, merchant, or billing scope onto one analytics site
+- `analytics_order_line_items`
+  product or plan detail
+- `analytics_payments`
+  ledger-like money facts including refunds and renewals
+- `analytics_subscriptions`
+  durable subscription state
+- `analytics_attribution_facts`
+  derived reporting credit by source/page/campaign/keyword/etc
+
+### Edge cases the future model must handle
+
+- guest checkout with no logged-in app user
+- delayed provider webhooks
+- same customer returning on another device
+- one order with multiple payment attempts
+- partial refunds
+- chargebacks
+- subscription renewals months later
+- sites with no commerce provider at all
+- one site with multiple providers
+- one provider account reused across multiple sites later
+
+### Exact vs estimated revenue attribution
+
+Treat these as different classes of truth:
+
+- exact enough:
+  - purchaser
+  - source
+  - referrer
+  - campaign
+  - landing page
+  - country
+  - device
+  - order count
+  - revenue
+- estimated:
+  - keyword revenue
+  - keyword conversion rate
+
+Why:
+
+- search providers expose aggregate query performance
+- they do not provide exact per-visit keyword truth for every purchase
+
+So future keyword revenue should be labeled as estimated or inferred.
+
+Recommended attribution rollout:
+
+- ship `last_touch` first for exact-enough source/page/campaign revenue
+- add `estimated_search` for query-level keyword revenue
+- add `first_touch` or `linear` later only when product needs them
+
+### Search provider normalization
+
+Google Search Console is the first provider, not the final reporting model.
+
+Longer term, normalized reporting should read from provider-neutral search query facts with columns like:
+
+- `provider`
+- `date`
+- `query`
+- `page`
+- `country`
+- `device`
+- `clicks`
+- `impressions`
+- `position`
+
+That is the cleanest path to future Bing support without forcing report query rewrites.
+
+Recommended v1 practical rule:
+
+- implementation can stay Google-first
+- reporting contracts should move toward provider-neutral search facts
+- new report/query code should avoid spreading Google-only assumptions when a normalized shape will do
+- cached provider facts should keep one canonical `page` value for reporting rather than storing both raw and normalized page variants
+
+Recommended v1 search reports:
+
+- query performance
+- page performance
+- country performance
+- device performance
+- stronger Google organic drilldowns in reports
+- inferred `Search Terms Preview` in profile/session views
+
+Recommended v1 non-goals:
+
+- exact per-visit keyword truth
+- live search-provider dashboards
+- cross-provider blended ranking semantics
+
+Recommended future search provider tables:
+
+```text
+analytics_search_provider_accounts
+analytics_search_site_bindings
+analytics_search_syncs
+analytics_search_query_facts
+```
+
+Interpretation:
+
+- provider accounts store OAuth/API credentials and account state
+- site bindings store which external property belongs to which analytics site
+- syncs track import windows and failures
+- query facts are the provider-neutral reporting facts
+
+Current implementation note:
+
+- Google-specific tables are still fine as the first implementation step
+- the long-term reporting contract should normalize above them
+- Bing should be added later by implementing the same reporting contract, not by redesigning the search model
+
+### Storage direction
+
+Long-term split:
+
+- Postgres control plane:
+  - sites
+  - boundaries
+  - settings
+  - provider accounts / bindings
+  - sync metadata
+- fact store:
+  - visits
+  - events
+  - search query facts
+  - orders
+  - payments
+  - subscriptions
+  - attribution facts
+
+Today the fact store is still Postgres. Later it can move behind ClickHouse adapters without changing the control plane.
+
+### Privacy and operations notes
+
+- provider credentials should always be encrypted
+- webhook ingestion must be idempotent
+- event ids or external ids should be used for replay-safe upserts
+- privacy deletion or redaction flows from providers should be handled explicitly
+- keep original provider identifiers and original currency values for auditability
+
 ## Client-Side Tracker
 
 `app/frontend/entrypoints/analytics.ts` — a standalone, framework-agnostic tracker injected into the application layout via `<%= vite_typescript_tag "analytics.ts" %>`.
@@ -176,6 +545,8 @@ window.analyticsConfig = {
 }
 ```
 
+For external installs, admin settings now generate a public snippet that points to `/js/script.js`. That loader normalizes `data-site-token`, `data-domain`, `data-api`, `data-include`, and `data-exclude` into the same `window.analyticsConfig` shape before it imports the real Vite tracker bundle.
+
 ### Excluded paths
 
 The tracker skips: `/admin`, `/app`, `/login`, `/logout`, `/register`, `/password`, `/ahoy`, `/cable`, static assets, and well-known files. These are hardcoded defaults in the tracker class.
@@ -183,6 +554,8 @@ The tracker skips: `/admin`, `/app`, `/login`, `/logout`, `/register`, `/passwor
 ### Transport
 
 Events use `fetch` with `keepalive: true`, a JSON body, and `X-CSRF-Token` header when available. The tracker is intentionally fetch-first for more predictable Safari/WebKit behavior and simpler end-to-end testing.
+
+External snippet installs use `OPTIONS /ahoy/events` preflight plus permissive CORS headers on `POST /ahoy/events`. Site ownership still resolves server-side through signed site tokens and boundary resolution.
 
 ## Server-Side Initial Pageviews
 
@@ -204,7 +577,7 @@ Events use `fetch` with `keepalive: true`, a JSON body, and `X-CSRF-Token` heade
 
 ## Server-Side: Ahoy Store
 
-`config/initializers/ahoy.rb` customizes the default Ahoy database store:
+`Analytics.setup` now owns the public host setup surface. Ahoy is an internal implementation detail installed from `config/initializers/analytics.rb`, with the tracking/runtime wiring living in `lib/analytics/*`:
 
 ### Visit enrichment (track_visit)
 
@@ -337,12 +710,17 @@ Filters are passed as repeated `f` query params: `f=operator,dimension,clause`
 
 Labels use `l` params: `l=key,value` (e.g., `l=country,United States`)
 
+Page filter note:
+
+- analytics report filters should treat page values as canonical normalized paths
+- malformed non-path page filter values should be normalized consistently across report endpoints rather than handled ad hoc per query
+
 ## Frontend Dashboard
 
 ### Page structure
 
 ```text
-/admin/analytics/reports     → ReportsController#index (Inertia page)
+/admin/analytics             → ReportsController#index (Inertia page)
   └─ props: site + query + defaultQuery + boot
      └─ AnalyticsDashboardProvider  site/top-stats/last-load state
         └─ QueryProvider            URL ↔ query state sync
@@ -387,7 +765,7 @@ All functions accept an `AbortSignal` for cancellation on re-fetch.
 
 Clicking a row in any panel opens a `RemoteDetailsDialog` — a paginated, searchable, sortable modal that fetches data from the same API endpoint with `limit` and `page` params.
 
-Dialog state is encoded in the URL path: `/admin/analytics/reports/_/sources` opens the sources detail dialog. This allows deep-linking and back/forward navigation.
+Dialog state is encoded in the URL path: `/admin/analytics/_/sources` opens the sources detail dialog. This allows deep-linking and back/forward navigation.
 
 ## Live View
 
@@ -403,14 +781,16 @@ Analytics::LiveBroadcastJob (recurring + request-triggered coalescing)
     → sparkline (hourly buckets, today vs yesterday)
     → sessions_by_location (top 5)
     → visitor_dots (lat/lng for globe)
-  → ActionCable.server.broadcast("analytics", payload)
+  → ActionCable.server.broadcast("analytics:<site_public_id>", payload)
         ↓
-  AnalyticsChannel (staff-only subscription)
+  Live controller renders signed subscription token for resolved site scope
+        ↓
+  AnalyticsChannel verifies token, resolves the scoped stream, subscribes
         ↓
   React live page via @rails/actioncable consumer
 ```
 
-`Admin::Analytics::LiveController#show` renders the page with `initialStats` from `Analytics::LiveState.build`. On the client, `live/show.tsx` composes extracted helpers such as `useLiveStats`, `useLiveLocationSearch`, `live-event-buffer`, `live-events-panel.tsx`, and `live-session-card.tsx` around the shared globe components.
+`Admin::Analytics::LiveController#show` renders the page with `initialStats` from `Analytics::LiveState.build` plus a signed live subscription token for the already-resolved analytics scope. On the client, `live/show.tsx` composes extracted helpers such as `useLiveStats`, `useLiveLocationSearch`, `live-event-buffer`, `live-events-panel.tsx`, and `live-session-card.tsx` around the shared globe components.
 
 ### 3D Globe
 
@@ -452,10 +832,32 @@ The behaviors panel switches to funnel mode when `mode=funnels` is active, showi
 |---|---|---|
 | `gsc_configured` | boolean | Enables Google Search Console search terms panel |
 
+Longer term, settings should continue moving away from generic key/value state and toward typed site-scoped resources for:
+
+- search provider connections
+- commerce provider connections
+- goals
+- funnels
+- allowed/custom event properties
+
+For a future SaaS product, this means:
+
+- analytics remains site-rooted
+- integrations are optional per site
+- one site can be traffic-only
+- another site can enable search + commerce + attribution
+
+For the current app, the product/UI priority should stay narrower:
+
+- make Google Search Console setup easy
+- make search reporting useful
+- keep current single-site UX simple
+- avoid exposing unused commerce setup until a real site needs it
+
 ## Adding a new analytics dimension
 
 1. Add the column to `ahoy_visits` via a migration in `db/analytics_migrate/`
-2. If the data comes from tracking, add it to `Ahoy::Store#track_visit` or `track_event` in `config/initializers/ahoy.rb`
+2. If the data comes from tracking, add it to `Ahoy::Store#track_visit` or `track_event` in `lib/analytics/ahoy_store.rb`
 3. Extend `Analytics::Query` / `Analytics::RequestQueryParser` if the dimension needs new filter semantics
 4. Add or extend an analytics object under `app/models/analytics/` for grouping/filtering logic
 5. Add a controller under `Admin::Analytics::` inheriting from `BaseController`
@@ -463,6 +865,34 @@ The behaviors panel switches to funnel mode when `mode=funnels` is active, showi
 7. Add a frontend panel component under `app/frontend/pages/admin/analytics/ui/`
 8. Add the fetch function to `api.ts`
 9. Add the panel tab to `panel-tabs.tsx`
+
+## Adding a new provider integration
+
+When adding a new search or commerce provider:
+
+1. keep the provider site-scoped through `analytics_site_id`
+2. store credentials and sync state in typed control-plane tables
+3. normalize reporting facts so queries stay provider-neutral where practical
+4. keep provider-specific ingestion details out of the main report query layer
+5. keep profile linking explicit through `analytics_profile_keys`, customers, or other stable external identifiers
+
+Examples:
+
+- `google`, `bing` for search providers
+- `stripe`, `paddle`, `lemonsqueezy`, `shopify` for commerce providers
+
+Provider-specific implementation notes:
+
+- Stripe / Paddle / Lemon Squeezy are usually payment/subscription-first
+- Shopify is order/storefront-first
+- do not force all providers into one payment-only mental model
+- normalize above provider-specific ingestion, not below it
+
+Recommended delivery strategy:
+
+- add one provider at a time
+- ship one complete vertical slice at a time
+- validate the shared model with real usage before widening to the next provider
 
 ## Adding a new tracked event
 
@@ -477,7 +907,8 @@ The tracker sends custom events via `sendEvent()`. To add a new auto-captured ev
 | Category | Path |
 |---|---|
 | Tracker | `app/frontend/entrypoints/analytics.ts` |
-| Ahoy store | `config/initializers/ahoy.rb` |
+| Analytics setup | `config/initializers/analytics.rb`, `lib/analytics.rb` |
+| Ahoy store | `lib/analytics/ahoy_store.rb`, `lib/analytics/ahoy_integration.rb` |
 | Analytics config | `config/initializers/analytics.rb` |
 | Source rules | `config/analytics/source_rules.yml` |
 | Source resolver | `app/models/analytics/source_resolver.rb` |
@@ -504,3 +935,81 @@ The tracker sends custom events via `sendEvent()`. To add a new auto-captured ev
 | Report URL helpers | `app/frontend/pages/admin/analytics/lib/report-url.ts` |
 | Dashboard shell | `app/frontend/pages/admin/analytics/ui/analytics-dashboard.tsx` |
 | Live page | `app/frontend/pages/admin/analytics/live/show.tsx` |
+
+## Host config defaults
+
+The host app should keep analytics setup small and explicit in
+`config/initializers/analytics.rb`.
+
+Current defaults now cover:
+
+- `mode`
+  single-site by default, multi-site only when the host app opts in
+- `default_site.host`
+  optional override for singleton bootstrap; falls back to the current request host
+- `default_site.name`
+  optional display name override; falls back to the resolved host
+- `google_search_console.client_id`
+- `google_search_console.client_secret`
+- `google_search_console.callback_path`
+  defaults to `/admin/settings/analytics/google_search_console/callback`
+
+Example: single-site host app
+
+```ruby
+Analytics.setup do |config|
+  config.mode = :single_site
+  config.default_site.host = "localhost"
+  config.default_site.name = "contextqmd.com"
+  config.google_search_console.client_id =
+    ENV["GOOGLE_SEARCH_CONSOLE_CLIENT_ID"]
+  config.google_search_console.client_secret =
+    ENV["GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET"]
+end
+```
+
+Example: multi-site host app
+
+```ruby
+Analytics.setup do |config|
+  config.mode = :multi_site
+  config.google_search_console.client_id =
+    ENV["GOOGLE_SEARCH_CONSOLE_CLIENT_ID"]
+  config.google_search_console.client_secret =
+    ENV["GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET"]
+end
+```
+
+For multi-site apps, actual sites and boundaries belong in the database, not in
+the initializer.
+
+For single-site apps, the intended flow is:
+
+1. configure analytics defaults once
+2. visit `Settings > Analytics`
+3. initialize the default site if it has not been bootstrapped yet
+4. connect Google Search Console using the callback URL shown in settings
+
+This keeps request-time resolution read-only while still giving the host app an easy setup path.
+
+## Google Search Console OAuth shape
+
+Google Search Console should use one stable callback URL:
+
+- `/admin/settings/analytics/google_search_console/callback`
+
+The callback path should not include `:site`.
+
+Instead:
+
+1. the connect action stores the target analytics site in signed session/state
+2. Google redirects back to the single callback URL
+3. the callback verifies the returned OAuth state
+4. the app loads the intended analytics site from session/state
+5. the connection is attached to that site
+
+This is cleaner because:
+
+- Google Cloud only needs one authorized redirect URI
+- single-site apps do not leak site ids into OAuth setup
+- multi-site apps still work without changing the redirect URI

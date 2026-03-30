@@ -60,36 +60,73 @@ Rails.application.routes.draw do
       resources :proxy_configs
       resources :webhooks, only: [ :index ]
 
-      # Analytics pages (Inertia) + API (JSON)
-      namespace :analytics do
-        get "_/*dialog", to: redirect("/admin/analytics/reports/_/%{dialog}")
-        resources :reports, only: [ :index ]
-        get "reports/_/*dialog", to: "reports#index"
-        resource :live, only: :show, controller: "live"
+      get "analytics", to: "analytics/reports#index", as: :analytics
+      get "analytics/_/*dialog", to: "analytics/reports#index"
+      get "analytics/reports", to: redirect { |_params, req|
+        target = "/admin/analytics"
+        req.query_string.present? ? "#{target}?#{req.query_string}" : target
+      }
+      get "analytics/reports/_/*dialog", to: redirect { |params, req|
+        target = "/admin/analytics/_/#{params[:dialog]}"
+        req.query_string.present? ? "#{target}?#{req.query_string}" : target
+      }
+      get "analytics/live", to: "analytics/live#show", as: :analytics_live
+      get "analytics/sites/:site", to: "analytics/reports#index", as: :analytics_site
+      get "analytics/sites/:site/_/*dialog", to: "analytics/reports#index"
+      get "analytics/sites/:site/reports", to: redirect { |params, req|
+        target = "/admin/analytics/sites/#{params[:site]}"
+        req.query_string.present? ? "#{target}?#{req.query_string}" : target
+      }
+      get "analytics/sites/:site/reports/_/*dialog", to: redirect { |params, req|
+        target = "/admin/analytics/sites/#{params[:site]}/_/#{params[:dialog]}"
+        req.query_string.present? ? "#{target}?#{req.query_string}" : target
+      }
+      get "analytics/sites/:site/live", to: "analytics/live#show", as: :analytics_site_live
 
-        # JSON API endpoints for analytics dashboard
-        resource :top_stats, only: [ :show ], controller: "top_stats"
-        resource :main_graph, only: [ :show ], controller: "main_graph"
-        resource :settings, only: [ :show, :update ], controller: "settings"
-        resource :source_debug, only: [ :show ], controller: "source_debug"
-        resources :funnels, only: [ :create, :update, :destroy ], controller: "funnels"
-        resources :sources, only: [ :index ]
-        resources :search_terms, only: [ :index ]
-        resources :referrers, only: [ :index ]
-        resources :pages, only: [ :index ], as: :analytics_pages
-        resources :locations, only: [ :index ]
-        resources :devices, only: [ :index ]
-        resources :behaviors, only: [ :index ]
-        resources :profiles, only: [ :index, :show ] do
-          resources :sessions, only: [ :index, :show ], controller: "profile_sessions"
+      # Analytics API (JSON) + site-scoped settings actions
+      namespace :analytics do
+        resources :sites, only: [], param: :site do
+          member do
+            get "settings", to: "settings_ui#show"
+            get "settings/data", to: "settings#show"
+            patch "settings/data", to: "settings#update"
+            post "google_search_console/connect", to: "google_search_console#connect"
+            post "google_search_console/sync", to: "google_search_console#sync"
+            patch "google_search_console", to: "google_search_console#update"
+            delete "google_search_console", to: "google_search_console#destroy"
+            get "top_stats", to: "top_stats#show"
+            get "main_graph", to: "main_graph#show"
+            get "source_debug", to: "source_debug#show"
+            get "sources", to: "sources#index"
+            get "search_terms", to: "search_terms#index"
+            get "referrers", to: "referrers#index"
+            get "pages", to: "pages#index"
+            get "locations", to: "locations#index"
+            get "devices", to: "devices#index"
+            get "behaviors", to: "behaviors#index"
+            get "profiles", to: "profiles#index"
+            get "profiles/:id", to: "profiles#show"
+            get "profiles/:profile_id/sessions", to: "profile_sessions#index"
+            get "profiles/:profile_id/sessions/:id", to: "profile_sessions#show"
+            post "funnels", to: "funnels#create"
+            patch "funnels/:id", to: "funnels#update"
+            delete "funnels/:id", to: "funnels#destroy"
+          end
         end
       end
 
       resource :settings, only: :show
       namespace :settings do
         resource :team, only: :show
+        resource :analytics, only: :show
       end
     end
+    post "admin/settings/analytics/bootstrap",
+      to: "admin/settings/analytics#bootstrap",
+      as: :admin_settings_analytics_bootstrap
+    get Analytics::Configuration.google_search_console_callback_path.delete_prefix("/"),
+      to: "admin/analytics/google_search_console#callback",
+      as: :admin_analytics_google_search_console_callback
     mount MissionControl::Jobs::Engine, at: "/admin/jobs" if defined?(MissionControl::Jobs::Engine)
 
     get "admin/*unmatched", to: "errors#show", defaults: { status: "404" },
@@ -101,6 +138,9 @@ Rails.application.routes.draw do
   constraints(host: "127.0.0.1") do
     get "(*path)", to: redirect { |params, req| "#{req.protocol}localhost:#{req.port}/#{params[:path]}" }
   end
+
+  get "js/script.js", to: "analytics/script#show", defaults: { format: :js }, as: :analytics_tracker_script
+  match "ahoy/events", to: "analytics/cors#preflight", via: :options
 
   # Library browsing (public) + submission (authenticated)
   resources :libraries, only: [ :index, :new, :create ], param: :slug do

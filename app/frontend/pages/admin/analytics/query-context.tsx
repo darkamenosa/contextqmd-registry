@@ -12,6 +12,10 @@ import {
   mergeReportQueryParams,
   resolveInitialReportQuery,
 } from "./lib/query-codec"
+import {
+  parseLocationFromUrl,
+  resolveAnalyticsLocation,
+} from "./lib/query-location"
 import { buildReportUrl, canonicalReportSearch } from "./lib/report-url"
 import type { AnalyticsQuery } from "./types"
 
@@ -26,16 +30,6 @@ export type QueryContextValue = {
 }
 
 const QueryContext = createContext<QueryContextValue | null>(null)
-
-function parseLocationFromUrl(url: string | undefined) {
-  if (!url) return { pathname: "", search: "" }
-
-  const parsed = new URL(url, "http://analytics.test")
-  return {
-    pathname: parsed.pathname,
-    search: parsed.search,
-  }
-}
 
 export function QueryProvider({
   initialQuery,
@@ -53,16 +47,14 @@ export function QueryProvider({
     () => parseLocationFromUrl(initialUrl),
     [initialUrl]
   )
-  const pathname = location.pathname || initialLocation.pathname
-  const search = location.search || initialLocation.search
+  const resolvedLocation = useMemo(
+    () => resolveAnalyticsLocation(location, initialLocation),
+    [initialLocation, location]
+  )
+  const { pathname, search } = resolvedLocation
 
   const query = useMemo(
-    () =>
-      resolveInitialReportQuery(
-        search || undefined,
-        initialQuery,
-        defaultQuery
-      ),
+    () => resolveInitialReportQuery(search, initialQuery, defaultQuery),
     [defaultQuery, initialQuery, search]
   )
 

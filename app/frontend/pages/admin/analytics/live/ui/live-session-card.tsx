@@ -58,7 +58,7 @@ export default function LiveSessionCard({
       country: session.country,
       countryCode: session.countryCode,
     },
-    { flagShown: true }
+    { flagShown: true, appendCountryCode: true }
   )
   const locationFlag = flagFromIso2(session.countryCode ?? undefined)
 
