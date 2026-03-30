@@ -8,7 +8,6 @@ class Admin::AnalyticsSearchTermsTest < ActionDispatch::IntegrationTest
   setup do
     Analytics::GoogleSearchConsole::QueryRow.delete_all
     Analytics::GoogleSearchConsole::Sync.delete_all
-    Analytics::Setting.delete_all
     Analytics::GoogleSearchConsoleConnection.delete_all
     Analytics::SiteBoundary.delete_all
     Analytics::Site.delete_all

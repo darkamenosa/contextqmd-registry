@@ -28,7 +28,9 @@ One practical strategy note:
 host app
   -> Analytics::HostIntegration
   -> server-side pageview bootstrap
-  -> /analytics/events
+  -> GET /analytics/script.js
+  -> POST /analytics/bootstrap
+  -> POST /analytics/events
   -> Analytics::AhoyStore
   -> analytics DB
   -> Analytics::* dataset queries
@@ -73,6 +75,129 @@ analytics_sites
   reports/live frontend
 - `app/frontend/pages/admin/settings/analytics/`
   analytics settings UI
+
+### Directory Tree
+
+```text
+app/
+  channels/
+    analytics_channel.rb
+  controllers/
+    analytics/
+      cors_controller.rb
+      events_controller.rb
+      script_controller.rb
+    admin/
+      analytics/
+        base_controller.rb
+        reports_controller.rb
+        live_controller.rb
+        settings_controller.rb
+        funnels_controller.rb
+        google_search_console_controller.rb
+        top_stats_controller.rb
+        main_graph_controller.rb
+        sources_controller.rb
+        search_terms_controller.rb
+        referrers_controller.rb
+        pages_controller.rb
+        locations_controller.rb
+        devices_controller.rb
+        behaviors_controller.rb
+        profiles_controller.rb
+        profile_sessions_controller.rb
+        source_debug_controller.rb
+      settings/
+        analytics_controller.rb
+    concerns/
+      analytics/
+        host_integration.rb
+      admin/
+        analytics/
+          site_context.rb
+          funnel_scoped.rb
+          google_search_console_context.rb
+  jobs/
+    analytics/
+      live_broadcast_job.rb
+      visit_projection_job.rb
+      profile_projection_job.rb
+      profile_resolution_job.rb
+      profile_summary_refresh_job.rb
+      google_search_console_sync_job.rb
+      refresh_due_google_search_console_connections_job.rb
+  models/
+    analytics/
+      site.rb
+      site_boundary.rb
+      site_tracking_rule.rb
+      tracking_rules.rb
+      tracking_site_resolver.rb
+      tracked_site_scope.rb
+      tracker_bootstrap.rb
+      tracker_loader.rb
+      tracker_site_token.rb
+      tracker_snippet.rb
+      tracker_cors_headers.rb
+      goal.rb
+      goals.rb
+      goal_suggestions.rb
+      funnel.rb
+      allowed_event_property.rb
+      properties.rb
+      google_search_console/
+      *_dataset_query/
+    analytics_profile/
+      directory.rb
+      journey.rb
+      live.rb
+      payload_builder.rb
+      projection.rb
+      querying.rb
+      resolution.rb
+    ahoy/
+      visit.rb
+      event.rb
+  frontend/
+    entrypoints/
+      analytics.ts
+    components/
+      analytics/
+    pages/
+      admin/
+        analytics/
+          reports/
+          live/
+          ui/
+          hooks/
+          lib/
+          settings.tsx
+          types.ts
+lib/
+  analytics/
+    ahoy_integration.rb
+    ahoy_store.rb
+    anonymous_identity.rb
+    browser_identity.rb
+    visit_boundary.rb
+db/
+  analytics_migrate/
+  analytics_schema.rb
+test/
+  integration/
+    analytics_*.rb
+    admin/analytics_*.rb
+  models/
+    analytics/
+    analytics_profile/
+    ahoy_*.rb
+  frontend/
+    analytics_*.test.mjs
+docs/
+  analytics.md
+  analytics-tracker-bootstrap-plan.md
+  analytics-architecture-plan.md
+```
 
 ### Routing Modes
 
@@ -129,6 +254,12 @@ Then follow these rules:
 - [app/models/analytics/bootstrap.rb](../app/models/analytics/bootstrap.rb)
 - [app/models/analytics/admin_site_resolver.rb](../app/models/analytics/admin_site_resolver.rb)
 - [app/models/analytics/tracking_site_resolver.rb](../app/models/analytics/tracking_site_resolver.rb)
+- [app/models/analytics/tracked_site_scope.rb](../app/models/analytics/tracked_site_scope.rb)
+- [app/models/analytics/tracker_bootstrap.rb](../app/models/analytics/tracker_bootstrap.rb)
+- [app/models/analytics/tracker_loader.rb](../app/models/analytics/tracker_loader.rb)
+- [app/controllers/analytics/script_controller.rb](../app/controllers/analytics/script_controller.rb)
+- [app/controllers/analytics/events_controller.rb](../app/controllers/analytics/events_controller.rb)
+- [app/models/analytics/site_tracking_rule.rb](../app/models/analytics/site_tracking_rule.rb)
 - [lib/analytics/ahoy_store.rb](../lib/analytics/ahoy_store.rb)
 - [lib/analytics/ahoy_integration.rb](../lib/analytics/ahoy_integration.rb)
 - [app/models/analytics/paths.rb](../app/models/analytics/paths.rb)
@@ -145,17 +276,31 @@ Public ownership rule:
 - `ahoy_visits` and `ahoy_events` remain internal storage tables for now
 
 ```text
-Browser → analytics.ts tracker → /analytics/events
-                                        ↓
-                 Ahoy::EventsController + Analytics::AhoyStore
-                                        ↓
-                              analytics database (ahoy_visits, ahoy_events, analytics_profiles, analytics_profile_keys, analytics_profile_sessions, analytics_profile_summaries)
-                                        ↓
-                 Analytics::RequestQueryParser → Analytics::Query
-                                        ↓
-      Analytics::* / AnalyticsProfile::* domain objects + shallow Analytics::*Job jobs
-                                        ↓
-                   Admin::Analytics::*Controller → JSON API → React dashboard
+first-party page
+  -> window.analyticsConfig in application layout
+  -> GET /analytics/script.js
+  -> analytics.ts tracker
+  -> POST /analytics/events
+        ↓
+  Analytics::EventsController + Analytics::AhoyStore
+        ↓
+  analytics database (ahoy_visits, ahoy_events, analytics_profiles, analytics_profile_keys, analytics_profile_sessions, analytics_profile_summaries)
+        ↓
+  Analytics::RequestQueryParser → Analytics::Query
+        ↓
+  Analytics::* / AnalyticsProfile::* domain objects + shallow Analytics::*Job jobs
+        ↓
+  Admin::Analytics::*Controller → JSON API → React dashboard
+```
+
+For external installs, the public flow is:
+
+```text
+third-party page
+  -> GET /analytics/script.js
+  -> POST /analytics/bootstrap
+  -> analytics.ts tracker
+  -> POST /analytics/events
 ```
 
 ## Database Isolation
@@ -169,7 +314,11 @@ class AnalyticsRecord < ActiveRecord::Base
 end
 ```
 
-**Tables today**: `ahoy_visits`, `ahoy_events`, `analytics_funnels`, `analytics_goals`, `analytics_allowed_event_properties`, `analytics_site_tracking_rules`, `analytics_settings`, `analytics_profiles`, `analytics_profile_keys`, `analytics_profile_sessions`, `analytics_profile_summaries`
+**Tables today**: `analytics_sites`, `analytics_site_boundaries`, `ahoy_visits`, `ahoy_events`, `analytics_funnels`, `analytics_goals`, `analytics_allowed_event_properties`, `analytics_site_tracking_rules`, `analytics_profiles`, `analytics_profile_keys`, `analytics_profile_sessions`, `analytics_profile_summaries`, `analytics_google_search_console_connections`, `analytics_google_search_console_syncs`, `analytics_google_search_console_query_rows`
+
+**Legacy schema note**: `analytics_settings` still exists in the analytics schema,
+but the current runtime design no longer uses it as an active config surface.
+New analytics configuration should go into typed site-scoped records instead.
 
 **Tables planned next**:
 
@@ -221,11 +370,18 @@ Recommended step types:
 - `page_visit`
 - `goal`
 
-### analytics_settings
+### analytics_site_tracking_rules
 
-Legacy key-value store for lightweight runtime analytics configuration. New
-site-owned analytics config should prefer typed records over adding more keys
-here.
+Typed site-owned runtime tracking rules.
+
+| Column | Purpose |
+|---|---|
+| `analytics_site_id` | Site ownership |
+| `include_paths` | Optional allowlist patterns for tracked paths |
+| `exclude_paths` | Site-owned denylist patterns merged with system defaults |
+| `created_at`, `updated_at` | Audit timestamps |
+
+This is the active replacement for generic analytics runtime settings.
 
 ### analytics_profiles
 
@@ -532,7 +688,7 @@ Today the fact store is still Postgres. Later it can move behind ClickHouse adap
 
 ## Client-Side Tracker
 
-`app/frontend/entrypoints/analytics.ts` — a standalone, framework-agnostic tracker injected into the application layout via `<%= vite_typescript_tag "analytics.ts" %>`.
+`app/frontend/entrypoints/analytics.ts` — a standalone, framework-agnostic tracker loaded through `GET /analytics/script.js`.
 
 ### How it works
 
@@ -546,18 +702,41 @@ Today the fact store is still Postgres. Later it can move behind ClickHouse adap
 
 ### Configuration
 
-Runtime config is injected by the layout into `window.analyticsConfig`:
+Runtime config is injected by the layout into `window.analyticsConfig` with one
+canonical nested shape:
 
 ```javascript
 window.analyticsConfig = {
-  useCookies: false,             // Ahoy visit/session cookies remain disabled
-  visitDurationMinutes: 30,      // 30-minute session window
-  useBeaconForEvents: false,     // legacy flag; fetch keepalive is the active transport
-  trackVisits: false,            // legacy flag; follow-up tracking is event-only
-  initialPageviewTracked: true,  // set only when the server already counted this render
-  initialPageKey: "/"            // server-seeded dedupe key for the current page
+  version: 1,
+  transport: {
+    eventsEndpoint: "/analytics/events"
+  },
+  site: {
+    websiteId: "site_public_id_or_null",
+    token: "signed_site_token_or_null",
+    domainHint: "example.com"
+  },
+  tracking: {
+    hashBasedRouting: false,
+    initialPageviewTracked: true,
+    initialPageKey: "/"
+  },
+  filters: {
+    includePaths: [],
+    excludePaths: ["/admin", "/.well-known", "/analytics", "/ahoy", "/cable"],
+    excludeAssets: [".png", ".jpg", ".css", ".js"]
+  },
+  debug: false
 }
 ```
+
+Important distinction:
+
+- first-party pages usually already have a signed `site.token`, so the loader
+  can start immediately
+- external installs bootstrap through `POST /analytics/bootstrap`
+- the browser uses `website_id` only for bootstrap, not for steady-state event
+  ingestion
 
 For external installs, admin settings should generate a public snippet that points
 to `/analytics/script.js`. The public contract should stay small:
@@ -570,11 +749,11 @@ to `/analytics/script.js`. The public contract should stay small:
 ></script>
 ```
 
-That loader should normalize `data-website-id` into the same
-`window.analyticsConfig` shape before it imports the real Vite tracker bundle.
-Tracking rules should come from backend-owned bootstrap, not HTML attributes.
-Any signed site token should be an internal runtime/bootstrap detail, not the
-public HTML contract.
+The loader should normalize `data-website-id` into the nested
+`window.analyticsConfig.site.websiteId` field before it imports the real Vite
+tracker bundle. Tracking rules come from backend-owned bootstrap, not HTML
+attributes. The signed site token is an internal runtime/bootstrap detail, not
+the public HTML contract.
 
 ### Excluded paths
 
@@ -601,9 +780,13 @@ Events use `fetch` with `keepalive: true`, a JSON body, and `X-CSRF-Token` heade
 
 External snippet installs use:
 
+- `GET /analytics/script.js` for the public loader
 - `POST /analytics/bootstrap` to validate the embed and mint runtime config
 - `OPTIONS /analytics/bootstrap` and `OPTIONS /analytics/events` for CORS
 - `POST /analytics/events` for event ingestion
+
+`GET /analytics/script.js` uses Rails conditional GET support in non-development
+environments, so matching ETags return `304 Not Modified`.
 
 Site ownership should still resolve server-side through `website_id` lookup for
 bootstrap, internal site attestation for events, and strict boundary
@@ -1010,20 +1193,26 @@ showing a horizontal step-by-step conversion flow instead of a generic list.
 
 ## Settings
 
-`Admin::Analytics::SettingsController` manages the remaining lightweight runtime
-config:
+`Admin::Analytics::SettingsController` and the settings payload assembled by
+`Admin::Analytics::GoogleSearchConsoleContext` expose typed site-scoped config.
 
-| Key | Type | Purpose |
-|---|---|---|
-| `analytics_site_tracking_rules` | typed record | Site-scoped include/exclude tracking rules merged with system defaults |
+Current typed settings/config surfaces:
 
-Longer term, settings should continue moving away from generic key/value state and toward typed site-scoped resources for:
+- `Analytics::SiteTrackingRule`
+- `Analytics::Goal`
+- `Analytics::Funnel`
+- `Analytics::AllowedEventProperty`
+- `Analytics::GoogleSearchConsoleConnection`
+
+Longer term, settings should continue moving toward typed site-scoped resources for:
 
 - search provider connections
 - commerce provider connections
 - goals
 - funnels
 - allowed/custom event properties
+
+The old generic `Analytics::Setting` model has been removed from runtime use.
 
 For a future SaaS product, this means:
 

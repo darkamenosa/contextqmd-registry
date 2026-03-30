@@ -5,7 +5,6 @@ require "test_helper"
 class Analytics::PropertiesTest < ActiveSupport::TestCase
   setup do
     Analytics::AllowedEventProperty.delete_all if defined?(Analytics::AllowedEventProperty)
-    Analytics::Setting.delete_all
     Analytics::Site.delete_all
   end
 

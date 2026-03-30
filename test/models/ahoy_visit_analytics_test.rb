@@ -16,7 +16,6 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
     Analytics::GoogleSearchConsole::Sync.delete_all
     Analytics::GoogleSearchConsoleConnection.delete_all
     Analytics::AllowedEventProperty.delete_all if defined?(Analytics::AllowedEventProperty)
-    Analytics::Setting.delete_all
     Analytics::Goal.delete_all
     Analytics::Funnel.delete_all
     Analytics::SiteBoundary.delete_all

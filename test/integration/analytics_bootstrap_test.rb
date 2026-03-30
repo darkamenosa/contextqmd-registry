@@ -16,16 +16,12 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
       end
 
       assert_response :success
-      assert_includes response.body, "\"visitDurationMinutes\":30"
-      assert_includes response.body, "\"trackVisits\":false"
-      assert_includes response.body, "\"useBeaconForEvents\":false"
-      assert_includes response.body, "\"useCookies\":false"
       assert_includes response.body, "\"version\":1"
       assert_includes response.body, "\"transport\":{\"eventsEndpoint\":\"/analytics/events\"}"
-      assert_includes response.body, "\"siteToken\":null"
-      assert_includes response.body, "\"initialPageviewTracked\":true"
-      assert_includes response.body, "\"initialPageKey\":\"/\""
-      assert_includes response.body, %(<script src="/analytics/script.js" defer></script>)
+      assert_includes response.body, "\"site\":{\"websiteId\":"
+      assert_includes response.body, "\"token\":"
+      assert_includes response.body, "\"tracking\":{\"hashBasedRouting\":false,\"initialPageviewTracked\":true,\"initialPageKey\":\"/\"}"
+      assert_includes response.body, %(<script src="/analytics/script.js" defer="defer"></script>)
       refute_includes response.body, "vite/assets/analytics"
       refute_includes response.body, "meta name=\"ahoy-visit\""
       refute_includes response.body, "meta name=\"ahoy-visitor\""
@@ -41,9 +37,8 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
       end
 
       assert_response :success
-      assert_includes response.body, "\"trackVisits\":false"
       assert_includes response.body, "\"version\":1"
-      assert_includes response.body, "\"initialPageviewTracked\":false"
+      assert_includes response.body, "\"tracking\":{\"hashBasedRouting\":false,\"initialPageviewTracked\":false"
       refute_includes response.body, "meta name=\"ahoy-visit\""
       refute_includes response.body, "meta name=\"ahoy-visitor\""
     end
@@ -58,9 +53,9 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
       end
 
       assert_response :success
-      assert_includes response.body, "\"siteToken\":null"
-      assert_includes response.body, "\"initialPageviewTracked\":true"
-      assert_includes response.body, "\"initialPageKey\":\"/login\""
+      assert_includes response.body, "\"site\":{\"websiteId\":"
+      assert_includes response.body, "\"token\":"
+      assert_includes response.body, "\"tracking\":{\"hashBasedRouting\":false,\"initialPageviewTracked\":true,\"initialPageKey\":\"/login\"}"
       refute_includes response.body, "meta name=\"ahoy-visit\""
       refute_includes response.body, "meta name=\"ahoy-visitor\""
     end
@@ -108,7 +103,7 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
       end
 
       assert_response :success
-      assert_includes response.body, "\"initialPageviewTracked\":false"
+      assert_includes response.body, "\"tracking\":{\"hashBasedRouting\":false,\"initialPageviewTracked\":false"
       refute_includes response.body, "meta name=\"ahoy-visit\""
       refute_includes response.body, "meta name=\"ahoy-visitor\""
     end

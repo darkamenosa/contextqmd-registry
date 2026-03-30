@@ -2,7 +2,6 @@
 
 class Analytics::TrackerBootstrap
   VERSION = 1
-  DEFAULT_EXCLUDE_PATHS = Analytics::InternalPaths.tracker_exclude_prefixes.freeze
   DEFAULT_EXCLUDE_ASSETS = [
     ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico", ".woff", ".woff2",
     ".ttf", ".eot", ".otf", ".pdf", ".zip", ".tar", ".gz", ".mp4", ".webm",
@@ -28,7 +27,7 @@ class Analytics::TrackerBootstrap
         )
       end
 
-      payload = {
+      {
         version: VERSION,
         transport: {
           eventsEndpoint: "/analytics/events"
@@ -48,21 +47,8 @@ class Analytics::TrackerBootstrap
           excludePaths: tracking_rules.exclude_paths,
           excludeAssets: DEFAULT_EXCLUDE_ASSETS
         },
-        debug: false,
-        # Legacy flat fields kept during migration.
-        eventsEndpoint: "/analytics/events",
-        useCookies: Analytics::Configuration.use_cookies?,
-        visitDurationMinutes: Analytics::Configuration.visit_duration_minutes,
-        useBeaconForEvents: Analytics::Configuration.use_beacon_for_events?,
-        trackVisits: false,
-        initialPageviewTracked: initial_pageview_tracked == true,
-        initialPageKey: initial_page_key,
-        websiteId: site_resolution&.site&.public_id,
-        siteToken: site_token,
-        domainHint: site_resolution&.site&.canonical_hostname.presence || request.host
+        debug: false
       }
-
-      payload
     end
 
     def build_external(site:, request:, boundary: nil, host: nil, path: nil)
@@ -98,16 +84,7 @@ class Analytics::TrackerBootstrap
           excludePaths: tracking_rules.exclude_paths,
           excludeAssets: DEFAULT_EXCLUDE_ASSETS
         },
-        debug: false,
-        # Legacy flat fields kept during migration.
-        eventsEndpoint: "#{public_origin}/analytics/events",
-        siteToken: token,
-        websiteId: site.public_id,
-        domainHint: site.canonical_hostname,
-        useCookies: false,
-        visitDurationMinutes: Analytics::Configuration.visit_duration_minutes,
-        useBeaconForEvents: Analytics::Configuration.use_beacon_for_events?,
-        trackVisits: false
+        debug: false
       }
     end
   end

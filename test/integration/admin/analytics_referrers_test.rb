@@ -10,7 +10,6 @@ class Admin::AnalyticsReferrersTest < ActionDispatch::IntegrationTest
     Ahoy::Visit.delete_all
     Analytics::SiteBoundary.delete_all
     Analytics::Site.delete_all
-    Analytics::Setting.delete_all
     Analytics::Goal.delete_all
   end
 

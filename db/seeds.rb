@@ -228,11 +228,12 @@ if Rails.env.development?
     end
 
     def ensure_behavior_config!
+      site = Analytics::Bootstrap.ensure_default_site!(host: HOSTNAME, name: "ContextQMD")
+
       Analytics::Goal.sync_from_definitions!(DEMO_GOAL_DEFINITIONS)
-      Analytics::Setting.set_bool("goals_managed", true)
-      Analytics::Setting.set_json(
-        "allowed_event_props",
-        (Analytics::Properties.available_keys + DEMO_ALLOWED_EVENT_PROPS).uniq.sort
+      Analytics::AllowedEventProperty.sync_keys!(
+        (Analytics::Properties.available_keys(site:) + DEMO_ALLOWED_EVENT_PROPS).uniq.sort,
+        site: site
       )
 
       DEMO_FUNNELS.each do |payload|

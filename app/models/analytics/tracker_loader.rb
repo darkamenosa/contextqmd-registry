@@ -32,10 +32,9 @@ class Analytics::TrackerLoader
           const websiteId = currentScript?.getAttribute("data-website-id");
           if (websiteId) {
             next.site.websiteId = websiteId;
-            next.websiteId = websiteId;
           }
 
-          if (websiteId && !next.site.token && !next.siteToken) {
+          if (websiteId && !next.site.token) {
             try {
               const bootstrapUrl = new URL(#{bootstrap_path.to_json}, currentScript?.src || window.location.href);
               const response = await fetch(bootstrapUrl.toString(), {

@@ -10,7 +10,6 @@ class Admin::AnalyticsPagesTest < ActionDispatch::IntegrationTest
     Ahoy::Visit.delete_all
     Analytics::GoogleSearchConsole::QueryRow.delete_all
     Analytics::GoogleSearchConsole::Sync.delete_all
-    Analytics::Setting.delete_all
     Analytics::Goal.delete_all
     Analytics::GoogleSearchConsoleConnection.delete_all
     Analytics::SiteBoundary.delete_all

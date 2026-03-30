@@ -21,63 +21,19 @@
     <link rel="apple-touch-icon" href="/icon.png">
 
     <%= vite_stylesheet_tag "application" %>
-    <% if Rails.env.development? %>
-      <script>
-        (() => {
-          const reloadKey = "vite-dev-recovery-at"
-          const shouldReload = () => {
-            const lastAttempt = Number(sessionStorage.getItem(reloadKey) || "0")
-            return Date.now() - lastAttempt > 10000
-          }
-          const reloadOnce = () => {
-            if (!shouldReload()) return
-            sessionStorage.setItem(reloadKey, String(Date.now()))
-            window.location.reload()
-          }
-          const isStaleViteDep = (value) =>
-            typeof value === "string" &&
-            value.includes("/vite-dev/@fs/") &&
-            value.includes("/node_modules/.vite/deps/")
-
-          window.addEventListener(
-            "error",
-            (event) => {
-              const source =
-                event.filename ||
-                event.target?.src ||
-                event.target?.href ||
-                ""
-
-              if (isStaleViteDep(source)) reloadOnce()
-            },
-            true
-          )
-
-          window.addEventListener("unhandledrejection", (event) => {
-            const message = String(event.reason?.message || event.reason || "")
-            if (
-              message.includes("WebSocket closed without opened") ||
-              message.includes("Outdated Optimize Dep")
-            ) {
-              reloadOnce()
-            }
-          })
-        })()
-      </script>
-    <% end %>
     <%= vite_react_refresh_tag %>
     <%= vite_client_tag %>
     <%= vite_typescript_tag "inertia.tsx" %>
-    <script>
-      window.analyticsConfig = <%= raw(
+    <%= javascript_tag do %>
+      window.analyticsConfig = <%= raw json_escape(
         Analytics::TrackerBootstrap.build(
           request: request,
           initial_pageview_tracked: analytics_initial_pageview_tracked?,
           initial_page_key: analytics_initial_page_key
         ).to_json
       ) %>;
-    </script>
-    <script src="<%= analytics_tracker_script_path %>" defer></script>
+    <% end %>
+    <%= javascript_include_tag analytics_tracker_script_path, defer: true %>
     <%= inertia_ssr_head %>
 
   </head>

@@ -17,7 +17,6 @@ class Admin::AnalyticsSettingsTest < ActionDispatch::IntegrationTest
     Ahoy::Visit.delete_all
     Analytics::AllowedEventProperty.delete_all if defined?(Analytics::AllowedEventProperty)
     Analytics::SiteTrackingRule.delete_all if defined?(Analytics::SiteTrackingRule)
-    Analytics::Setting.delete_all
     Analytics::Goal.delete_all
     Analytics::Funnel.delete_all
     Analytics::SiteBoundary.delete_all

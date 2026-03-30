@@ -11,7 +11,6 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
     Analytics::AllowedEventProperty.delete_all if defined?(Analytics::AllowedEventProperty)
     Analytics::SiteBoundary.delete_all
     Analytics::Site.delete_all
-    Analytics::Setting.delete_all
     Analytics::Goal.delete_all
     Analytics::Funnel.delete_all
     Analytics::Bootstrap.ensure_default_site!(host: "localhost")

@@ -18,7 +18,6 @@ class Admin::AnalyticsReportsTest < ActionDispatch::IntegrationTest
     AnalyticsProfileSession.delete_all if defined?(AnalyticsProfileSession)
     AnalyticsProfileSummary.delete_all if defined?(AnalyticsProfileSummary)
     Analytics::AllowedEventProperty.delete_all if defined?(Analytics::AllowedEventProperty)
-    Analytics::Setting.delete_all
     Analytics::Goal.delete_all
     Analytics::Funnel.delete_all
     Analytics::SiteBoundary.delete_all

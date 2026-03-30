@@ -21,7 +21,6 @@ class Admin::AnalyticsGoogleSearchConsoleTest < ActionDispatch::IntegrationTest
 
     Analytics::GoogleSearchConsole::QueryRow.delete_all
     Analytics::GoogleSearchConsole::Sync.delete_all
-    Analytics::Setting.delete_all
     Analytics::GoogleSearchConsoleConnection.delete_all
     Analytics::SiteBoundary.delete_all
     Analytics::Site.delete_all

@@ -7,21 +7,17 @@
  * - Hybrid apps (mix of both)
  *
  * Similar to Plausible.io, wraps the History API to detect navigation.
- * Usage: Add to <head> with <%= vite_typescript_tag "analytics" %>
+ * Usage: load through the analytics loader at /analytics/script.js
  */
 
 interface AnalyticsConfig {
   // Analytics endpoints
   eventsEndpoint: string
-  websiteId?: string
   siteToken?: string
-  domainHint?: string
   // Filters
   excludePaths: string[]
   includePaths?: string[] // if provided, only paths matching any will be tracked (plausible-style)
   excludeAssets: string[]
-  // Transport
-  useBeaconForEvents: boolean // legacy flag; events use fetch keepalive by default
   initialPageviewTracked?: boolean // true when the server already tracked the current full-page load
   initialPageKey?: string // server-tracked dedupe key for the current page
   // Routing behavior
@@ -30,11 +26,19 @@ interface AnalyticsConfig {
   debug?: boolean
 }
 
+type EventContext = {
+  page: string
+  url: string
+  title: string
+  referrer: string
+  screenSize: string
+}
+
 declare global {
   interface Window {
     __analyticsInitialized?: boolean
     __analyticsQueue?: Array<[string, Record<string, unknown> | undefined]>
-    analyticsConfig?: Partial<AnalyticsConfig> & {
+    analyticsConfig?: {
       version?: number
       transport?: {
         eventsEndpoint?: string
@@ -79,8 +83,7 @@ class StandaloneAnalytics {
   constructor() {
     this.config = {
       eventsEndpoint: "/analytics/events",
-      // Defaults similar to our app; can be overridden by data-* attributes or window.analyticsConfig
-      // Exclude internal/system endpoints to avoid accidental tracking
+      // Exclude internal/system endpoints to avoid accidental tracking.
       excludePaths: ["/admin", "/.well-known", "/analytics", "/ahoy", "/cable"],
       excludeAssets: [
         ".png",
@@ -108,7 +111,6 @@ class StandaloneAnalytics {
         ".map",
         ".json",
       ],
-      useBeaconForEvents: false,
       hashBasedRouting: false,
       debug: false,
     }
@@ -133,8 +135,6 @@ class StandaloneAnalytics {
       // Ignore malformed runtime overrides and keep the default config.
     }
 
-    // Read public tracker identifiers from the script tag if present.
-    this.readScriptAttributes()
     this.installPublicApi()
 
     this.bootstrapServerTrackedPageview()
@@ -180,7 +180,7 @@ class StandaloneAnalytics {
 
     this.lastTrackedHref = href
     this.lastTrackedPageKey = pageKey
-    this.postPageview({ url: href, page: pageKey })
+    this.postPageview(href)
   }
 
   private setupNavigationListener(): void {
@@ -247,7 +247,6 @@ class StandaloneAnalytics {
 
     const href = window.location.href
     const pathname = window.location.pathname
-    const pathQuery = pathname + window.location.search
     const pageKey = this.currentPageKey()
 
     // Skip if same path+query as last tracked (ignore hash-only changes)
@@ -264,20 +263,16 @@ class StandaloneAnalytics {
       return
     }
 
-    const referrer = this.lastTrackedHref || document.referrer || ""
-
-    // Plausible-style event name and props
-    this.sendEvent({
-      name: "pageview",
-      page: pathQuery,
-      url: href,
-      title: document.title,
-      referrer,
-      screenSize: `${window.innerWidth}x${window.innerHeight}`,
-    })
+    this.sendEvent(
+      this.currentEventContext({
+        name: "pageview",
+        url: href,
+        referrer: this.lastTrackedHref || document.referrer || "",
+      })
+    )
 
     this.lastTrackedHref = href
-    this.postPageview({ url: href, page: pathQuery })
+    this.postPageview(href)
   }
 
   private currentPageKey(): string {
@@ -336,14 +331,7 @@ class StandaloneAnalytics {
   }
 
   private sendEvent(
-    properties: {
-      name: string
-      page: string
-      url: string
-      title: string
-      referrer: string
-      screenSize: string
-    },
+    properties: EventContext & { name: string },
     extra?: Record<string, unknown>
   ): void {
     if (typeof window === "undefined") return
@@ -432,9 +420,9 @@ class StandaloneAnalytics {
     }
   }
 
-  private postPageview(payload: { url: string; page: string }): void {
+  private postPageview(url: string): void {
     this.currentEngagementIgnored = false
-    this.currentEngagementURL = payload.url
+    this.currentEngagementURL = url
     this.currentEngagementMaxScrollDepth = -1
     this.currentEngagementTime = 0
     this.runningEngagementStart = Date.now()
@@ -501,14 +489,10 @@ class StandaloneAnalytics {
           : 0
       const url = this.currentEngagementURL || window.location.href
       this.sendEvent(
-        {
+        this.currentEventContext({
           name: "engagement",
-          page: window.location.pathname + window.location.search,
-          url,
-          title: document.title,
-          referrer: document.referrer || "",
-          screenSize: `${window.innerWidth}x${window.innerHeight}`,
-        },
+          url: url,
+        }),
         { engaged_ms: engagementTime, scroll_depth: sd }
       )
       // Reset timers
@@ -564,25 +548,21 @@ class StandaloneAnalytics {
       }
       const hrefWithoutQuery = link.href.split("?")[0]
       if (this.isOutboundLink(link)) {
-        this.sendEvent({
-          name: "Outbound Link: Click",
-          page: window.location.pathname + window.location.search,
-          url: link.href,
-          title: document.title,
-          referrer: document.referrer || "",
-          screenSize: `${window.innerWidth}x${window.innerHeight}`,
-        })
+        this.sendEvent(
+          this.currentEventContext({
+            name: "Outbound Link: Click",
+            url: link.href,
+          })
+        )
         return
       }
       if (this.isDownloadToTrack(hrefWithoutQuery)) {
-        this.sendEvent({
-          name: "File Download",
-          page: window.location.pathname + window.location.search,
-          url: hrefWithoutQuery,
-          title: document.title,
-          referrer: document.referrer || "",
-          screenSize: `${window.innerWidth}x${window.innerHeight}`,
-        })
+        this.sendEvent(
+          this.currentEventContext({
+            name: "File Download",
+            url: hrefWithoutQuery,
+          })
+        )
       }
     }
     document.addEventListener("click", handler)
@@ -626,17 +606,7 @@ class StandaloneAnalytics {
     const normalizedName = typeof name === "string" ? name.trim() : ""
     if (!normalizedName) return
 
-    this.sendEvent(
-      {
-        name: normalizedName,
-        page: window.location.pathname + window.location.search,
-        url: window.location.href,
-        title: document.title,
-        referrer: document.referrer || "",
-        screenSize: `${window.innerWidth}x${window.innerHeight}`,
-      },
-      props
-    )
+    this.sendEvent(this.currentEventContext({ name: normalizedName }), props)
   }
 
   private getDeclarativeGoalEl(element: Element | null): Element | null {
@@ -667,28 +637,6 @@ class StandaloneAnalytics {
     return Object.keys(props).length > 0 ? props : undefined
   }
 
-  // Parse plausible-style data attributes from the <script> element that loaded this file
-  private readScriptAttributes(): void {
-    try {
-      const scripts = Array.from(
-        document.getElementsByTagName("script")
-      ) as HTMLScriptElement[]
-      const el = scripts
-        .reverse()
-        .find(
-          (s) =>
-            s.getAttribute("data-website-id") ||
-            (s.src && s.src.includes("/analytics/script"))
-        )
-      if (!el) return
-
-      const websiteId = el.getAttribute("data-website-id")
-      if (websiteId) this.config.websiteId = websiteId
-    } catch {
-      // Ignore malformed tracker script attributes.
-    }
-  }
-
   private normalizeConfig(
     overrides: Window["analyticsConfig"]
   ): Partial<AnalyticsConfig> {
@@ -700,70 +648,53 @@ class StandaloneAnalytics {
     const tracking = overrides.tracking
     const filters = overrides.filters
 
-    if (typeof overrides.eventsEndpoint === "string") {
-      normalized.eventsEndpoint = overrides.eventsEndpoint
-    } else if (typeof transport?.eventsEndpoint === "string") {
+    if (typeof transport?.eventsEndpoint === "string") {
       normalized.eventsEndpoint = transport.eventsEndpoint
     }
 
-    if (typeof overrides.websiteId === "string") {
-      normalized.websiteId = overrides.websiteId
-    } else if (typeof site?.websiteId === "string") {
-      normalized.websiteId = site.websiteId
-    }
-
-    if (typeof overrides.siteToken === "string") {
-      normalized.siteToken = overrides.siteToken
-    } else if (typeof site?.token === "string") {
+    if (typeof site?.token === "string") {
       normalized.siteToken = site.token
     }
 
-    if (typeof overrides.domainHint === "string") {
-      normalized.domainHint = overrides.domainHint
-    } else if (typeof site?.domainHint === "string") {
-      normalized.domainHint = site.domainHint
-    }
-
-    if (Array.isArray(overrides.includePaths))
-      normalized.includePaths = overrides.includePaths
-    else if (Array.isArray(filters?.includePaths))
+    if (Array.isArray(filters?.includePaths))
       normalized.includePaths = filters.includePaths
 
-    if (Array.isArray(overrides.excludePaths))
-      normalized.excludePaths = overrides.excludePaths
-    else if (Array.isArray(filters?.excludePaths))
+    if (Array.isArray(filters?.excludePaths))
       normalized.excludePaths = filters.excludePaths
 
-    if (Array.isArray(overrides.excludeAssets))
-      normalized.excludeAssets = overrides.excludeAssets
-    else if (Array.isArray(filters?.excludeAssets))
+    if (Array.isArray(filters?.excludeAssets))
       normalized.excludeAssets = filters.excludeAssets
 
-    if (typeof overrides.useBeaconForEvents === "boolean") {
-      normalized.useBeaconForEvents = overrides.useBeaconForEvents
-    }
-
-    if (typeof overrides.hashBasedRouting === "boolean") {
-      normalized.hashBasedRouting = overrides.hashBasedRouting
-    } else if (typeof tracking?.hashBasedRouting === "boolean") {
+    if (typeof tracking?.hashBasedRouting === "boolean") {
       normalized.hashBasedRouting = tracking.hashBasedRouting
     }
 
-    if (typeof overrides.initialPageviewTracked === "boolean") {
-      normalized.initialPageviewTracked = overrides.initialPageviewTracked
-    } else if (typeof tracking?.initialPageviewTracked === "boolean") {
+    if (typeof tracking?.initialPageviewTracked === "boolean") {
       normalized.initialPageviewTracked = tracking.initialPageviewTracked
     }
 
-    if (typeof overrides.initialPageKey === "string") {
-      normalized.initialPageKey = overrides.initialPageKey
-    } else if (typeof tracking?.initialPageKey === "string") {
+    if (typeof tracking?.initialPageKey === "string") {
       normalized.initialPageKey = tracking.initialPageKey
     }
 
     if (typeof overrides.debug === "boolean") normalized.debug = overrides.debug
 
     return normalized
+  }
+
+  private currentEventContext(overrides: {
+    name: string
+    url?: string
+    referrer?: string
+  }): EventContext & { name: string } {
+    return {
+      name: overrides.name,
+      page: window.location.pathname + window.location.search,
+      url: overrides.url ?? window.location.href,
+      title: document.title,
+      referrer: overrides.referrer ?? (document.referrer || ""),
+      screenSize: `${window.innerWidth}x${window.innerHeight}`,
+    }
   }
 
   // Wildcard matching similar to Plausible tracker

@@ -6,29 +6,28 @@ module Analytics
     skip_forgery_protection
 
     def show
-      response.headers["Content-Type"] = "application/javascript; charset=utf-8"
-      expires_now if Rails.env.development?
+      source = loader_source
 
-      render plain: loader_source
+      if Rails.env.development?
+        expires_now
+      else
+        return unless stale?(etag: source, public: true)
+      end
+
+      render js: source
     end
 
     def bootstrap
       Analytics::TrackerCorsHeaders.apply!(response.headers)
 
-      site = ::Analytics::Site.active.find_by(public_id: bootstrap_params[:website_id].to_s)
-      if site.blank?
-        head :not_found
-        return
-      end
-
-      embed_context = resolved_embed_context_for(site)
+      embed_context = resolved_bootstrap_scope
       if embed_context.blank?
         head :forbidden
         return
       end
 
       render json: ::Analytics::TrackerBootstrap.build_external(
-        site: site,
+        site: embed_context[:site],
         request: request,
         boundary: embed_context[:boundary],
         host: embed_context[:host],
@@ -48,7 +47,7 @@ module Analytics
         "#{request.base_url}#{helpers.vite_asset_path('analytics.ts')}"
       end
 
-      def resolved_embed_context_for(site)
+      def resolved_bootstrap_scope
         source_uri = embed_source_uri
         return if source_uri.blank? || source_uri.host.blank?
 
@@ -58,11 +57,12 @@ module Analytics
           host: normalized_host,
           url: source_uri.to_s,
           path: normalized_path,
-          website_id: site.public_id
+          website_id: bootstrap_params[:website_id].to_s
         )
         return if resolution.blank? || resolution.invalid_claim?
 
         {
+          site: resolution.site,
           host: normalized_host,
           path: normalized_path,
           boundary: resolution.boundary

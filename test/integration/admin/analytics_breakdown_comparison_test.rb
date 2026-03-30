@@ -14,7 +14,6 @@ class Admin::AnalyticsBreakdownComparisonTest < ActiveSupport::TestCase
     Analytics::GoogleSearchConsoleConnection.delete_all
     Analytics::SiteBoundary.delete_all
     Analytics::Site.delete_all
-    Analytics::Setting.delete_all
     Analytics::Goal.delete_all
     Analytics::Funnel.delete_all
   end

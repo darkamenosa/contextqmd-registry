@@ -20,12 +20,29 @@ class AnalyticsEmbedTest < ActionDispatch::IntegrationTest
     get "/analytics/script.js", headers: MODERN_BROWSER_HEADERS
 
     assert_response :success
-    assert_equal "application/javascript; charset=utf-8", response.media_type + "; charset=#{response.charset}"
+    assert_equal "text/javascript; charset=utf-8", response.media_type + "; charset=#{response.charset}"
     assert_includes response.body, "window.analyticsConfig"
     assert_includes response.body, "window.analytics ="
     assert_includes response.body, "__analyticsModuleRequested"
     assert_includes response.body, "/analytics/bootstrap"
     assert_includes response.body, "http://localhost/vite"
+  ensure
+    host! "www.example.com"
+  end
+
+  test "public tracker loader responds with 304 when the etag matches" do
+    host! "localhost"
+
+    get "/analytics/script.js", headers: MODERN_BROWSER_HEADERS
+
+    assert_response :success
+    etag = response.headers["ETag"]
+    assert etag.present?
+
+    get "/analytics/script.js", headers: MODERN_BROWSER_HEADERS.merge("If-None-Match" => etag)
+
+    assert_response :not_modified
+    assert_empty response.body
   ensure
     host! "www.example.com"
   end
@@ -46,10 +63,9 @@ class AnalyticsEmbedTest < ActionDispatch::IntegrationTest
     assert_response :success
 
     payload = JSON.parse(response.body)
-    assert_equal site.public_id, payload.fetch("websiteId")
     assert_equal site.public_id, payload.dig("site", "websiteId")
-    assert_equal "http://localhost/analytics/events", payload.fetch("eventsEndpoint")
-    assert payload.fetch("siteToken").present?
+    assert_equal "http://localhost/analytics/events", payload.dig("transport", "eventsEndpoint")
+    assert payload.dig("site", "token").present?
   ensure
     host! "www.example.com"
   end
