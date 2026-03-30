@@ -5,6 +5,8 @@ class Analytics::AdminSiteResolver
 
   class << self
     def resolve(request: nil, explicit_site_id: nil)
+      return resolve_single_site(request:, explicit_site_id:) if ::Analytics::Configuration.single_site_mode?
+
       if explicit_site_id.present?
         if explicit_site_id.to_s == "current"
           active_sites = ::Analytics::Site.active.order(:id).to_a
@@ -32,6 +34,7 @@ class Analytics::AdminSiteResolver
     end
 
     def selection_required?(explicit_site_id: nil, request: nil, host: nil)
+      return false if ::Analytics::Configuration.single_site_mode?
       return false if explicit_site_id.present?
 
       return false if ::Analytics::Site.active.limit(2).count <= 1
@@ -40,6 +43,24 @@ class Analytics::AdminSiteResolver
     end
 
     private
+      def resolve_single_site(request:, explicit_site_id:)
+        active_sites = ::Analytics::Site.active.order(:id).to_a
+        return if active_sites.empty?
+
+        if explicit_site_id.present? && explicit_site_id.to_s != "current"
+          site = active_sites.find { |entry| entry.public_id == explicit_site_id.to_s }
+          return build_resolution(site) if site.present?
+        end
+
+        resolve_for_host(request&.host) || build_resolution(active_sites.first)
+      end
+
+      def build_resolution(site)
+        return if site.blank?
+
+        Resolution.new(site:, boundary: site.boundaries.find_by(primary: true))
+      end
+
       def resolve_for_host(host)
         normalized_host = ::Analytics::SiteBoundary.normalize_host(host)
         return if normalized_host.blank?

@@ -82,19 +82,21 @@ export function useBehaviorsPanelController({
   const behaviourTabs = useMemo(
     () =>
       BEHAVIOR_TABS.filter((tab) => {
-        if (tab.value === "conversions" && !site.hasGoals) return false
         if (tab.value === "visitors" && !site.profilesAvailable) return false
+        if (tab.value === "props" && !site.propsAvailable) return false
+        if (tab.value === "funnels" && !site.funnelsAvailable) return false
         return true
       }),
-    [site.hasGoals, site.profilesAvailable]
+    [site.funnelsAvailable, site.profilesAvailable, site.propsAvailable]
   )
 
-  const defaultMode = behaviourTabs[0]?.value ?? "props"
+  const defaultMode = behaviourTabs[0]?.value ?? "visitors"
   const queryMode = getBehaviorsModeFromSearch(
     search,
     query.mode,
-    site.hasGoals,
-    site.profilesAvailable
+    site.profilesAvailable,
+    site.propsAvailable,
+    site.funnelsAvailable
   )
 
   const [preferredMode, setPreferredMode] = useState<string | null>(null)
@@ -294,7 +296,10 @@ export function useBehaviorsPanelController({
 
       updateQuery((current) => ({
         ...current,
-        filters: { ...current.filters, goal: String(item.name) },
+        filters: {
+          ...current.filters,
+          goal: String(item.filterValue ?? item.name),
+        },
       }))
     },
     [activeProperty, mode, updateQuery]
@@ -498,9 +503,9 @@ export function useBehaviorsPanelController({
         return "Funnels"
       case "conversions":
       default:
-        return site.hasGoals ? "Goal Conversions" : "Behaviors"
+        return "Goals"
     }
-  }, [mode, site.hasGoals, site.propsAvailable])
+  }, [mode, site.propsAvailable])
 
   const firstColumnLabel = useMemo(() => {
     switch (mode) {
@@ -552,7 +557,6 @@ export function useBehaviorsPanelController({
     setProfilesSearch,
     setSelectedProfile,
     selectModeWithValue,
-    showNoGoalsHint: mode !== "visitors" && !site.hasGoals,
     tablePayload,
   }
 }

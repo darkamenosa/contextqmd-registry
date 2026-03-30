@@ -13,6 +13,8 @@ class Admin::AnalyticsSettingsTest < ActionDispatch::IntegrationTest
   }.freeze
 
   setup do
+    Ahoy::Event.delete_all
+    Ahoy::Visit.delete_all
     Analytics::AllowedEventProperty.delete_all if defined?(Analytics::AllowedEventProperty)
     Analytics::Setting.delete_all
     Analytics::Goal.delete_all
@@ -47,7 +49,11 @@ class Admin::AnalyticsSettingsTest < ActionDispatch::IntegrationTest
               custom_props: {}
             }
           ],
-          allowed_event_props: [ " plan ", "source", "" ]
+          allowed_event_props: [ " plan ", "source", "" ],
+          tracking_rules: {
+            include_paths: [ "blog/**" ],
+            exclude_paths: [ "/preview/**", "" ]
+          }
         }
       },
       as: :json
@@ -67,6 +73,9 @@ class Admin::AnalyticsSettingsTest < ActionDispatch::IntegrationTest
     assert_equal [ "signup", nil ], Analytics::Goal.order(:display_name).pluck(:event_name)
     assert_equal [ nil, "/pricing" ], Analytics::Goal.order(:display_name).pluck(:page_path)
     assert_equal [ "plan", "source" ], settings.fetch("allowedEventProps")
+    assert_equal [ "/blog/**" ], settings.fetch("trackingRules").fetch("includePaths")
+    assert_equal [ "/preview/**" ], settings.fetch("trackingRules").fetch("excludePaths")
+    assert_includes settings.fetch("trackingRules").fetch("effectiveExcludePaths"), "/analytics"
   ensure
     Current.reset
   end
@@ -194,27 +203,146 @@ class Admin::AnalyticsSettingsTest < ActionDispatch::IntegrationTest
     Current.reset
   end
 
-  test "settings analytics page lists sites when no site is selected" do
+  test "settings api derives funnel page suggestions from tracked site pages" do
     staff_identity, = create_tenant(
-      email: "staff-analytics-settings-page-#{SecureRandom.hex(4)}@example.com",
-      name: "Staff Analytics Settings Page"
+      email: "staff-analytics-settings-funnel-suggestions-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Analytics Settings Funnel Suggestions"
     )
     staff_identity.update!(staff: true)
+    site = Analytics::Bootstrap.ensure_default_site!(host: "localhost")
 
-    site_a = Analytics::Site.create!(name: "Blog", canonical_hostname: "blog.example.test")
-    site_b = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    visit = Ahoy::Visit.create!(
+      visit_token: SecureRandom.hex(16),
+      visitor_token: SecureRandom.hex(16),
+      analytics_site: site,
+      started_at: 5.minutes.ago.change(usec: 0),
+      landing_page: "https://localhost/register"
+    )
+
+    2.times do
+      Ahoy::Event.create!(
+        visit: visit,
+        analytics_site: site,
+        name: "pageview",
+        properties: { page: "/register?plan=pro" },
+        time: 4.minutes.ago.change(usec: 0)
+      )
+    end
+
+    Ahoy::Event.create!(
+      visit: visit,
+      analytics_site: site,
+      name: "pageview",
+      properties: { page: "/pricing" },
+      time: 3.minutes.ago.change(usec: 0)
+    )
 
     sign_in(staff_identity)
 
-    get "/admin/settings/analytics", headers: INERTIA_HEADERS
+    get settings_data_path_for(site), headers: { "ACCEPT" => "application/json" }
 
     assert_response :success
 
-    payload = JSON.parse(response.body).fetch("props")
-    assert_nil payload.fetch("site")
-    assert_equal [ "Blog", "Docs" ], payload.fetch("sites").map { |site| site.fetch("name") }
-    assert_equal "/admin/settings/analytics?site=#{site_a.public_id}", payload.fetch("sites").first.fetch("settingsPath")
-    assert_equal "/admin/settings/analytics?site=#{site_b.public_id}", payload.fetch("sites").last.fetch("settingsPath")
+    suggestions = JSON.parse(response.body)
+      .fetch("settings")
+      .fetch("funnelPageSuggestions")
+
+    assert_equal "/register", suggestions.first.fetch("value")
+    assert_equal "Register page", suggestions.first.fetch("label")
+    assert_equal "equals", suggestions.first.fetch("match")
+    assert_equal [ "/register", "/pricing" ], suggestions.map { |item| item.fetch("value") }
+  ensure
+    Current.reset
+  end
+
+  test "settings api exposes recent custom event goal suggestions" do
+    staff_identity, = create_tenant(
+      email: "staff-analytics-settings-goal-suggestions-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Analytics Settings Goal Suggestions"
+    )
+    staff_identity.update!(staff: true)
+    site = Analytics::Bootstrap.ensure_default_site!(host: "localhost")
+
+    visit = Ahoy::Visit.create!(
+      visit_token: SecureRandom.hex(16),
+      visitor_token: SecureRandom.hex(16),
+      analytics_site: site,
+      started_at: 10.minutes.ago.change(usec: 0),
+      landing_page: "https://localhost/"
+    )
+
+    3.times do
+      Ahoy::Event.create!(
+        visit: visit,
+        analytics_site: site,
+        name: "signup",
+        properties: { plan: "pro" },
+        time: 9.minutes.ago.change(usec: 0)
+      )
+    end
+
+    Ahoy::Event.create!(
+      visit: visit,
+      analytics_site: site,
+      name: "purchase",
+      properties: { amount: "49" },
+      time: 8.minutes.ago.change(usec: 0)
+    )
+
+    Ahoy::Event.create!(
+      visit: visit,
+      analytics_site: site,
+      name: "pageview",
+      properties: { page: "/" },
+      time: 7.minutes.ago.change(usec: 0)
+    )
+
+    Analytics::Goal.create!(
+      analytics_site: site,
+      display_name: "purchase",
+      event_name: "purchase",
+      custom_props: {}
+    )
+
+    sign_in(staff_identity)
+
+    get settings_data_path_for(site), headers: { "ACCEPT" => "application/json" }
+
+    assert_response :success
+
+    suggestions = JSON.parse(response.body)
+      .fetch("settings")
+      .fetch("goalSuggestions")
+
+    assert_equal [ "signup" ], suggestions.map { |item| item.fetch("name") }
+    assert_equal 1, suggestions.first.fetch("recentVisits")
+  ensure
+    Current.reset
+  end
+
+  test "settings analytics page lists sites when no site is selected" do
+    with_analytics_mode(:multi_site) do
+      staff_identity, = create_tenant(
+        email: "staff-analytics-settings-page-#{SecureRandom.hex(4)}@example.com",
+        name: "Staff Analytics Settings Page"
+      )
+      staff_identity.update!(staff: true)
+
+      site_a = Analytics::Site.create!(name: "Blog", canonical_hostname: "blog.example.test")
+      site_b = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+
+      sign_in(staff_identity)
+
+      get "/admin/settings/analytics", headers: INERTIA_HEADERS
+
+      assert_response :success
+
+      payload = JSON.parse(response.body).fetch("props")
+      assert_nil payload.fetch("site")
+      assert_equal [ "Blog", "Docs" ], payload.fetch("sites").map { |site| site.fetch("name") }
+      assert_equal "/admin/settings/analytics?site=#{site_a.public_id}", payload.fetch("sites").first.fetch("settingsPath")
+      assert_equal "/admin/settings/analytics?site=#{site_b.public_id}", payload.fetch("sites").last.fetch("settingsPath")
+    end
   ensure
     Current.reset
   end
@@ -240,35 +368,61 @@ class Admin::AnalyticsSettingsTest < ActionDispatch::IntegrationTest
     assert_equal "/admin/settings/analytics", payload.fetch("paths").fetch("settings")
     tracker = payload.fetch("settings").fetch("tracker")
     assert_equal "http://www.example.com/js/script.js", tracker.fetch("scriptUrl")
-    assert_equal "http://www.example.com/ahoy/events", tracker.fetch("eventsEndpoint")
+    assert_equal site.public_id, tracker.fetch("websiteId")
     assert_equal "docs.example.test", tracker.fetch("domainHint")
-    assert_includes tracker.fetch("snippetHtml"), %(data-site-token=")
+    assert_includes tracker.fetch("snippetHtml"), %(data-website-id="#{site.public_id}")
   ensure
     Current.reset
   end
 
   test "settings analytics page can resolve the site from a unique host in multi-site mode" do
+    with_analytics_mode(:multi_site) do
+      staff_identity, = create_tenant(
+        email: "staff-analytics-settings-host-#{SecureRandom.hex(4)}@example.com",
+        name: "Staff Analytics Settings Host"
+      )
+      staff_identity.update!(staff: true)
+
+      site = Analytics::Site.create!(name: "Local", canonical_hostname: "localhost")
+      Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+
+      sign_in(staff_identity)
+      host! "localhost"
+
+      get "/admin/settings/analytics", headers: INERTIA_HEADERS
+
+      assert_response :success
+
+      payload = JSON.parse(response.body).fetch("props")
+      assert_equal site.public_id, payload.fetch("site").fetch("id")
+      assert_equal [ "Docs", "Local" ], payload.fetch("sites").map { |entry| entry.fetch("name") }
+    end
+  ensure
+    host! "www.example.com"
+    Current.reset
+  end
+
+  test "settings analytics page hides site selection in single-site mode even with extra active sites" do
     staff_identity, = create_tenant(
-      email: "staff-analytics-settings-host-#{SecureRandom.hex(4)}@example.com",
-      name: "Staff Analytics Settings Host"
+      email: "staff-analytics-settings-single-hidden-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Analytics Settings Single Hidden"
     )
     staff_identity.update!(staff: true)
 
-    site = Analytics::Site.create!(name: "Local", canonical_hostname: "localhost")
+    primary = Analytics::Bootstrap.ensure_default_site!(host: "localhost")
     Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    Analytics::Site.create!(name: "Blog", canonical_hostname: "blog.example.test")
 
     sign_in(staff_identity)
-    host! "localhost"
 
     get "/admin/settings/analytics", headers: INERTIA_HEADERS
 
     assert_response :success
 
     payload = JSON.parse(response.body).fetch("props")
-    assert_equal site.public_id, payload.fetch("site").fetch("id")
-    assert_equal [ "Docs", "Local" ], payload.fetch("sites").map { |entry| entry.fetch("name") }
+    assert_equal primary.public_id, payload.fetch("site").fetch("id")
+    assert_equal [], payload.fetch("sites")
   ensure
-    host! "www.example.com"
     Current.reset
   end
 
@@ -323,6 +477,14 @@ class Admin::AnalyticsSettingsTest < ActionDispatch::IntegrationTest
   end
 
   private
+    def with_analytics_mode(mode)
+      original_mode = Analytics.config.mode
+      Analytics.config.mode = mode
+      yield
+    ensure
+      Analytics.config.mode = original_mode
+    end
+
     def settings_data_path_for(site)
       "/admin/analytics/sites/#{site.public_id}/settings/data"
     end

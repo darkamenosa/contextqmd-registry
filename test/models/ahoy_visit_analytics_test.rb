@@ -996,6 +996,8 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
 
   test "conversions payload ignores property filters in total visitor denominator" do
     travel_to Time.zone.parse("2026-03-25 14:00:00") do
+      Analytics::Goal.create!(display_name: "Signup", event_name: "Signup", custom_props: {})
+
       converting_visit = Ahoy::Visit.create!(
         visit_token: SecureRandom.hex(16),
         visitor_token: "conversions-pro",
@@ -1080,7 +1082,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
     assert_equal 50.0, totals[:conversion_rate]
   end
 
-  test "goals available uses cheap existence checks for unmanaged analytics" do
+  test "observed custom events do not count as configured goals" do
     refute Analytics::Goals.available?
 
     visit = Ahoy::Visit.create!(
@@ -1095,10 +1097,10 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
       properties: {}
     )
 
-    assert Analytics::Goals.available?
+    refute Analytics::Goals.available?
   end
 
-  test "properties available uses cheap existence checks for unmanaged analytics" do
+  test "observed custom event properties do not count as configured custom properties" do
     refute Analytics::Properties.available?
 
     visit = Ahoy::Visit.create!(
@@ -1113,7 +1115,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
       properties: { plan: "pro" }
     )
 
-    assert Analytics::Properties.available?
+    refute Analytics::Properties.available?
   end
 
   test "screen size categorization matches ingestion breakpoints" do

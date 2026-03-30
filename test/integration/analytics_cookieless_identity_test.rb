@@ -34,7 +34,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
 
     assert_no_difference -> { Ahoy::Visit.count } do
       assert_difference -> { Ahoy::Event.count }, +1 do
-        post "/ahoy/events",
+        post "/analytics/events",
           params: {
             events: [
               {
@@ -111,6 +111,25 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "server-side tracking respects site include path rules" do
+    site = Analytics::Bootstrap.ensure_default_site!(host: "localhost")
+    Analytics::TrackingRules.save!(
+      include_paths: [ "/blog/**" ],
+      exclude_paths: [],
+      site: site
+    )
+
+    perform_analytics_jobs do
+      assert_no_difference -> { Ahoy::Visit.count } do
+        assert_no_difference -> { Ahoy::Event.count } do
+          get root_path, headers: BROWSER_HEADERS
+        end
+      end
+    end
+
+    assert_response :success
+  end
+
   test "server-side tracking includes authenticated app dashboard pages" do
     identity, account, = create_tenant(
       email: "analytics-dashboard-#{SecureRandom.hex(4)}@example.com",
@@ -183,6 +202,102 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     assert_equal boundary.id, event.analytics_site_boundary_id
   end
 
+  test "server-side tracking broadcasts live updates for the resolved analytics site" do
+    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    captured_sites = []
+    analytics_live_state_singleton = class << Analytics::LiveState; self; end
+
+    host! "docs.example.test"
+
+    analytics_live_state_singleton.alias_method :__test_original_broadcast_later, :broadcast_later
+    analytics_live_state_singleton.define_method(:broadcast_later) do |site: nil, **|
+      captured_sites << site
+    end
+
+    begin
+      get root_path, headers: BROWSER_HEADERS
+    ensure
+      analytics_live_state_singleton.alias_method :broadcast_later, :__test_original_broadcast_later
+      analytics_live_state_singleton.remove_method :__test_original_broadcast_later
+    end
+
+    assert_includes captured_sites, site
+  ensure
+    host! "www.example.com"
+  end
+
+  test "public event ingest respects site exclude path rules" do
+    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    Analytics::TrackingRules.save!(
+      include_paths: [],
+      exclude_paths: [ "/private/**" ],
+      site: site
+    )
+
+    assert_no_difference -> { Ahoy::Event.count } do
+      post "/analytics/events",
+        params: {
+          events: [
+            {
+              name: "pageview",
+              website_id: site.public_id,
+              properties: {
+                page: "/private/plan",
+                url: "https://docs.example.test/private/plan",
+                title: "Private",
+                referrer: "",
+                screen_size: "1440x900"
+              },
+              time: Time.current.iso8601
+            }
+          ]
+        },
+        as: :json,
+        headers: BROWSER_HEADERS
+    end
+
+    assert_response :success
+  end
+
+  test "public event ingest broadcasts live updates for the resolved analytics site" do
+    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    captured_sites = []
+    analytics_live_state_singleton = class << Analytics::LiveState; self; end
+
+    analytics_live_state_singleton.alias_method :__test_original_broadcast_later, :broadcast_later
+    analytics_live_state_singleton.define_method(:broadcast_later) do |site: nil, **|
+      captured_sites << site
+    end
+
+    begin
+      post "/analytics/events",
+        params: {
+          events: [
+            {
+              name: "pageview",
+              website_id: site.public_id,
+              properties: {
+                page: "/pricing",
+                url: "https://docs.example.test/pricing",
+                title: "Pricing",
+                referrer: "",
+                screen_size: "1440x900"
+              },
+              time: Time.current.iso8601
+            }
+          ]
+        },
+        as: :json,
+        headers: BROWSER_HEADERS
+    ensure
+      analytics_live_state_singleton.alias_method :broadcast_later, :__test_original_broadcast_later
+      analytics_live_state_singleton.remove_method :__test_original_broadcast_later
+    end
+
+    assert_response :success
+    assert_includes captured_sites, site
+  end
+
   test "server-side tracking uses the bootstrapped default analytics site in singleton mode" do
     host! "localhost:3000"
     site = Analytics::Bootstrap.ensure_default_site!(host: "localhost")
@@ -230,7 +345,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
 
     assert_no_difference -> { Ahoy::Visit.count } do
       assert_difference -> { Ahoy::Event.count }, +1 do
-        post "/ahoy/events",
+        post "/analytics/events",
           params: {
             visit_token: SecureRandom.uuid,
             visitor_token: SecureRandom.uuid,
@@ -260,7 +375,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
   test "non-engagement event creates a visit and backfills landing page and screen size" do
     assert_difference -> { Ahoy::Visit.count }, +1 do
       assert_difference -> { Ahoy::Event.count }, +1 do
-        post "/ahoy/events",
+        post "/analytics/events",
           params: {
             events: [
               {
@@ -291,7 +406,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
   end
 
   test "ahoy events controller seeds the analytics browser cookie" do
-    post "/ahoy/events",
+    post "/analytics/events",
       params: {
         events: [
           {
@@ -327,7 +442,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     travel_to Time.utc(2026, 3, 26, 0, 0, 10) do
       assert_no_difference -> { Ahoy::Visit.count } do
         assert_difference -> { Ahoy::Event.count }, +1 do
-          post "/ahoy/events",
+          post "/analytics/events",
             params: {
               events: [
                 {
@@ -366,7 +481,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     travel_to Time.utc(2026, 3, 25, 10, 31, 0) do
       assert_no_difference -> { Ahoy::Visit.count } do
         assert_no_difference -> { Ahoy::Event.count } do
-          post "/ahoy/events",
+          post "/analytics/events",
             params: {
               events: [
                 {

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_30_000022) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_30_161453) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -221,6 +221,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_30_000022) do
     t.string "current_page"
     t.string "device_type"
     t.integer "duration_seconds", default: 0, null: false
+    t.integer "engaged_ms_total", default: 0, null: false
     t.string "entry_page"
     t.jsonb "event_names", default: [], null: false
     t.integer "events_count", default: 0, null: false

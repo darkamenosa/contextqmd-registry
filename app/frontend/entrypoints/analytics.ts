@@ -13,6 +13,7 @@
 interface AnalyticsConfig {
   // Ahoy endpoints
   eventsEndpoint: string
+  websiteId?: string
   siteToken?: string
   domainHint?: string
   // Filters
@@ -32,12 +33,14 @@ interface AnalyticsConfig {
 declare global {
   interface Window {
     __analyticsInitialized?: boolean
+    __analyticsQueue?: Array<[string, Record<string, unknown> | undefined]>
     analyticsConfig?: Partial<AnalyticsConfig> & {
       version?: number
       transport?: {
         eventsEndpoint?: string
       }
       site?: {
+        websiteId?: string | null
         token?: string | null
         domainHint?: string | null
       }
@@ -53,6 +56,7 @@ declare global {
       }
       debug?: boolean
     }
+    analytics?: (name: string, props?: Record<string, unknown>) => void
   }
 }
 
@@ -74,10 +78,10 @@ class StandaloneAnalytics {
 
   constructor() {
     this.config = {
-      eventsEndpoint: "/ahoy/events",
+      eventsEndpoint: "/analytics/events",
       // Defaults similar to our app; can be overridden by data-* attributes or window.analyticsConfig
       // Exclude internal/system endpoints to avoid accidental tracking
-      excludePaths: ["/admin", "/.well-known", "/ahoy", "/cable"],
+      excludePaths: ["/admin", "/.well-known", "/analytics", "/ahoy", "/cable"],
       excludeAssets: [
         ".png",
         ".jpg",
@@ -131,6 +135,7 @@ class StandaloneAnalytics {
 
     // Read plausible-style include/exclude from script tag if present
     this.readScriptAttributes()
+    this.installPublicApi()
 
     this.bootstrapServerTrackedPageview()
 
@@ -164,6 +169,7 @@ class StandaloneAnalytics {
     // Engagement and auto-capture listeners
     this.initEngagement()
     this.initAutoCapture()
+    this.initDeclarativeGoalCapture()
   }
 
   private bootstrapServerTrackedPageview(): void {
@@ -345,6 +351,7 @@ class StandaloneAnalytics {
 
     const event = {
       name: properties.name,
+      website_id: this.config.websiteId,
       site_token: this.config.siteToken,
       properties: {
         page: properties.page,
@@ -583,6 +590,84 @@ class StandaloneAnalytics {
     document.addEventListener("auxclick", handler)
   }
 
+  private initDeclarativeGoalCapture(): void {
+    document.addEventListener("click", (event) => {
+      const goalEl = this.getDeclarativeGoalEl(event.target as Element | null)
+      if (!goalEl) return
+
+      const goalName = goalEl.getAttribute("data-analytics-goal")?.trim()
+      if (!goalName) return
+
+      this.trackCustomEvent(goalName, this.extractDeclarativeGoalProps(goalEl))
+    })
+  }
+
+  private installPublicApi(): void {
+    if (typeof window === "undefined") return
+
+    const queued = Array.isArray(window.__analyticsQueue)
+      ? [...window.__analyticsQueue]
+      : []
+
+    window.analytics = (name: string, props?: Record<string, unknown>) => {
+      this.trackCustomEvent(name, props)
+    }
+
+    window.__analyticsQueue = []
+
+    for (const [name, props] of queued) {
+      this.trackCustomEvent(name, props)
+    }
+  }
+
+  private trackCustomEvent(
+    name: string,
+    props?: Record<string, unknown>
+  ): void {
+    const normalizedName = typeof name === "string" ? name.trim() : ""
+    if (!normalizedName) return
+
+    this.sendEvent(
+      {
+        name: normalizedName,
+        page: window.location.pathname + window.location.search,
+        url: window.location.href,
+        title: document.title,
+        referrer: document.referrer || "",
+        screenSize: `${window.innerWidth}x${window.innerHeight}`,
+      },
+      props
+    )
+  }
+
+  private getDeclarativeGoalEl(element: Element | null): Element | null {
+    if (!element || typeof element.closest !== "function") return null
+    return element.closest("[data-analytics-goal]")
+  }
+
+  private extractDeclarativeGoalProps(
+    element: Element
+  ): Record<string, unknown> | undefined {
+    const attrs =
+      "attributes" in element && element.attributes
+        ? Array.from(element.attributes)
+        : []
+
+    const props = attrs.reduce<Record<string, unknown>>((memo, attr) => {
+      const name = attr.name
+      if (!name.startsWith("data-analytics-prop-")) return memo
+
+      const rawKey = name.slice("data-analytics-prop-".length).trim()
+      const key = rawKey.replace(/-/g, "_")
+      if (!key) return memo
+
+      memo[key] = attr.value
+      return memo
+    }, {})
+
+    return Object.keys(props).length > 0 ? props : undefined
+  }
+
   // Parse plausible-style data attributes from the <script> element that loaded this file
   private readScriptAttributes(): void {
     try {
@@ -594,18 +679,19 @@ class StandaloneAnalytics {
         .reverse()
         .find(
           (s) =>
+            s.getAttribute("data-website-id") ||
             s.getAttribute("data-include") ||
             s.getAttribute("data-exclude") ||
-            (s.src && s.src.includes("analytics"))
+            (s.src && s.src.includes("/js/script"))
         )
       if (!el) return
 
-      const siteToken = el.getAttribute("data-site-token")
+      const websiteId = el.getAttribute("data-website-id")
       const domainHint = el.getAttribute("data-domain")
       const eventsEndpoint = el.getAttribute("data-api")
       const includeAttr = el.getAttribute("data-include")
       const excludeAttr = el.getAttribute("data-exclude")
-      if (siteToken) this.config.siteToken = siteToken
+      if (websiteId) this.config.websiteId = websiteId
       if (domainHint) this.config.domainHint = domainHint
       if (eventsEndpoint) this.config.eventsEndpoint = eventsEndpoint
       if (includeAttr)
@@ -641,6 +727,12 @@ class StandaloneAnalytics {
       normalized.eventsEndpoint = overrides.eventsEndpoint
     } else if (typeof transport?.eventsEndpoint === "string") {
       normalized.eventsEndpoint = transport.eventsEndpoint
+    }
+
+    if (typeof overrides.websiteId === "string") {
+      normalized.websiteId = overrides.websiteId
+    } else if (typeof site?.websiteId === "string") {
+      normalized.websiteId = site.websiteId
     }
 
     if (typeof overrides.siteToken === "string") {

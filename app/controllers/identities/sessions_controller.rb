@@ -2,7 +2,16 @@
 
 module Identities
   class SessionsController < Devise::SessionsController
-    PRIVATE_SIGN_OUT_PATH_PREFIXES = %w[/admin /app /login /logout /register /rails].freeze
+    PUBLIC_SIGN_OUT_PATH_PATTERNS = [
+      %r{\A/\z},
+      %r{\A/(?:about|privacy|terms|contact)\z},
+      %r{\A/rankings\z},
+      %r{\A/libraries\z},
+      %r{\A/libraries/(?!new\z)[^/]+\z},
+      %r{\A/libraries/[^/]+/versions/[^/]+/pages/.+\z},
+      %r{\A/crawl\z},
+      %r{\A/errors/\d+\z}
+    ].freeze
 
     include InertiaFlash
     rate_limit to: 10, within: 3.minutes, only: :create
@@ -66,28 +75,10 @@ module Identities
 
       def public_sign_out_path?(path)
         return false unless path.start_with?("/")
-        return false if PRIVATE_SIGN_OUT_PATH_PREFIXES.any? { |prefix| path.start_with?(prefix) }
 
-        route = Rails.application.routes.recognize_path(path, method: :get)
+        normalized_path = path == "/" ? path : path.delete_suffix("/")
 
-        case route[:controller]
-        when "homepages", "pages"
-          true
-        when "rankings"
-          route[:action] == "index"
-        when "libraries"
-          %w[index show].include?(route[:action])
-        when "libraries/pages"
-          route[:action] == "show"
-        when "crawl_requests"
-          route[:action] == "index"
-        when "errors"
-          route[:action] == "show"
-        else
-          false
-        end
-      rescue ActionController::RoutingError, NoMethodError
-        false
+        PUBLIC_SIGN_OUT_PATH_PATTERNS.any? { |pattern| pattern.match?(normalized_path) }
       end
   end
 end

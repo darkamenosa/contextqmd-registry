@@ -10,30 +10,23 @@ module Analytics::Properties
       key.to_s.delete_prefix("prop:").presence
     end
 
-    def configured_keys
-      typed_keys = configured_typed_keys
+    def configured_keys(site = ::Analytics::Current.site_or_default)
+      typed_keys = configured_typed_keys(site)
       return typed_keys if typed_keys.any?
 
-      Analytics::Lists.normalize_strings(Analytics::Setting.get_json("allowed_event_props", fallback: []))
+      legacy_configured_keys(site)
     end
 
-    def available_keys(events = nil)
-      return configured_keys if managed_keys?
-
-      scope = events || Ahoy::Event.for_analytics_site.where.not(properties: [ nil, {} ])
-      event_keys(scope)
+    def available_keys(_events = nil, site: ::Analytics::Current.site_or_default)
+      configured_keys(site)
     end
 
-    def available?
-      if managed_keys?
-        configured_keys.any?
-      else
-        Ahoy::Event.for_analytics_site.where.not(properties: [ nil, {} ]).limit(1).exists?
-      end
+    def available?(site: ::Analytics::Current.site_or_default)
+      configured_keys(site).any?
     end
 
-    def managed_keys?
-      Analytics::AllowedEventProperty.configured_for? || Analytics::Setting.configured?("allowed_event_props")
+    def managed_keys?(site: ::Analytics::Current.site_or_default)
+      configured_typed_keys(site).any?
     end
 
     def event_keys(events)
@@ -97,11 +90,22 @@ module Analytics::Properties
     end
 
     private
-      def configured_typed_keys
+      def configured_typed_keys(site)
         return [] unless Analytics::AllowedEventProperty.table_exists?
 
-        Analytics::AllowedEventProperty.configured_keys
+        Analytics::AllowedEventProperty.configured_keys(site)
       rescue ActiveRecord::NoDatabaseError, ActiveRecord::StatementInvalid
+        []
+      end
+
+      def legacy_configured_keys(site)
+        return [] if site.blank?
+
+        record = Analytics::Setting.find_by(key: "allowed_event_props", analytics_site_id: site.id)
+        return [] if record.nil? || record.value.blank?
+
+        Analytics::Lists.normalize_strings(JSON.parse(record.value))
+      rescue JSON::ParserError
         []
       end
 

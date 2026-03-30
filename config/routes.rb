@@ -140,7 +140,9 @@ Rails.application.routes.draw do
   end
 
   get "js/script.js", to: "analytics/script#show", defaults: { format: :js }, as: :analytics_tracker_script
-  match "ahoy/events", to: "analytics/cors#preflight", via: :options
+  get "js/bootstrap", to: "analytics/script#bootstrap", defaults: { format: :json }, as: :analytics_tracker_bootstrap
+  post "analytics/events", to: "analytics/events#create", as: :analytics_events
+  match "analytics/events", to: "analytics/cors#preflight", via: :options
 
   # Library browsing (public) + submission (authenticated)
   resources :libraries, only: [ :index, :new, :create ], param: :slug do

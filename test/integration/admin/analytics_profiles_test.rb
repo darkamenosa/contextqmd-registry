@@ -383,6 +383,7 @@ class Admin::AnalyticsProfilesTest < ActionDispatch::IntegrationTest
     payload = JSON.parse(response.body)
     assert_equal visit.id, payload.fetch("session").fetch("visitId")
     assert_equal "CZ", payload.fetch("session").fetch("countryCode")
+    assert_equal 0, payload.fetch("session").fetch("engagedMsTotal")
     assert_equal "Google", payload.fetch("sourceSummary").fetch("sourceLabel")
     assert_equal "google.com", payload.fetch("sourceSummary").fetch("referringDomain")
     assert_equal "/course?ref=shipfast_pricing",
@@ -467,6 +468,73 @@ class Admin::AnalyticsProfilesTest < ActionDispatch::IntegrationTest
     payload = JSON.parse(response.body)
     assert_equal false, payload.fetch("hasMore")
     assert_equal [ visits.third.id ], payload.fetch("sessions").map { |session| session.fetch("visitId") }
+  ensure
+    Current.reset
+  end
+
+  test "profile sessions payload includes engagement time for same-second engagement events" do
+    staff_identity, = create_tenant(
+      email: "staff-profile-sessions-engagement-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Profile Sessions Engagement"
+    )
+    staff_identity.update!(staff: true)
+
+    profile = AnalyticsProfile.create!(
+      analytics_site: default_analytics_site,
+      status: AnalyticsProfile::STATUS_IDENTIFIED,
+      traits: { display_name: "black emu" },
+      first_seen_at: 2.hours.ago,
+      last_seen_at: 5.minutes.ago
+    )
+
+    visit = Ahoy::Visit.create!(
+      analytics_site: default_analytics_site,
+      visit_token: SecureRandom.hex(16),
+      visitor_token: SecureRandom.hex(16),
+      analytics_profile: profile,
+      browser_id: SecureRandom.uuid,
+      started_at: 30.minutes.ago.change(usec: 0),
+      landing_page: "https://example.test/engaged"
+    )
+
+    Ahoy::Event.create!(
+      analytics_site: default_analytics_site,
+      visit: visit,
+      name: "pageview",
+      properties: { page: "/engaged" },
+      time: visit.started_at
+    )
+    Ahoy::Event.create!(
+      analytics_site: default_analytics_site,
+      visit: visit,
+      name: "engagement",
+      properties: { page: "/engaged", engaged_ms: 285, scroll_depth: 100 },
+      time: visit.started_at
+    )
+
+    AnalyticsProfile::Projection.rebuild(profile)
+    sign_in(staff_identity)
+
+    get profile_sessions_path_for(default_analytics_site, profile),
+        params: { period: "day", limit: 20, page: 1 },
+        headers: { "ACCEPT" => "application/json" }
+
+    assert_response :success
+
+    payload = JSON.parse(response.body)
+    session = payload.fetch("sessions").find { |item| item.fetch("visitId") == visit.id }
+
+    assert_equal 0, session.fetch("durationSeconds")
+    assert_equal 285, session.fetch("engagedMsTotal")
+
+    get profile_session_path_for(default_analytics_site, profile, visit),
+        params: { period: "day" },
+        headers: { "ACCEPT" => "application/json" }
+
+    assert_response :success
+
+    detail_payload = JSON.parse(response.body)
+    assert_equal 285, detail_payload.fetch("session").fetch("engagedMsTotal")
   ensure
     Current.reset
   end

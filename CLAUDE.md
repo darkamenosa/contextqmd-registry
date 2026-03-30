@@ -29,6 +29,7 @@ Guidance for Claude Code when working with this Rails + InertiaJS React/TypeScri
 - Inertia props: use **snake_case** in Ruby — `prop_transformer` auto-converts to camelCase
 - Never run migrations automatically — ask first
 - Always use gem's official generators — never manually write files that generators create
+- Generate migrations with Rails generators like `bin/rails generate migration ...` or `bin/rails generate model ...`; do not create migration files by hand
 - Run `bin/rubocop --autocorrect` after changes
 
 ### Frontend

@@ -128,7 +128,10 @@ class Analytics::VisitScope
         by_landing = visits.where(Arel.sql("#{expr} = ?"), label)
 
         candidate_ids = visits
-          .where("landing_page IS NULL OR landing_page = '' OR regexp_replace(landing_page, '^(https://|http://)[^/]+', '') SIMILAR TO ?", "(/ahoy%|/cable%|/rails/%|/assets/%|/up%|/jobs%|/webhooks%)")
+          .where(
+            "landing_page IS NULL OR landing_page = '' OR regexp_replace(landing_page, '^(https://|http://)[^/]+', '') SIMILAR TO ?",
+            Analytics::InternalPaths.report_internal_sql_similar_pattern
+          )
           .pluck(:id)
 
         derived_ids = []

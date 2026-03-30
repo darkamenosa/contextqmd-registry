@@ -21,7 +21,7 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
       assert_includes response.body, "\"useBeaconForEvents\":false"
       assert_includes response.body, "\"useCookies\":false"
       assert_includes response.body, "\"version\":1"
-      assert_includes response.body, "\"transport\":{\"eventsEndpoint\":\"/ahoy/events\"}"
+      assert_includes response.body, "\"transport\":{\"eventsEndpoint\":\"/analytics/events\"}"
       assert_includes response.body, "\"siteToken\":null"
       assert_includes response.body, "\"initialPageviewTracked\":true"
       assert_includes response.body, "\"initialPageKey\":\"/\""
@@ -62,6 +62,23 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
       refute_includes response.body, "meta name=\"ahoy-visit\""
       refute_includes response.body, "meta name=\"ahoy-visitor\""
     end
+  end
+
+  test "bootstrap merges site tracking rules into frontend filters" do
+    site = Analytics::Bootstrap.ensure_default_site!(host: "localhost")
+    Analytics::TrackingRules.save!(
+      include_paths: [ "/**" ],
+      exclude_paths: [ "/preview/**" ],
+      site: site
+    )
+
+    with_server_visits(true) do
+      get root_path, headers: MODERN_BROWSER_HEADERS
+    end
+
+    assert_response :success
+    assert_includes response.body, "\"includePaths\":[\"/**\"]"
+    assert_includes response.body, "\"excludePaths\":[\"/admin\",\"/.well-known\",\"/analytics\",\"/ahoy\",\"/cable\",\"/preview/**\"]"
   end
 
   test "head requests do not bootstrap or track analytics" do

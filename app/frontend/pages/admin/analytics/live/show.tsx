@@ -207,13 +207,9 @@ export default function LiveAnalytics({
     [clearSessionAnchors, setView]
   )
 
-  const selectSession = useCallback(
-    (sessionId: string | null) => {
-      setSelectedSessionId(sessionId)
-      clearSessionAnchors()
-    },
-    [clearSessionAnchors]
-  )
+  const selectSession = useCallback((sessionId: string | null) => {
+    setSelectedSessionId(sessionId)
+  }, [])
 
   const closeSelectedSession = useCallback(() => {
     selectionRequestRef.current += 1

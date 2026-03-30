@@ -107,33 +107,38 @@ export function getDevicesModeFromSearch(search: string, legacyMode?: string) {
 
 export function getBehaviorsMode(
   mode: string | undefined,
-  hasGoals: boolean,
-  profilesAvailable = true
+  profilesAvailable = true,
+  propsAvailable = true,
+  funnelsAvailable = true
 ) {
-  const allowed = hasGoals
-    ? BEHAVIORS_MODES
-    : BEHAVIORS_MODES.filter((value) => value !== "conversions")
-  const available = profilesAvailable
-    ? allowed
-    : allowed.filter((value) => value !== "visitors")
+  const available = BEHAVIORS_MODES.filter(
+    (value) => profilesAvailable || value !== "visitors"
+  )
+    .filter((value) => propsAvailable || value !== "props")
+    .filter((value) => funnelsAvailable || value !== "funnels")
   return isAllowedMode(mode, available) ? mode : null
 }
 
 export function getBehaviorsModeFromSearch(
   search: string,
   legacyMode: string | undefined,
-  hasGoals: boolean,
-  profilesAvailable = true
+  profilesAvailable = true,
+  propsAvailable = true,
+  funnelsAvailable = true
 ) {
-  const allowed = hasGoals
-    ? BEHAVIORS_MODES
-    : BEHAVIORS_MODES.filter((value) => value !== "conversions")
-  const available = profilesAvailable
-    ? allowed
-    : allowed.filter((value) => value !== "visitors")
+  const available = BEHAVIORS_MODES.filter(
+    (value) => profilesAvailable || value !== "visitors"
+  )
+    .filter((value) => propsAvailable || value !== "props")
+    .filter((value) => funnelsAvailable || value !== "funnels")
   return (
     getModeFromSearch(search, "behaviors", available) ??
-    getBehaviorsMode(legacyMode, hasGoals, profilesAvailable)
+    getBehaviorsMode(
+      legacyMode,
+      profilesAvailable,
+      propsAvailable,
+      funnelsAvailable
+    )
   )
 }
 

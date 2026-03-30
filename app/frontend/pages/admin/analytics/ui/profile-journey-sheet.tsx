@@ -42,7 +42,7 @@ import type {
 } from "../types"
 import {
   formatCompactNumber,
-  formatProfileDuration,
+  formatProfileSessionEngagement,
   maskEmail,
 } from "./profile/formatters"
 import {
@@ -621,11 +621,14 @@ export default function ProfileJourneySheet({
 
                               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                                 <span>
-                                  Duration{" "}
+                                  Engaged{" "}
                                   <span className="font-medium text-foreground tabular-nums">
-                                    {formatProfileDuration(
-                                      session.durationSeconds
-                                    )}
+                                    {formatProfileSessionEngagement({
+                                      engagedMsTotal: session.engagedMsTotal,
+                                      durationSeconds: session.durationSeconds,
+                                      pageviewsCount: session.pageviewsCount,
+                                      eventsCount: session.eventsCount,
+                                    })}
                                   </span>
                                 </span>
                                 <span>

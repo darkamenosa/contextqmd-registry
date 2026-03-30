@@ -116,8 +116,7 @@ module Analytics::Pages
     end
 
     def internal_entry_label?(label)
-      path = label.to_s
-      path.start_with?("/ahoy", "/cable", "/rails/", "/assets/", "/up", "/jobs", "/webhooks")
+      Analytics::InternalPaths.report_internal_path?(label)
     end
 
     def entry_page_label_by_visit(visits_relation, grouped_visit_ids)

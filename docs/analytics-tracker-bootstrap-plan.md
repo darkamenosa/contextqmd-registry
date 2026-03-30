@@ -5,7 +5,8 @@ This document defines the recommended long-term bootstrap contract for the analy
 It is intentionally narrow:
 
 - exact browser bootstrap payload
-- exact signed site token shape
+- exact public snippet contract
+- optional internal site attestation shape
 - first-party vs external snippet delivery modes
 - server-side validation rules
 - rollout order
@@ -30,14 +31,15 @@ It does not replace the broader analytics architecture plan. It refines the trac
 
 The browser must not be the source of truth for analytics site ownership.
 
-The browser may carry a server-issued, signed site token.
+The browser may carry a short public `website_id`.
+The server may additionally issue an internal, signed site attestation token.
 The server still validates tracked host/path/url and resolves boundary ownership.
 
 Long-term, first-party and external installs should use the same trust model:
 
 - both receive a unified bootstrap payload
-- both may carry the same signed site token shape
-- neither mode may rely on raw browser-provided site ids or domains as authority
+- both may carry the same internal attestation shape at runtime
+- neither mode may rely on raw browser-provided ids or domains as authority
 
 ## Delivery Modes
 
@@ -71,7 +73,7 @@ Recommended shape:
 <script
   defer
   src="https://datafa.st/js/script.js"
-  data-site-token="signed_site_token"
+  data-website-id="site_xxx"
   data-domain="example.com"
   data-api="https://datafa.st/a/events"
 ></script>
@@ -79,12 +81,13 @@ Recommended shape:
 
 Properties:
 
-- `data-site-token` is authoritative
+- `data-website-id` is the public lookup key
 - `data-domain` is advisory only
 - `data-api` is explicit and environment-safe
 - `/js/script.js` is a tiny public loader that normalizes `data-*` attributes into `window.analyticsConfig` and then imports the real tracker bundle
 
-Do not treat a raw `data-website-id` as authoritative.
+Do not treat a raw `data-website-id` as authoritative proof of site ownership.
+It is an identifier, not the trust boundary.
 
 ## Unified Bootstrap Payload
 
@@ -96,10 +99,11 @@ Suggested shape:
 {
   "version": 1,
   "transport": {
-    "eventsEndpoint": "/ahoy/events"
+    "eventsEndpoint": "/analytics/events"
   },
   "site": {
-    "token": "signed_site_token",
+    "websiteId": "site_xxx",
+    "token": "signed_internal_site_token",
     "domainHint": "example.com"
   },
   "tracking": {
@@ -109,7 +113,7 @@ Suggested shape:
   },
   "filters": {
     "includePaths": [],
-    "excludePaths": ["/admin", "/ahoy", "/cable"],
+    "excludePaths": ["/admin", "/analytics", "/ahoy", "/cable"],
     "excludeAssets": [".png", ".jpg", ".css", ".js"]
   },
   "debug": false
@@ -124,9 +128,14 @@ Suggested shape:
 - `transport.eventsEndpoint`
   - required
   - must be explicit so the same tracker can work first-party and cross-origin
+- `site.websiteId`
+  - public identifier for the tracked site
+  - safe to expose in copy-paste snippets
+  - must still be resolved and validated server-side
 - `site.token`
-  - optional only during migration from the current first-party bootstrap
-  - required in the long-term end state for both first-party and external modes
+  - internal runtime attestation only
+  - may be omitted during migration
+  - must not be the primary public snippet contract
 - `site.domainHint`
   - optional
   - useful for snippet UX, debugging, and sanity checks
@@ -137,12 +146,24 @@ Suggested shape:
 - `tracking.initialPageKey`
   - only meaningful when the server already counted the initial pageview
 - `filters.*`
-  - tracker-side guardrails only
+  - backend-owned effective rules
+  - frontend tracker uses them only as an early guardrail
   - must not replace server-side validation
 
-## Signed Site Token
+User config rule:
 
-The token should be opaque to the browser and signed by the server.
+- internal/system excludes are analytics-owned defaults
+- those defaults should come from one analytics-owned source in code, then be
+  merged into the effective tracker filters during bootstrap
+- user-defined include/exclude rules should be configured once in analytics
+  settings and stored in `analytics_settings` as site-scoped `tracking_rules`
+- bootstrap should deliver the effective merged rules to the tracker
+- users should never manage separate frontend and backend exclude lists
+
+## Internal Site Attestation Token
+
+The token should be opaque to the browser, signed by the server, and treated as
+an internal runtime detail rather than a copy-paste HTML contract.
 
 Recommended payload before signing:
 
@@ -186,8 +207,9 @@ On every tracked request:
 
 1. normalize the incoming URL, host, and path
 2. resolve boundary ownership through `Analytics::TrackingSiteResolver`
-3. verify the signed site token if present
-4. compare token site vs resolved boundary site
+3. if an internal attestation token is present, verify it
+4. if a public `website_id` is present, resolve it server-side
+5. compare explicit site identity vs resolved boundary site
 
 Recommended behavior:
 
@@ -197,9 +219,13 @@ Recommended behavior:
   - accept and use resolved boundary site
 - no token, multi-site, boundary unresolved:
   - drop or route to unresolved bucket
-- valid token, no boundary conflict:
+- valid attestation token, no boundary conflict:
   - accept token site
-- valid token, boundary resolves to a different site:
+- resolved `website_id`, no boundary conflict:
+  - accept resolved site
+- valid attestation token, boundary resolves to a different site:
+  - hard reject and log
+- resolved `website_id`, boundary resolves to a different site:
   - hard reject and log
 - invalid token:
   - reject and log
@@ -220,11 +246,17 @@ External installs need two public capabilities:
   - no CSRF
   - safe to embed cross-origin
   - loads the real tracker bundle from the analytics service origin
-- `OPTIONS /ahoy/events`
+- `OPTIONS /analytics/events`
   - returns permissive tracker CORS headers
   - allows cross-origin `application/json` event posts from the snippet
 
-`POST /ahoy/events` responses should return the same tracker CORS headers.
+`POST /analytics/events` responses should return the same tracker CORS headers.
+
+Internal boundary rule:
+
+- `Analytics` owns the public HTTP surface
+- `Ahoy` stays the internal engine handling event creation and visit lifecycle
+- public docs and snippets should use `/analytics/events`
 
 ## Trust Model
 
@@ -236,9 +268,11 @@ The following must not be trusted as site ownership claims on their own:
 
 The following may be trusted:
 
-- signed site token
+- internal signed site attestation token
+- server-side lookup of `website_id`, but only after normal boundary validation
 
-Server-rendered first-party bootstrap is trusted as a transport for delivering the signed token.
+Server-rendered first-party bootstrap is trusted as a transport for delivering the
+internal token.
 It is not a separate long-term trust model.
 
 ## Runtime Tracker Responsibilities
@@ -251,12 +285,20 @@ The tracker should:
   - `window.analyticsConfig`, or
   - `data-*` attributes on its script element
 - normalize both into one internal config object
+- expose one public event API for host pages, for example:
+  - `window.analytics("signup")`
+  - `window.analytics("signup", { plan: "pro" })`
+- optionally support declarative goal tracking on DOM nodes, for example:
+  - `data-analytics-goal="signup"`
+  - `data-analytics-prop-plan="pro"`
 
 The tracker should not:
 
 - decide analytics ownership from raw domain alone
+- decide analytics ownership from raw `website_id` alone
 - silently invent site scope
 - contain product-specific tenant resolution logic
+- treat revenue or purchases as generic custom goals
 
 ## Recommended Server API Surface
 
@@ -276,6 +318,7 @@ Recommended helper outputs:
 
 - first-party inline bootstrap helper for Rails layout
 - external snippet helper or admin-generated snippet for copy-paste installs
+- declarative HTML goal helper built on the same runtime tracker
 
 ## Rollout Plan
 
@@ -283,18 +326,20 @@ Recommended helper outputs:
 
 - formalize the unified bootstrap payload
 - keep current first-party inline bootstrap
-- add `site.token` support in tracker runtime
+- add `site.websiteId` to the public snippet/runtime config
+- keep any signed token internal to the runtime/bootstrap layer
 
 ### Phase 2
 
-- add signed site token verification on ingest
+- add internal site attestation verification on ingest
 - add snippet generator in admin settings
 - support external snippet installs
 
 ### Phase 3
 
-- require signed token for explicit site overrides
-- migrate first-party bootstrap to emit the same site token contract as external mode
+- move explicit site overrides behind `website_id` lookup plus internal attestation
+- migrate first-party bootstrap to emit the same public/publicly-documentable
+  contract as external mode
 - remove any remaining raw site-ownership inputs from the public tracker contract
 
 ## Best-Possible End State
@@ -303,7 +348,8 @@ The best end state is:
 
 - one runtime tracker
 - one bootstrap payload shape
-- one signed site token shape
+- one public `website_id` contract
+- one optional internal attestation token shape
 - one ingestion trust model
 - server-owned boundary resolution on every request
 - hard rejection on token/boundary mismatch
@@ -321,7 +367,8 @@ In that end state:
 - one runtime tracker
 - one unified bootstrap payload
 - one server bootstrap builder
-- signed site tokens for trusted explicit site identity
+- short public `website_id` for snippet installs
+- internal attestation tokens for trusted explicit site identity
 - server-owned boundary resolution
 
 That gives:

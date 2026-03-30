@@ -63,6 +63,11 @@ export type GoalDefinition = {
   customProps?: Record<string, string>
 }
 
+export type GoalSuggestion = {
+  name: string
+  recentVisits: number
+}
+
 export type GoogleSearchConsoleProperty = {
   identifier: string
   type: string
@@ -97,18 +102,50 @@ export type GoogleSearchConsoleSettings = {
 
 export type AnalyticsTrackerSnippet = {
   scriptUrl: string
-  eventsEndpoint: string
-  siteToken: string
+  websiteId: string
   domainHint: string
-  publicOrigin: string
   snippetHtml: string
+}
+
+export type AnalyticsTrackingRules = {
+  includePaths: string[]
+  excludePaths: string[]
+  effectiveIncludePaths: string[]
+  effectiveExcludePaths: string[]
+}
+
+export type FunnelPageSuggestion = {
+  label: string
+  value: string
+  match: FunnelPageMatch
+}
+
+export type FunnelStepType = "page_visit" | "goal"
+export type FunnelPageMatch =
+  | "equals"
+  | "contains"
+  | "starts_with"
+  | "ends_with"
+export type FunnelGoalMatch = "completes"
+
+export type FunnelStepDefinition = {
+  name?: string | null
+  type?: FunnelStepType | "page" | "event" | null
+  match?: FunnelPageMatch | FunnelGoalMatch | "contains" | "equals" | null
+  value?: string | null
+  goalKey?: string | null
+  goal_key?: string | null
+  label?: string | null
 }
 
 export type AnalyticsSettingsPayload = {
   gscConfigured: boolean
   goals: string[]
   goalDefinitions: GoalDefinition[]
+  goalSuggestions: GoalSuggestion[]
   allowedEventProps: string[]
+  funnelPageSuggestions: FunnelPageSuggestion[]
+  trackingRules: AnalyticsTrackingRules
   tracker?: AnalyticsTrackerSnippet | null
   googleSearchConsole: GoogleSearchConsoleSettings
 }
@@ -247,6 +284,7 @@ export type SourceDebugPayload = {
 
 export type ListItem = Record<string, unknown> & {
   name: string
+  filterValue?: string
   comparison?: Record<string, unknown>
   sourceInfo?: SourceRowSourceInfo
 }
@@ -398,6 +436,7 @@ export type ProfileSessionItem = {
   exitPage?: string | null
   currentPage?: string | null
   durationSeconds: number
+  engagedMsTotal: number
   pageviewsCount: number
   eventsCount: number
   pagePaths?: string[]
@@ -490,7 +529,7 @@ export type AnalyticsSettingsPageProps = {
   }
   funnels: Array<{
     name: string
-    steps: Array<Record<string, unknown>>
+    steps: FunnelStepDefinition[]
   }>
   settings: AnalyticsSettingsPayload
   paths: AnalyticsSettingsPaths

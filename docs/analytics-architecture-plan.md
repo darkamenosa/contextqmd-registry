@@ -260,6 +260,42 @@ Use typed tables where possible:
 
 `analytics_settings` can remain for lightweight operational flags if needed, but it should not remain the primary home for site-specific analytics configuration.
 
+Recommended funnel step contract:
+
+- funnels should store typed step objects, not plain labels
+- v1 step types:
+  - `page_visit`
+  - `goal`
+- `page_visit` should support only positive matchers:
+  - `equals`
+  - `contains`
+  - `starts_with`
+  - `ends_with`
+- `goal` should support:
+  - `completes`
+- goal steps should point at a stable goal key/name
+- negative matchers should stay out of v1 funnel design because they are
+  ambiguous in ordered step evaluation
+
+Recommended v2 extension for exclusions and abandonment:
+
+- keep `steps` as positive milestones only
+- add separate `exclusions` for population filtering
+- add separate `abandonment_rules` for analyses like "reached step X but did not
+  complete goal Y within the same session"
+
+Do not overload normal funnel steps with `does_not_complete`.
+That requires explicit evaluation windows and should be modeled as a different
+analysis primitive.
+
+Recommended funnel reporting UI:
+
+- render funnels as a horizontal flow
+- show visitor counts at each step
+- show dropoff percentage between adjacent steps
+- show one prominent overall conversion rate summary
+- keep v1 hover details limited to metrics already present in the funnel payload
+
 ### Identity and Profiles
 
 Profiles remain the answer to `who`, but they should not become the only place where business outcomes live.
@@ -1240,7 +1276,9 @@ Design rules:
 
 1. `Analytics` is the public boundary
    The host app should not need a separate `ahoy.rb` initializer or direct
-   `Rails.configuration.x.analytics` access.
+   `Rails.configuration.x.analytics` access. This also applies to HTTP
+   endpoints: public tracker/browser routes should use `/analytics/*`. Ahoy
+   remains an internal engine concern.
 
 2. Ahoy stays internal
    `lib/analytics.rb` installs Ahoy integration, store wiring, and controller
@@ -1250,7 +1288,15 @@ Design rules:
    The initializer should stay short and host-friendly, with only project-level
    overrides and credentials.
 
-3. Remove legacy fallback booleans
+4. Site-specific tracking rules live in the analytics database
+   Internal/system excludes stay in code, but user-configurable include/exclude
+   rules should live once in `analytics_settings` and flow through bootstrap +
+   backend enforcement.
+   The code-owned defaults should come from one analytics-owned source and then
+   be derived into tracker, server-side, and reporting lists rather than being
+   configured independently in multiple places.
+
+5. Remove legacy fallback booleans
    `gsc_configured?` in
    `app/controllers/concerns/admin/analytics/google_search_console_context.rb`
    still falls back to `x.analytics.gsc_configured` and
@@ -1262,12 +1308,12 @@ Design rules:
 
 4. Keep provider config symmetrical
    Future Bing config should mirror Google shape:
-   - `config.analytics.bing_webmaster.enabled`
-   - `config.analytics.bing_webmaster.auth_mode`
-   - `config.analytics.bing_webmaster.client_id`
-   - `config.analytics.bing_webmaster.client_secret`
-   - `config.analytics.bing_webmaster.api_key`
-   - `config.analytics.bing_webmaster.callback_path`
+   - `config.bing_webmaster.enabled`
+   - `config.bing_webmaster.auth_mode`
+   - `config.bing_webmaster.client_id`
+   - `config.bing_webmaster.client_secret`
+   - `config.bing_webmaster.api_key`
+   - `config.bing_webmaster.callback_path`
 
 5. Expose config diagnostics in settings
    The settings page should eventually show a small diagnostics block for each
@@ -1276,6 +1322,38 @@ Design rules:
    - callback URL
    - current auth mode
    - last sync status
+
+### Public Tracker Surface
+
+The tracker should expose one small public browser contract.
+
+For external snippets:
+
+```html
+<script
+  defer
+  src="https://analytics.example.com/js/script.js"
+  data-website-id="site_xxx"
+  data-domain="example.com"
+></script>
+```
+
+Rules:
+
+- `data-website-id` is the public identifier, not the trust boundary
+- any signed site token should remain an internal runtime/bootstrap detail
+- boundary resolution stays server-owned
+
+For custom goals/events:
+
+```javascript
+window.analytics("signup")
+window.analytics("signup", { plan: "pro" })
+```
+
+Longer term, analytics should also support declarative HTML helpers and a
+server-side event API, but they should all write into the same typed goal/event
+system.
 
 ### Future ClickHouse
 
@@ -1360,6 +1438,10 @@ Examples:
 2. Scope funnels by site
 3. Replace global property config with site-scoped allowed event properties
 4. Reduce reliance on generic `analytics_settings`
+5. Replace plain-string funnel editing with a typed step builder:
+   - `Page visit`
+   - `Goal`
+6. Keep funnel creation limited to positive ordered milestones in v1
 
 ### Phase 4: Google Search Console Integration
 
@@ -1436,14 +1518,22 @@ Recommended pattern:
 - historical data repair via rake task or one-off script
 - no request-time repair for analytics site ownership
 
-## Current Placeholder To Replace Later
+## Search Terms Status
 
-The current search terms implementation is a placeholder:
+The old referrer-derived search terms placeholder has been replaced.
 
-- it derives terms from Google referrer URLs
-- it fabricates impressions, CTR, and position
+Current state:
 
-That should be removed once Google Search Console integration is implemented properly.
+- Google Search Console-backed search terms are synced and cached
+- the dashboard and details dialog read real Search Console term metrics
+- profile/session `Likely search queries` stay explicitly probabilistic and are
+  inferred from synced Search Console facts plus visit context
+
+What is still future work:
+
+- provider-neutral search fact tables
+- Bing support against the same reporting contract
+- keyword revenue attribution
 
 ## Summary
 

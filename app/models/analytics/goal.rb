@@ -24,10 +24,7 @@ class Analytics::Goal < AnalyticsRecord
 
   class << self
     def effective_scope(site = ::Analytics::Current.site_or_default)
-      site_scope = for_analytics_site(site)
-      return site_scope if site.present? && site_scope.exists?
-
-      global
+      write_scope(site)
     end
 
     def write_scope(site = ::Analytics::Current.site_or_default)

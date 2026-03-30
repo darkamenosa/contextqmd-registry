@@ -77,44 +77,48 @@ class Admin::AnalyticsLiveTest < ActionDispatch::IntegrationTest
   end
 
   test "legacy live route redirects ambiguous multi-site traffic to analytics settings" do
-    staff_identity, = create_tenant(
-      email: "staff-live-ambiguous-#{SecureRandom.hex(4)}@example.com",
-      name: "Staff Live Ambiguous"
-    )
-    staff_identity.update!(staff: true)
+    with_analytics_mode(:multi_site) do
+      staff_identity, = create_tenant(
+        email: "staff-live-ambiguous-#{SecureRandom.hex(4)}@example.com",
+        name: "Staff Live Ambiguous"
+      )
+      staff_identity.update!(staff: true)
 
-    Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
-    Analytics::Site.create!(name: "App", canonical_hostname: "app.example.test")
+      Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+      Analytics::Site.create!(name: "App", canonical_hostname: "app.example.test")
 
-    sign_in(staff_identity)
+      sign_in(staff_identity)
 
-    get "/admin/analytics/live", headers: INERTIA_HEADERS
+      get "/admin/analytics/live", headers: INERTIA_HEADERS
 
-    assert_redirected_to "/admin/settings/analytics"
+      assert_redirected_to "/admin/settings/analytics"
+    end
   ensure
     Current.reset
   end
 
   test "live view exposes site-scoped reports and settings paths" do
-    staff_identity, = create_tenant(
-      email: "staff-live-site-#{SecureRandom.hex(4)}@example.com",
-      name: "Staff Live Site"
-    )
-    staff_identity.update!(staff: true)
+    with_analytics_mode(:multi_site) do
+      staff_identity, = create_tenant(
+        email: "staff-live-site-#{SecureRandom.hex(4)}@example.com",
+        name: "Staff Live Site"
+      )
+      staff_identity.update!(staff: true)
 
-    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test", time_zone: "UTC")
-    Analytics::Site.create!(name: "App", canonical_hostname: "app.example.test", time_zone: "UTC")
+      site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test", time_zone: "UTC")
+      Analytics::Site.create!(name: "App", canonical_hostname: "app.example.test", time_zone: "UTC")
 
-    sign_in(staff_identity)
+      sign_in(staff_identity)
 
-    get "/admin/analytics/sites/#{site.public_id}/live", headers: INERTIA_HEADERS
+      get "/admin/analytics/sites/#{site.public_id}/live", headers: INERTIA_HEADERS
 
-    assert_response :success
+      assert_response :success
 
-    site_payload = JSON.parse(response.body).fetch("props").fetch("site")
-    assert_equal site.public_id, site_payload.fetch("id")
-    assert_equal "/admin/analytics/sites/#{site.public_id}", site_payload.fetch("paths").fetch("reports")
-    assert_equal "/admin/settings/analytics?site=#{site.public_id}", site_payload.fetch("paths").fetch("settings")
+      site_payload = JSON.parse(response.body).fetch("props").fetch("site")
+      assert_equal site.public_id, site_payload.fetch("id")
+      assert_equal "/admin/analytics/sites/#{site.public_id}", site_payload.fetch("paths").fetch("reports")
+      assert_equal "/admin/settings/analytics?site=#{site.public_id}", site_payload.fetch("paths").fetch("settings")
+    end
   ensure
     Current.reset
   end
@@ -206,7 +210,15 @@ class Admin::AnalyticsLiveTest < ActionDispatch::IntegrationTest
   end
 
   private
+    def with_analytics_mode(mode)
+      original_mode = Analytics.config.mode
+      Analytics.config.mode = mode
+      yield
+    ensure
+      Analytics.config.mode = original_mode
+    end
+
     def live_path_for(site)
-      Analytics::Site.sole_active == site ? "/admin/analytics/live" : "/admin/analytics/sites/#{site.public_id}/live"
+      Analytics::Configuration.single_site_mode? ? "/admin/analytics/live" : "/admin/analytics/sites/#{site.public_id}/live"
     end
 end

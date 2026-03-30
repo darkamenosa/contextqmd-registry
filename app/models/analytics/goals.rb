@@ -3,35 +3,42 @@
 module Analytics::Goals
   class << self
     def available_names
-      if managed_definitions?
-        Analytics::Goal.effective_scope.order(:display_name).pluck(:display_name)
-      else
-        legacy = Analytics::Setting.get_json("goals", fallback: :missing)
-        if legacy == :missing
-          Ahoy::Event.for_analytics_site.where.not(name: [ "pageview", "engagement" ]).distinct.order(:name).pluck(:name)
-        else
-          Analytics::Lists.normalize_strings(legacy)
-        end
-      end
+      Analytics::Goal.effective_scope.order(:display_name).pluck(:display_name)
     end
 
     def available?
-      if managed_definitions?
-        Analytics::Goal.effective_scope.exists?
-      else
-        legacy = Analytics::Setting.get_json("goals", fallback: :missing)
-        if legacy == :missing
-          Ahoy::Event.for_analytics_site.where.not(name: [ "pageview", "engagement" ]).limit(1).exists?
-        else
-          Analytics::Lists.normalize_strings(legacy).any?
-        end
-      end
+      Analytics::Goal.effective_scope.exists?
     end
 
     def configured(name)
-      return unless managed_definitions?
-
       Analytics::Goal.effective_find_by_display_name(name)
+    end
+
+    def display_label(goal_or_name)
+      raw_name =
+        case goal_or_name
+        when Analytics::Goal
+          goal_or_name.display_name.presence || goal_or_name.event_name.to_s
+        else
+          goal_or_name.to_s
+        end
+
+      return raw_name if raw_name.blank?
+      return raw_name if raw_name.match?(/[A-Z]/) || raw_name.match?(/[:\/ ]/)
+
+      raw_name
+        .split(/[_-]+/)
+        .map do |segment|
+          lower = segment.downcase
+          case lower
+          when "cta" then "CTA"
+          when "api" then "API"
+          when "utm" then "UTM"
+          else
+            lower.capitalize
+          end
+        end
+        .join(" ")
     end
 
     def apply(events, goal)
@@ -49,11 +56,6 @@ module Analytics::Goals
 
       apply_custom_properties(events, goal.custom_props)
     end
-
-    def managed_definitions?
-      Analytics::Goal.effective_scope.exists? || Analytics::Setting.get_bool("goals_managed", fallback: false)
-    end
-
     def apply_custom_properties(events, custom_props)
       Array(custom_props&.to_h).reduce(events) do |scope, (key, value)|
         property_name = key.to_s.strip

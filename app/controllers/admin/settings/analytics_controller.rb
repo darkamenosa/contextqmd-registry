@@ -53,6 +53,8 @@ module Admin
         end
 
         def analytics_site_options
+          return [] if ::Analytics::Configuration.single_site_mode?
+
           sites = ::Analytics::Site.active.order(:name).to_a
           return [] if sites.length <= 1
 
@@ -85,7 +87,9 @@ module Admin
             gsc_configured: false,
             goals: [],
             goal_definitions: [],
+            goal_suggestions: [],
             allowed_event_props: [],
+            funnel_page_suggestions: [],
             tracker: nil,
             google_search_console: {
               available: ::Analytics::GoogleSearchConsole::Configuration.configured?,

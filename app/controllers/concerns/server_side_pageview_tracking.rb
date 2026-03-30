@@ -3,17 +3,7 @@
 module ServerSidePageviewTracking
   extend ActiveSupport::Concern
 
-  EXCLUDED_PREFIXES = %w[
-    /admin
-    /api
-    /ahoy
-    /rails/
-    /assets/
-    /up
-    /jobs
-    /webhooks
-    /.well-known
-  ].freeze
+  EXCLUDED_PREFIXES = Analytics::InternalPaths.server_excluded_prefixes.freeze
 
   EXCLUDED_PATHS = %w[
     /favicon.ico
@@ -68,6 +58,11 @@ module ServerSidePageviewTracking
       return false if path.include?("apple-touch-icon")
       return false if speculative_prefetch_request?
       return false if ahoy.exclude?
+      return false unless ::Analytics::TrackingRules.trackable_path?(
+        path,
+        site: ::Analytics::TrackingRules.site_for_request(request),
+        include_internal_defaults: false
+      )
 
       true
     end

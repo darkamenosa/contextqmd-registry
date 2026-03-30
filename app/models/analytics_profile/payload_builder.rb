@@ -261,6 +261,7 @@ module AnalyticsProfile::PayloadBuilder
         exit_page: session.exit_page,
         current_page: session.current_page,
         duration_seconds: session.duration_seconds,
+        engaged_ms_total: session.respond_to?(:engaged_ms_total) ? session.engaged_ms_total : 0,
         pageviews_count: session.pageviews_count,
         events_count: session.events_count,
         page_paths: session.page_paths,

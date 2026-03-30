@@ -8,6 +8,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
   setup do
     Ahoy::Event.delete_all
     Ahoy::Visit.delete_all
+    Analytics::AllowedEventProperty.delete_all if defined?(Analytics::AllowedEventProperty)
     Analytics::SiteBoundary.delete_all
     Analytics::Site.delete_all
     Analytics::Setting.delete_all
@@ -52,6 +53,8 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
       properties: { page: "/pricing", title: "Pricing" },
       time: Time.zone.now.change(usec: 0)
     )
+
+    configure_allowed_props("plan", "source")
 
     sign_in(staff_identity)
 
@@ -100,6 +103,8 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
       time: Time.zone.now.change(usec: 0)
     )
 
+    configure_allowed_props("plan")
+
     sign_in(staff_identity)
 
     get "#{behaviors_path}?period=day&mode=props&property=plan&f=is,prop:plan,Pro",
@@ -139,6 +144,8 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
       time: Time.zone.now.change(usec: 0)
     )
 
+    configure_allowed_props("plan")
+
     sign_in(staff_identity)
 
     get "#{behaviors_path}?period=day&mode=props&property=plan&f=is_not,prop:plan,Pro",
@@ -175,6 +182,8 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
         time: Time.zone.now.change(usec: 0)
       )
     end
+
+    Analytics::Goal.create!(display_name: "Signup", event_name: "Signup", custom_props: {})
 
     sign_in(staff_identity)
 
@@ -229,6 +238,44 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
     assert_equal [ "Signup" ], rows.map { |row| row.fetch("name") }
     assert_equal 0, rows.first.fetch("uniques")
     assert_equal 0, rows.first.fetch("total")
+  ensure
+    Current.reset
+  end
+
+  test "behaviors conversions endpoint humanizes raw event-style goal labels while preserving filter values" do
+    staff_identity, = create_tenant(
+      email: "staff-behaviors-humanized-goals-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Behaviors Humanized Goals"
+    )
+    staff_identity.update!(staff: true)
+
+    Analytics::Goal.create!(display_name: "add_site", event_name: "add_site", custom_props: {})
+
+    visit = Ahoy::Visit.create!(
+      visit_token: SecureRandom.hex(16),
+      visitor_token: SecureRandom.hex(16),
+      started_at: Time.zone.now.change(usec: 0)
+    )
+
+    Ahoy::Event.create!(
+      visit: visit,
+      name: "add_site",
+      properties: {},
+      time: Time.zone.now.change(usec: 0)
+    )
+
+    sign_in(staff_identity)
+
+    get behaviors_path,
+        params: { period: "day", mode: "conversions", with_imported: "false" },
+        headers: { "ACCEPT" => "application/json" }
+
+    assert_response :success
+
+    row = JSON.parse(response.body).fetch("results").first
+    assert_equal "Add Site", row.fetch("name")
+    assert_equal "add_site", row.fetch("filterValue")
+    assert_equal 1, row.fetch("uniques")
   ensure
     Current.reset
   end
@@ -315,6 +362,8 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
       time: Time.zone.now.change(usec: 0)
     )
 
+    configure_allowed_props("plan")
+
     sign_in(staff_identity)
 
     get "#{behaviors_path}?period=day&mode=props&property=plan&with_imported=false&f=is,goal,Visit%20%2Fblog*",
@@ -368,6 +417,9 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
       )
     end
 
+    Analytics::Goal.create!(display_name: "Signup", event_name: "Signup", custom_props: {})
+    configure_allowed_props("plan")
+
     sign_in(staff_identity)
 
     get "#{behaviors_path}?period=day&mode=props&property=plan&with_imported=false&f=is,goal,Signup",
@@ -392,8 +444,6 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
     )
     staff_identity.update!(staff: true)
 
-    Analytics::Setting.set_json("allowed_event_props", [ "plan" ])
-
     visit = Ahoy::Visit.create!(
       visit_token: SecureRandom.hex(16),
       visitor_token: SecureRandom.hex(16),
@@ -406,6 +456,8 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
       properties: { plan: "Pro", source: "Ads" },
       time: Time.zone.now.change(usec: 0)
     )
+
+    configure_allowed_props("plan")
 
     sign_in(staff_identity)
 
@@ -455,6 +507,8 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
           time: Time.zone.parse("2026-03-24 09:00:00")
         )
       end
+
+      configure_allowed_props("plan")
 
       sign_in(staff_identity)
 
@@ -507,6 +561,8 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
         )
       end
 
+      Analytics::Goal.create!(display_name: "Signup", event_name: "Signup", custom_props: {})
+
       sign_in(staff_identity)
 
       get behaviors_path,
@@ -557,6 +613,8 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
       time: Time.zone.now.change(usec: 0)
     )
 
+    configure_allowed_props("plan")
+
     sign_in(staff_identity)
 
     get "#{behaviors_path}?period=day&mode=props&property=plan&f=is_not,browser,Chrome",
@@ -580,7 +638,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
     Analytics::Funnel.create!(
       name: "Signup Funnel",
       steps: [
-        { name: "Signup", type: "event", match: "equals", value: "Signup" }
+        { name: "Signup", type: "goal", match: "completes", goal_key: "Signup" }
       ]
     )
 
@@ -633,8 +691,8 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
     Analytics::Funnel.create!(
       name: "Signup Funnel",
       steps: [
-        { name: "View pricing", type: "page", match: "equals", value: "/pricing" },
-        { name: "Signup", type: "event", match: "equals", value: "Signup" }
+        { name: "View pricing", type: "page_visit", match: "starts_with", value: "/pricing" },
+        { name: "Signup", type: "goal", match: "completes", goal_key: "Signup" }
       ]
     )
 
@@ -717,6 +775,11 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
   end
 
   private
+    def configure_allowed_props(*keys)
+      site = Analytics::Site.active.order(:id).first
+      Analytics::AllowedEventProperty.sync_keys!(keys.flatten, site: site)
+    end
+
     def behaviors_path
       "/admin/analytics/sites/#{Analytics::Site.sole_active.public_id}/behaviors"
     end

@@ -40,7 +40,7 @@ class Analytics::AhoyStore < Ahoy::DatabaseStore
     Analytics::VisitBoundary.consume_force_new_visit!(Current.request) if Current.request
     visit = repair_existing_visit_after_conflict!(visit, attrs)
     resolve_analytics_profile(visit, occurred_at: visit&.started_at)
-    Analytics::LiveState.broadcast_later
+    Analytics::LiveState.broadcast_later(site: Analytics::SiteLocator.from_record(visit))
     visit
   end
 
@@ -68,10 +68,12 @@ class Analytics::AhoyStore < Ahoy::DatabaseStore
       return nil
     end
 
-    repair_visit_from_event!(visit, event, site_token: data[:site_token])
+    repair_visit_from_event!(visit, event, site_token: data[:site_token], website_id: data[:website_id])
     sync_event_site_scope!(event, visit)
     resolve_analytics_profile(visit, occurred_at: event.time)
-    Analytics::LiveState.broadcast_later
+    Analytics::LiveState.broadcast_later(
+      site: Analytics::SiteLocator.from_record(visit) || Analytics::SiteLocator.from_record(event)
+    )
     event
   end
 
@@ -80,7 +82,7 @@ class Analytics::AhoyStore < Ahoy::DatabaseStore
 
     resolved_visit = visit
     resolve_analytics_profile(resolved_visit, occurred_at: Time.current)
-    Analytics::LiveState.broadcast_later
+    Analytics::LiveState.broadcast_later(site: Analytics::SiteLocator.from_record(resolved_visit))
   end
 
   private
@@ -141,7 +143,7 @@ class Analytics::AhoyStore < Ahoy::DatabaseStore
       visit
     end
 
-    def repair_visit_from_event!(visit, event, site_token: nil)
+    def repair_visit_from_event!(visit, event, site_token: nil, website_id: nil)
       props = event.properties.to_h.with_indifferent_access
       updates = {}
       enrich_visit_technology!(updates, Current.request) if Current.request && visit_technology_missing?(visit)
@@ -153,17 +155,19 @@ class Analytics::AhoyStore < Ahoy::DatabaseStore
 
       url = props[:url]
       if url.present?
-        updates[:landing_page] = url if visit_needs_landing_page_fix?(visit) || site_token.present?
-        if site_token.present? || visit.hostname.blank?
+        updates[:landing_page] = url if visit_needs_landing_page_fix?(visit) || site_token.present? || website_id.present?
+        if site_token.present? || website_id.present? || visit.hostname.blank?
           resolved_host = host_from_url(url)
           updates[:hostname] = resolved_host if resolved_host.present?
         end
       end
 
-      if updates.key?(:landing_page) || updates.key?(:hostname) || site_scope_missing?(visit) || site_token.present?
+      if updates.key?(:landing_page) || updates.key?(:hostname) || site_scope_missing?(visit) || site_token.present? || website_id.present?
         updates[:site_token] = site_token if site_token.present?
+        updates[:website_id] = website_id if website_id.present?
         merge_resolved_site_scope!(updates, req: Current.request, fallback_visit: visit)
         updates.delete(:site_token)
+        updates.delete(:website_id)
       end
 
       persist_visit_repairs!(
@@ -305,7 +309,7 @@ class Analytics::AhoyStore < Ahoy::DatabaseStore
       rescue URI::InvalidURIError
         value.to_s
       end.to_s
-      path.start_with?("/ahoy", "/cable", "/rails/", "/assets/", "/up", "/jobs", "/webhooks")
+      Analytics::InternalPaths.report_internal_path?(path)
     end
 
     def same_site_host?(ref_host, site_host)
@@ -340,7 +344,8 @@ class Analytics::AhoyStore < Ahoy::DatabaseStore
         host: host_from_url(tracked_url) || attrs[:hostname].presence || fallback_visit&.hostname || req&.host,
         url: tracked_url,
         path: attrs[:path],
-        site_token: attrs[:site_token].presence
+        site_token: attrs[:site_token].presence,
+        website_id: attrs[:website_id].presence
       )
       return attrs if resolved.blank?
 
@@ -349,7 +354,7 @@ class Analytics::AhoyStore < Ahoy::DatabaseStore
       attrs
     end
 
-    def resolved_site_scope(host:, url: nil, path: nil, site_token: nil)
+    def resolved_site_scope(host:, url: nil, path: nil, site_token: nil, website_id: nil)
       normalized_path = path.presence || path_from_url(url)
       boundary_resolution = Analytics::TrackingSiteResolver.resolve(host:, path: normalized_path, url:)
 
@@ -377,6 +382,29 @@ class Analytics::AhoyStore < Ahoy::DatabaseStore
         end
 
         resolution = boundary_resolution.presence || token_resolution
+      elsif website_id.present?
+        explicit_site = Analytics::Site.active.find_by(public_id: website_id)
+        return {} if explicit_site.blank?
+
+        if boundary_resolution.present? && boundary_resolution.site != explicit_site
+          log_website_id_mismatch(
+            website_id: website_id,
+            website_site: explicit_site,
+            boundary_site: boundary_resolution.site,
+            host: host,
+            path: normalized_path
+          )
+          return {}
+        end
+
+        if boundary_resolution.present?
+          resolution = boundary_resolution
+        elsif same_site_host?(host, explicit_site.canonical_hostname)
+          resolution = Analytics::TrackingSiteResolver::Resolution.new(site: explicit_site, boundary: nil)
+        else
+          log_invalid_website_id(website_id:, host:, path: normalized_path)
+          return {}
+        end
       else
         resolution = boundary_resolution
       end
@@ -404,6 +432,18 @@ class Analytics::AhoyStore < Ahoy::DatabaseStore
     def log_site_token_mismatch(token_site:, boundary_site:, host:, path:)
       Rails.logger.warn(
         "[analytics] rejected mismatched site token token_site=#{token_site.public_id.inspect} boundary_site=#{boundary_site.public_id.inspect} host=#{host.inspect} path=#{path.inspect}"
+      )
+    end
+
+    def log_invalid_website_id(website_id:, host:, path:)
+      Rails.logger.warn(
+        "[analytics] rejected website_id without matching site boundary website_id=#{website_id.inspect} host=#{host.inspect} path=#{path.inspect}"
+      )
+    end
+
+    def log_website_id_mismatch(website_id:, website_site:, boundary_site:, host:, path:)
+      Rails.logger.warn(
+        "[analytics] rejected mismatched website_id website_id=#{website_id.inspect} website_site=#{website_site.public_id.inspect} boundary_site=#{boundary_site.public_id.inspect} host=#{host.inspect} path=#{path.inspect}"
       )
     end
 

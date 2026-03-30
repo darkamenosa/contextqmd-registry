@@ -70,7 +70,7 @@ class Analytics::Paths
     attr_reader :site, :helpers
 
     def single_site_mode?
-      ::Analytics::Site.sole_active == site
+      ::Analytics::Configuration.single_site_mode?
     end
 
     def escape_dialog(dialog)

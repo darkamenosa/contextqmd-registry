@@ -86,36 +86,65 @@ class AnalyticsProfile::Projection
         page_paths = events.filter_map { |event| page_for_event(event) }.uniq
         pageviews = events.count { |event| event.name == "pageview" }
         last_event_at = events.map(&:time).compact.max || visit.started_at
+        engaged_ms_total = total_engaged_ms(events)
         source = visit.source_label.to_s.presence || visit.referring_domain.to_s.presence || "Direct / None"
         entry_page = page_paths.first || normalized_path(visit.landing_page)
         exit_page = page_paths.last || normalized_path(visit.landing_page)
 
-        session = AnalyticsProfileSession.find_or_initialize_by(visit_id: visit.id)
-        resolved_country = Analytics::Country.resolve(
-          country: visit.country,
-          country_code: visit.respond_to?(:country_code) ? visit.country_code : nil
-        )
-        session.analytics_profile_id = visit.analytics_profile_id
-        session.analytics_site_id = visit.analytics_site_id
-        session.started_at = visit.started_at || last_event_at || Time.current
-        session.last_event_at = last_event_at
-        session.country = resolved_country.name
-        session.country_code = resolved_country.code if session.respond_to?(:country_code=)
-        session.region = visit.region.to_s.presence
-        session.city = visit.city.to_s.presence
-        session.device_type = visit.device_type.to_s.presence || "Desktop"
-        session.os = visit.os.to_s.presence
-        session.browser = visit.browser.to_s.presence
-        session.source = source
-        session.entry_page = entry_page
-        session.exit_page = exit_page
-        session.current_page = exit_page
-        session.duration_seconds = duration_seconds(session.started_at, last_event_at)
-        session.pageviews_count = pageviews
-        session.events_count = events.size
-        session.page_paths = page_paths
-        session.event_names = event_names
-        session.save!
+        with_session_retry do
+          session = AnalyticsProfileSession.find_or_initialize_by(visit_id: visit.id)
+          resolved_country = Analytics::Country.resolve(
+            country: visit.country,
+            country_code: visit.respond_to?(:country_code) ? visit.country_code : nil
+          )
+          session.analytics_profile_id = visit.analytics_profile_id
+          session.analytics_site_id = visit.analytics_site_id
+          session.started_at = visit.started_at || last_event_at || Time.current
+          session.last_event_at = last_event_at
+          session.country = resolved_country.name
+          session.country_code = resolved_country.code if session.respond_to?(:country_code=)
+          session.region = visit.region.to_s.presence
+          session.city = visit.city.to_s.presence
+          session.device_type = visit.device_type.to_s.presence || "Desktop"
+          session.os = visit.os.to_s.presence
+          session.browser = visit.browser.to_s.presence
+          session.source = source
+          session.entry_page = entry_page
+          session.exit_page = exit_page
+          session.current_page = exit_page
+          session.duration_seconds = duration_seconds(session.started_at, last_event_at)
+          session.engaged_ms_total = engaged_ms_total if session.respond_to?(:engaged_ms_total=)
+          session.pageviews_count = pageviews
+          session.events_count = events.size
+          session.page_paths = page_paths
+          session.event_names = event_names
+          session.save!
+        end
+      end
+
+      def with_session_retry(max_attempts = 2)
+        attempts = 0
+
+        begin
+          attempts += 1
+          yield
+        rescue ActiveRecord::RecordNotUnique, PG::UniqueViolation, ActiveRecord::StatementInvalid => error
+          raise unless unique_session_conflict?(error)
+          raise if attempts >= max_attempts
+
+          retry
+        end
+      end
+
+      def unique_session_conflict?(error)
+        return true if error.is_a?(ActiveRecord::RecordNotUnique)
+        return true if defined?(PG::UniqueViolation) && error.is_a?(PG::UniqueViolation)
+
+        cause = error.respond_to?(:cause) ? error.cause : nil
+        return true if cause.is_a?(ActiveRecord::RecordNotUnique)
+        return true if defined?(PG::UniqueViolation) && cause.is_a?(PG::UniqueViolation)
+
+        error.message.to_s.include?("index_analytics_profile_sessions_on_visit_id")
       end
 
       def refresh_summary_by_id(profile_id)
@@ -318,6 +347,17 @@ class AnalyticsProfile::Projection
         return 0 if started_at.blank?
 
         [ (last_event_at || started_at).to_i - started_at.to_i, 0 ].max
+      end
+
+      def total_engaged_ms(events)
+        events.sum do |event|
+          next 0 unless event.name.to_s == "engagement"
+
+          engaged_ms = event.properties.to_h.with_indifferent_access[:engaged_ms]
+          [ engaged_ms.to_i, 0 ].max
+        rescue StandardError
+          0
+        end
       end
   end
 end

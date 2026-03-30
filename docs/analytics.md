@@ -137,10 +137,17 @@ Then follow these rules:
 
 A Plausible-style analytics dashboard built on Ahoy. Ahoy visit/session ownership remains cookieless, while an app-owned first-party browser cookie provides weak continuity for analytics profile resolution. Runs in a dedicated PostgreSQL database isolated from primary app data. The admin dashboard at `/admin/analytics` shows traffic stats; `/admin/analytics/live` shows real-time visitors on a 3D globe.
 
+Public ownership rule:
+
+- `Analytics` owns the public browser and HTTP contract
+- `Ahoy` stays the internal tracking engine and persistence layer
+- public endpoints should use `/analytics/*`, not `/ahoy/*`
+- `ahoy_visits` and `ahoy_events` remain internal storage tables for now
+
 ```text
-Browser → analytics.ts tracker → /ahoy/visits + /ahoy/events
+Browser → analytics.ts tracker → /analytics/events
                                         ↓
-                      Ahoy::Store (installed via Analytics.setup)
+                 Ahoy::EventsController + Analytics::AhoyStore
                                         ↓
                               analytics database (ahoy_visits, ahoy_events, analytics_profiles, analytics_profile_keys, analytics_profile_sessions, analytics_profile_summaries)
                                         ↓
@@ -207,7 +214,12 @@ One row per tracked action (pageview, engagement, outbound link click, file down
 
 ### analytics_funnels
 
-Named conversion funnels with ordered step definitions (JSONB array).
+Named conversion funnels with ordered typed step definitions stored as JSONB.
+
+Recommended step types:
+
+- `page_visit`
+- `goal`
 
 ### analytics_settings
 
@@ -525,7 +537,7 @@ Today the fact store is still Postgres. Later it can move behind ClickHouse adap
 1. **Server-first initial pageview**: On eligible public HTML `GET` requests, Rails creates the visit and first `pageview` before the response is sent. The layout bootstraps only the initial `pageKey` and whether the current render was already counted.
 2. **Browser continuity cookie**: Rails ensures a first-party `cq_analytics_browser_id` cookie exists. This browser id is separate from Ahoy visit/session ownership and is used only for anonymous continuity and profile resolution.
 3. **Client follow-up tracking**: The standalone tracker seeds its dedupe/engagement state from that bootstrap and continues tracking SPA navigation, engagement, downloads, and outbound clicks.
-4. **Event-only follow-up ingestion**: Subsequent tracking uses POST `/ahoy/events` only. Ahoy creates a new visit lazily on the next `pageview` when no recent visit exists.
+4. **Event-only follow-up ingestion**: Subsequent tracking uses POST `/analytics/events` only. Ahoy creates a new visit lazily on the next `pageview` when no recent visit exists.
 5. **Engagement does not open a new visit**: `engagement` events extend an active visit, but are dropped when no recent visit exists. This matches Plausible-style session handling.
 6. **Engagement tracking**: Tracks time-on-page and scroll depth (Plausible-style). Fires `engagement` events on visibility change / blur / navigation.
 7. **Dedup**: Uses a `pageKey` (pathname + search) to prevent double-counting when frameworks call `pushState` then `replaceState` in the same tick, and seeds that key from the server-rendered page on first load.
@@ -545,17 +557,50 @@ window.analyticsConfig = {
 }
 ```
 
-For external installs, admin settings now generate a public snippet that points to `/js/script.js`. That loader normalizes `data-site-token`, `data-domain`, `data-api`, `data-include`, and `data-exclude` into the same `window.analyticsConfig` shape before it imports the real Vite tracker bundle.
+For external installs, admin settings should generate a public snippet that points
+to `/js/script.js`. The public contract should stay small:
+
+```html
+<script
+  defer
+  src="https://analytics.example.com/js/script.js"
+  data-website-id="site_xxx"
+  data-domain="example.com"
+></script>
+```
+
+That loader should normalize `data-website-id`, `data-domain`, `data-api`,
+`data-include`, and `data-exclude` into the same `window.analyticsConfig` shape
+before it imports the real Vite tracker bundle. Any signed site token should be an
+internal runtime/bootstrap detail, not the public HTML contract.
 
 ### Excluded paths
 
-The tracker skips: `/admin`, `/app`, `/login`, `/logout`, `/register`, `/password`, `/ahoy`, `/cable`, static assets, and well-known files. These are hardcoded defaults in the tracker class.
+Analytics owns one set of system defaults in code and derives the runtime lists
+from that source. Today that means:
+
+- tracker/bootstrap defaults skip: `/admin`, `/.well-known`, `/analytics`,
+  `/ahoy`, `/cable`
+- server-side pageview enforcement also skips internal transport and platform
+  paths like `/api`, `/rails/*`, `/assets/*`, `/up`, `/jobs`, and `/webhooks`
+- reporting cleanup treats `/analytics`, `/ahoy`, `/cable`, `/rails/*`,
+  `/assets/*`, `/up`, `/jobs`, and `/webhooks` as internal
+These should not become separate frontend user config. The best model is:
+
+- analytics owns system/internal excludes by default
+- user-defined include/exclude rules live once in analytics settings, stored in
+  `analytics_settings` as site-scoped `tracking_rules`
+- bootstrap sends the effective rules to the tracker
+- backend still enforces them for correctness
 
 ### Transport
 
 Events use `fetch` with `keepalive: true`, a JSON body, and `X-CSRF-Token` header when available. The tracker is intentionally fetch-first for more predictable Safari/WebKit behavior and simpler end-to-end testing.
 
-External snippet installs use `OPTIONS /ahoy/events` preflight plus permissive CORS headers on `POST /ahoy/events`. Site ownership still resolves server-side through signed site tokens and boundary resolution.
+External snippet installs use `OPTIONS /analytics/events` preflight plus permissive
+CORS headers on `POST /analytics/events`. Site ownership should still resolve
+server-side through `website_id` lookup, optional internal site attestation, and
+boundary resolution.
 
 ## Server-Side Initial Pageviews
 
@@ -820,9 +865,141 @@ The module (`config/initializers/maxmind.rb`) lazy-loads the database reader and
 
 ## Funnels
 
-Funnels are named sequences of steps (goal names or page paths). CRUD via `Admin::Analytics::FunnelsController`. Stored in `analytics_funnels` table with JSONB `steps` array.
+Funnels are named sequences of ordered, positive milestones. CRUD lives in
+`Admin::Analytics::FunnelsController`. They are stored in `analytics_funnels`
+with a typed JSONB `steps` array.
 
-The behaviors panel switches to funnel mode when `mode=funnels` is active, showing step-by-step conversion rates.
+Recommended step schema:
+
+```json
+[
+  {
+    "name": "Visit landing page",
+    "type": "page_visit",
+    "match": "equals",
+    "value": "/"
+  },
+  {
+    "name": "Signup",
+    "type": "goal",
+    "match": "completes",
+    "goal_key": "signup"
+  }
+]
+```
+
+Recommended funnel step types:
+
+- `page_visit`
+  - represents reaching a page URL/path
+  - matchers should stay positive only in v1:
+    - `equals`
+    - `contains`
+    - `starts_with`
+    - `ends_with`
+- `goal`
+  - represents completing a tracked goal/custom event
+  - v1 matcher should be only:
+    - `completes`
+
+Important rules:
+
+- funnels should mix page steps and goal steps naturally
+- step names are presentation labels, not primary identifiers
+- goal steps should reference a stable goal key/name, not only free-form text
+- funnel steps should stay positive and time-ordered
+- avoid negative matchers like `does_not_equal` in funnels; they are ambiguous in
+  ordered conversion paths
+- v1 funnels should stay visit/browser scoped unless the product explicitly adds
+  a separate profile-based funnel mode later
+
+Why negative goal steps stay out:
+
+- `does_not_complete` is not a milestone, it is an absence
+- absence needs an evaluation window such as:
+  - by end of visit
+  - within N minutes after step X
+  - before the next step
+  - within the reporting range
+- each window produces different numbers, so it should not be hidden inside a
+  normal funnel step
+
+Recommended v2 design for non-completion and exclusions:
+
+- keep funnels as positive ordered milestones
+- add optional funnel-level exclusion rules, not negative steps
+- add optional abandonment conditions evaluated relative to a positive step
+
+Example future shape:
+
+```json
+{
+  "name": "Signup funnel",
+  "steps": [
+    { "type": "page_visit", "match": "equals", "value": "/pricing" },
+    { "type": "goal", "match": "completes", "goal_key": "signup" }
+  ],
+  "exclusions": [
+    {
+      "scope": "entire_funnel",
+      "type": "goal",
+      "match": "completes",
+      "goal_key": "internal_test"
+    }
+  ],
+  "abandonment_rules": [
+    {
+      "after_step": 1,
+      "type": "goal",
+      "match": "not_completed_within_session",
+      "goal_key": "signup"
+    }
+  ]
+}
+```
+
+Meaning:
+
+- `exclusions` remove visits/sessions from the funnel population entirely
+- `abandonment_rules` describe a separate analysis like:
+  - reached step X
+  - did not complete goal Y within the same visit/session
+
+That is a better product boundary than adding `does_not_complete` as a normal
+step matcher.
+
+Recommended builder UX:
+
+- when adding a step, choose:
+  - `Page visit`
+  - `Goal`
+- for `Page visit`, select a matcher and a path value
+- for `Goal`, search/select from existing goals
+- suggested steps may come from:
+  - common pages such as landing/pricing/signup
+  - existing goals
+- do not reduce funnel creation to a plain list of step labels
+
+Recommended funnel visualization UX:
+
+- the behaviors panel should render funnels as a horizontal journey, not a plain
+  list or stacked cards
+- each step should show:
+  - step name
+  - visitors who reached that step
+  - conversion from funnel start
+- each gap between steps should show dropoff percentage
+- the overall conversion rate should be prominent in the panel header or top
+  right summary
+- hover details should stay lightweight in v1:
+  - visitors at this step
+  - dropoff from previous step
+  - conversion from start
+- v1 should use the existing funnel payload only; do not invent fake revenue,
+  attribution, or source breakdowns inside the tooltip
+
+The behaviors panel switches to funnel mode when `mode=funnels` is active,
+showing a horizontal step-by-step conversion flow instead of a generic list.
 
 ## Settings
 
@@ -830,7 +1007,7 @@ The behaviors panel switches to funnel mode when `mode=funnels` is active, showi
 
 | Key | Type | Purpose |
 |---|---|---|
-| `gsc_configured` | boolean | Enables Google Search Console search terms panel |
+| `tracking_rules` | json | Site-scoped include/exclude tracking rules merged with system defaults |
 
 Longer term, settings should continue moving away from generic key/value state and toward typed site-scoped resources for:
 
@@ -894,7 +1071,66 @@ Recommended delivery strategy:
 - ship one complete vertical slice at a time
 - validate the shared model with real usage before widening to the next provider
 
-## Adding a new tracked event
+## Goal Tracking Contract
+
+The current backend goal model is already stronger than a plain event counter:
+
+- `Analytics::Goal` stores typed goal definitions
+- `Analytics::Goals` owns goal matching logic
+- `Analytics::AllowedEventProperty` defines which custom properties may be
+  retained and queried safely
+
+The public developer-facing tracking surface is partially implemented.
+
+Recommended contract:
+
+### 1. Public JavaScript API
+
+The tracker now exposes one simple browser API:
+
+```javascript
+window.analytics("signup")
+window.analytics("initiate_checkout", { plan: "pro" })
+```
+
+Use it for custom events that should map into goals and behavior reporting.
+
+These calls do not silently create managed goals in the database. Instead:
+
+- recent custom event names are detected automatically
+- `Settings > Analytics > Goals` shows them as one-click suggestions
+- users can add one or all detected events as managed goals without typing
+- managed goals remain the stable source of truth for reporting and funnels
+
+### 2. Declarative HTML API
+
+The tracker also supports a simple HTML convention for sites that do not want
+to write custom JavaScript:
+
+```html
+<button
+  data-analytics-goal="signup"
+  data-analytics-prop-plan="pro"
+>
+  Start free trial
+</button>
+```
+
+This compiles down to the same runtime event pipeline as the JS helper.
+
+### 3. Server-Side Event Tracking
+
+Longer term, analytics should also support a server-side event/goal API for
+host apps that want more accurate or privileged tracking. That API should write
+into the same event/goal system, not invent a second concept of goals.
+
+### 4. Revenue Is Not A Custom Goal
+
+Purchases, renewals, refunds, and revenue should remain first-class commerce
+facts. They may appear in conversion reporting later, but they should not be
+modeled as generic custom goals.
+
+## Adding a new auto-captured event
 
 The tracker sends custom events via `sendEvent()`. To add a new auto-captured event:
 

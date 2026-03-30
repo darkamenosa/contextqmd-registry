@@ -94,12 +94,9 @@ export function MetricTable({
   firstColumnLabel,
   barColorTheme = "emerald",
   metricLabels,
-  revealSecondaryMetricsOnHover = true,
   testId,
 }: MetricTableProps) {
   const metrics = data.metrics
-  const primaryMetric = metrics[0]
-  const secondaryMetrics = metrics.slice(1)
   const resolvedMetricLabels = metricLabels ?? data.meta.metricLabels
   // Base width used when labels are short
   const BASE_NUM_COL_MIN_PX = 72
@@ -134,11 +131,6 @@ export function MetricTable({
     const len = String(title).length
     return len >= 16 ? 144 : len >= 12 ? 120 : BASE_NUM_COL_MIN_PX
   }
-  const compactMetricsWidth = metrics.reduce((sum, metric, index) => {
-    const gap = index === 0 ? 0 : 16
-    return sum + metricWidth(metric) + gap
-  }, 0)
-
   // Use new DevicesPanel styling when displayBars is false
   if (!displayBars) {
     return (
@@ -152,7 +144,9 @@ export function MetricTable({
         >
           <colgroup>
             <col />
-            <col style={{ width: compactMetricsWidth }} />
+            {metrics.map((metric) => (
+              <col key={metric} style={{ width: metricWidth(metric) }} />
+            ))}
           </colgroup>
           <thead>
             <tr className="border-b border-border">
@@ -162,16 +156,16 @@ export function MetricTable({
               >
                 {itemLabel}
               </th>
-              <th scope="col" className="pb-2 text-right">
-                {primaryMetric ? (
+              {metrics.map((metric) => (
+                <th key={metric} scope="col" className="pb-2 pl-4 text-right">
                   <span className="inline-block text-right text-xs font-semibold tracking-wide whitespace-nowrap text-muted-foreground uppercase">
                     {(resolvedMetricLabels &&
-                      resolvedMetricLabels[primaryMetric]) ??
-                      METRIC_LABELS[normalizeMetricKey(primaryMetric)] ??
-                      primaryMetric}
+                      resolvedMetricLabels[metric as ListMetricKey]) ??
+                      METRIC_LABELS[normalizeMetricKey(metric)] ??
+                      metric}
                   </span>
-                ) : null}
-              </th>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -233,42 +227,24 @@ export function MetricTable({
                       </span>
                     </div>
                   </td>
-                  <td className="text-right">
-                    <div className="flex shrink-0 items-center justify-end">
-                      {primaryMetric ? (
-                        <span className="font-semibold whitespace-nowrap text-foreground tabular-nums">
-                          <MetricValueCell
-                            item={item}
-                            metric={primaryMetric}
-                            meta={data.meta}
-                          />
-                        </span>
-                      ) : null}
-                      {secondaryMetrics.length > 0 ? (
-                        <div
-                          className={[
-                            "ml-4 flex shrink-0 items-center gap-4 overflow-hidden",
-                            revealSecondaryMetricsOnHover
-                              ? "transition-all duration-150 md:ml-0 md:max-w-0 md:translate-x-3 md:opacity-0 md:group-hover/report:ml-4 md:group-hover/report:max-w-[20rem] md:group-hover/report:translate-x-0 md:group-hover/report:opacity-100"
-                              : "",
-                          ].join(" ")}
-                        >
-                          {secondaryMetrics.map((metric) => (
-                            <span
-                              key={metric}
-                              className="font-semibold whitespace-nowrap text-muted-foreground tabular-nums"
-                            >
-                              <MetricValueCell
-                                item={item}
-                                metric={metric}
-                                meta={data.meta}
-                              />
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  </td>
+                  {metrics.map((metric, metricIndex) => (
+                    <td key={metric} className="pl-4 text-right">
+                      <span
+                        className={[
+                          "whitespace-nowrap tabular-nums",
+                          metricIndex === 0
+                            ? "font-semibold text-foreground"
+                            : "font-semibold text-muted-foreground",
+                        ].join(" ")}
+                      >
+                        <MetricValueCell
+                          item={item}
+                          metric={metric}
+                          meta={data.meta}
+                        />
+                      </span>
+                    </td>
+                  ))}
                 </tr>
               )
             })}

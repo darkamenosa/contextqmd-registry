@@ -10,10 +10,10 @@ import {
 import { pickCardMetrics } from "../lib/card-metrics"
 import {
   buildDialogPath,
-  type PagesMode,
   pagesModeForSegment,
   pagesSegmentForMode,
   parseDialogFromPath,
+  type PagesMode,
 } from "../lib/dialog-path"
 import { analyticsScopedPath } from "../lib/path-prefix"
 import {
@@ -131,8 +131,7 @@ export default function PagesPanel({
   const loading = panelState.loading
 
   const highlightMetric = useMemo(
-    () =>
-      data.metrics.includes("visitors") ? "visitors" : data.metrics[0],
+    () => (data.metrics.includes("visitors") ? "visitors" : data.metrics[0]),
     [data.metrics]
   )
 

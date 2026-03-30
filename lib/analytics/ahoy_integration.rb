@@ -34,9 +34,11 @@ module Analytics
       return true if req.nil?
 
       path = req.path.to_s
-      return false if path.start_with?("/ahoy")
+      return false if path.start_with?("/ahoy", "/analytics")
 
-      path.start_with?("/admin", "/rails/", "/assets/", "/up", "/jobs", "/webhooks")
+      Analytics::InternalPaths.server_excluded_prefixes.any? do |prefix|
+        path.start_with?(prefix)
+      end
     end
 
     private

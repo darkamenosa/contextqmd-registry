@@ -10,15 +10,19 @@ class Analytics::AllowedEventProperty < AnalyticsRecord
 
   before_validation :normalize_property_name
 
-  scope :for_analytics_site, ->(site = ::Analytics::Current.site) { Analytics::Scope.apply(all, site:) }
+  scope :for_analytics_site, ->(site = ::Analytics::Current.site_or_default) { Analytics::Scope.apply(all, site:) }
 
   class << self
-    def configured_for?(site = ::Analytics::Current.site)
-      for_analytics_site(site).exists?
+    def configured_for?(site = ::Analytics::Current.site_or_default)
+      return false if site.blank?
+
+      where(analytics_site_id: site.id).exists?
     end
 
-    def configured_keys(site = ::Analytics::Current.site)
-      for_analytics_site(site).order(:property_name).pluck(:property_name)
+    def configured_keys(site = ::Analytics::Current.site_or_default)
+      return [] if site.blank?
+
+      where(analytics_site_id: site.id).order(:property_name).pluck(:property_name)
     end
 
     def sync_keys!(keys, site:)

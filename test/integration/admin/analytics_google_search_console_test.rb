@@ -119,7 +119,7 @@ class Admin::AnalyticsGoogleSearchConsoleTest < ActionDispatch::IntegrationTest
       end
     end
 
-    assert_redirected_to "/admin/settings/analytics"
+    assert_redirected_to "/admin/settings/analytics?tab=integrations"
 
     connection = Analytics::GoogleSearchConsoleConnection.current_for(site)
     assert_not_nil connection
@@ -184,7 +184,7 @@ class Admin::AnalyticsGoogleSearchConsoleTest < ActionDispatch::IntegrationTest
       end
     end
 
-    assert_redirected_to "/admin/settings/analytics"
+    assert_redirected_to "/admin/settings/analytics?tab=integrations"
 
     connection.reload
     assert_equal "sc-domain:example.com", connection.property_identifier
@@ -193,7 +193,7 @@ class Admin::AnalyticsGoogleSearchConsoleTest < ActionDispatch::IntegrationTest
 
     delete "/admin/analytics/sites/#{site.public_id}/google_search_console"
 
-    assert_redirected_to "/admin/settings/analytics"
+    assert_redirected_to "/admin/settings/analytics?tab=integrations"
 
     connection.reload
     assert_equal false, connection.active
@@ -260,7 +260,7 @@ class Admin::AnalyticsGoogleSearchConsoleTest < ActionDispatch::IntegrationTest
       end
     end
 
-    assert_redirected_to "/admin/settings/analytics"
+    assert_redirected_to "/admin/settings/analytics?tab=integrations"
   ensure
     Current.reset
   end

@@ -60,7 +60,7 @@ class Admin::AnalyticsReportsTest < ActionDispatch::IntegrationTest
     site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
 
     Analytics::Goal.create!(analytics_site: site, display_name: "Signup", event_name: "Signup", custom_props: {})
-    Analytics::Setting.set_json("allowed_event_props", [ "plan" ], site: site)
+    Analytics::AllowedEventProperty.sync_keys!(%w[plan], site: site)
     Analytics::Funnel.create!(analytics_site: site, name: "Signup funnel", steps: [ { type: "event", value: "Signup" } ])
 
     sign_in(staff_identity)
@@ -117,6 +117,7 @@ class Admin::AnalyticsReportsTest < ActionDispatch::IntegrationTest
       properties: { page: "/" },
       time: 3.minutes.ago.change(usec: 0)
     )
+    AnalyticsProfile::Projection.rebuild(profile)
 
     sign_in(staff_identity)
 
@@ -160,7 +161,7 @@ class Admin::AnalyticsReportsTest < ActionDispatch::IntegrationTest
     Current.reset
   end
 
-  test "reports shell marks goals available when custom events exist" do
+  test "reports shell does not mark goals available from observed custom events alone" do
     staff_identity, = create_tenant(
       email: "staff-reports-goals-#{SecureRandom.hex(4)}@example.com",
       name: "Staff Reports Goals"
@@ -192,7 +193,37 @@ class Admin::AnalyticsReportsTest < ActionDispatch::IntegrationTest
     payload = JSON.parse(response.body)
     site = payload.fetch("props").fetch("site")
 
-    assert_equal true, site.fetch("hasGoals")
+    assert_equal false, site.fetch("hasGoals")
+  ensure
+    Current.reset
+  end
+
+  test "reports shell does not inherit global goals or funnels into a site" do
+    staff_identity, = create_tenant(
+      email: "staff-reports-no-global-config-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Reports No Global Config"
+    )
+    staff_identity.update!(staff: true)
+
+    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    global_goal = Analytics::Goal.create!(display_name: "Global Signup", event_name: "signup", custom_props: {})
+    global_goal.update_column(:analytics_site_id, nil)
+    global_funnel = Analytics::Funnel.create!(name: "Global Funnel", steps: [ { type: "goal", goal_key: "signup", match: "completes" } ])
+    global_funnel.update_column(:analytics_site_id, nil)
+    Analytics::Setting.set_json("allowed_event_props", [ "plan" ], site: nil)
+
+    sign_in(staff_identity)
+
+    get reports_path_for(site), headers: INERTIA_HEADERS
+
+    assert_response :success
+
+    payload = JSON.parse(response.body)
+    resolved_site = payload.fetch("props").fetch("site")
+
+    assert_equal false, resolved_site.fetch("hasGoals")
+    assert_equal false, resolved_site.fetch("propsAvailable")
+    assert_equal false, resolved_site.fetch("funnelsAvailable")
   ensure
     Current.reset
   end
@@ -252,28 +283,30 @@ class Admin::AnalyticsReportsTest < ActionDispatch::IntegrationTest
   end
 
   test "site reports route resolves analytics site from the path" do
-    staff_identity, = create_tenant(
-      email: "staff-reports-site-route-#{SecureRandom.hex(4)}@example.com",
-      name: "Staff Reports Site Route"
-    )
-    staff_identity.update!(staff: true)
+    with_analytics_mode(:multi_site) do
+      staff_identity, = create_tenant(
+        email: "staff-reports-site-route-#{SecureRandom.hex(4)}@example.com",
+        name: "Staff Reports Site Route"
+      )
+      staff_identity.update!(staff: true)
 
-    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test", time_zone: "UTC")
-    Analytics::Site.create!(name: "App", canonical_hostname: "app.example.test", time_zone: "UTC")
+      site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test", time_zone: "UTC")
+      Analytics::Site.create!(name: "App", canonical_hostname: "app.example.test", time_zone: "UTC")
 
-    sign_in(staff_identity)
+      sign_in(staff_identity)
 
-    get "/admin/analytics/sites/#{site.public_id}", headers: INERTIA_HEADERS
+      get "/admin/analytics/sites/#{site.public_id}", headers: INERTIA_HEADERS
 
-    assert_response :success
+      assert_response :success
 
-    payload = JSON.parse(response.body).fetch("props")
-    assert_equal site.public_id, payload.fetch("site").fetch("id")
-    assert_equal "Docs", payload.fetch("site").fetch("name")
-    assert_equal "docs.example.test", payload.fetch("site").fetch("domain")
-    assert_equal "/admin/analytics/sites/#{site.public_id}", payload.fetch("site").fetch("paths").fetch("reports")
-    assert_equal "/admin/analytics/sites/#{site.public_id}/live", payload.fetch("site").fetch("paths").fetch("live")
-    assert_equal "/admin/settings/analytics?site=#{site.public_id}", payload.fetch("site").fetch("paths").fetch("settings")
+      payload = JSON.parse(response.body).fetch("props")
+      assert_equal site.public_id, payload.fetch("site").fetch("id")
+      assert_equal "Docs", payload.fetch("site").fetch("name")
+      assert_equal "docs.example.test", payload.fetch("site").fetch("domain")
+      assert_equal "/admin/analytics/sites/#{site.public_id}", payload.fetch("site").fetch("paths").fetch("reports")
+      assert_equal "/admin/analytics/sites/#{site.public_id}/live", payload.fetch("site").fetch("paths").fetch("live")
+      assert_equal "/admin/settings/analytics?site=#{site.public_id}", payload.fetch("site").fetch("paths").fetch("settings")
+    end
   ensure
     Current.reset
   end
@@ -315,41 +348,65 @@ class Admin::AnalyticsReportsTest < ActionDispatch::IntegrationTest
   end
 
   test "generic analytics root redirects host-resolved multi-site traffic to canonical site route" do
-    staff_identity, = create_tenant(
-      email: "staff-reports-host-resolved-#{SecureRandom.hex(4)}@example.com",
-      name: "Staff Reports Host Resolved"
-    )
-    staff_identity.update!(staff: true)
+    with_analytics_mode(:multi_site) do
+      staff_identity, = create_tenant(
+        email: "staff-reports-host-resolved-#{SecureRandom.hex(4)}@example.com",
+        name: "Staff Reports Host Resolved"
+      )
+      staff_identity.update!(staff: true)
 
-    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
-    Analytics::Site.create!(name: "App", canonical_hostname: "app.example.test")
+      site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+      Analytics::Site.create!(name: "App", canonical_hostname: "app.example.test")
 
-    sign_in(staff_identity)
-    host! "docs.example.test"
+      sign_in(staff_identity)
+      host! "docs.example.test"
 
-    get "/admin/analytics", headers: INERTIA_HEADERS
+      get "/admin/analytics", headers: INERTIA_HEADERS
 
-    assert_redirected_to "/admin/analytics/sites/#{site.public_id}"
+      assert_redirected_to "/admin/analytics/sites/#{site.public_id}"
+    end
   ensure
     Current.reset
     host! "www.example.com"
   end
 
   test "legacy reports route redirects ambiguous multi-site traffic to analytics settings without carrying report params" do
+    with_analytics_mode(:multi_site) do
+      staff_identity, = create_tenant(
+        email: "staff-reports-ambiguous-#{SecureRandom.hex(4)}@example.com",
+        name: "Staff Reports Ambiguous"
+      )
+      staff_identity.update!(staff: true)
+
+      Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+      Analytics::Site.create!(name: "App", canonical_hostname: "app.example.test")
+
+      sign_in(staff_identity)
+
+      get "/admin/analytics?period=7d", headers: INERTIA_HEADERS
+
+      assert_redirected_to "/admin/settings/analytics"
+    end
+  ensure
+    Current.reset
+  end
+
+  test "single-site mode keeps singleton reports shell even with extra active sites in the database" do
     staff_identity, = create_tenant(
-      email: "staff-reports-ambiguous-#{SecureRandom.hex(4)}@example.com",
-      name: "Staff Reports Ambiguous"
+      email: "staff-reports-single-site-canonical-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Reports Single Site Canonical"
     )
     staff_identity.update!(staff: true)
 
+    primary = Analytics::Bootstrap.ensure_default_site!(host: "localhost")
     Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
-    Analytics::Site.create!(name: "App", canonical_hostname: "app.example.test")
+    Analytics::Site.create!(name: "Blog", canonical_hostname: "blog.example.test")
 
     sign_in(staff_identity)
 
-    get "/admin/analytics?period=7d", headers: INERTIA_HEADERS
+    get "/admin/analytics/sites/#{primary.public_id}", headers: INERTIA_HEADERS
 
-    assert_redirected_to "/admin/settings/analytics"
+    assert_redirected_to "/admin/analytics"
   ensure
     Current.reset
   end
@@ -496,8 +553,16 @@ class Admin::AnalyticsReportsTest < ActionDispatch::IntegrationTest
   end
 
   private
+    def with_analytics_mode(mode)
+      original_mode = Analytics.config.mode
+      Analytics.config.mode = mode
+      yield
+    ensure
+      Analytics.config.mode = original_mode
+    end
+
     def reports_path_for(site)
-      Analytics::Site.sole_active == site ? "/admin/analytics" : "/admin/analytics/sites/#{site.public_id}"
+      Analytics::Configuration.single_site_mode? ? "/admin/analytics" : "/admin/analytics/sites/#{site.public_id}"
     end
 
     def json_key(hash, *keys)

@@ -6,6 +6,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react"
+import { ChevronDown } from "lucide-react"
 
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -145,15 +146,18 @@ export function SuggestInput({
         }
       }}
     >
-      <Input
-        value={value}
-        onChange={(e) => {
-          onChange(e.target.value)
-        }}
-        placeholder={placeholder}
-        disabled={disabled}
-        className="h-9"
-      />
+      <div className="relative">
+        <Input
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value)
+          }}
+          placeholder={placeholder}
+          disabled={disabled}
+          className="h-9 pr-8"
+        />
+        <ChevronDown className="pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2 text-muted-foreground/60" />
+      </div>
       {open && (
         <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-md border border-border bg-background shadow-lg">
           <div className="max-h-60 overflow-auto text-sm">

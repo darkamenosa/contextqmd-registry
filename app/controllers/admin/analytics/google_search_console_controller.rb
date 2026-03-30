@@ -10,7 +10,7 @@ module Admin
 
       def connect
         if ::Analytics::Current.site.blank?
-          redirect_to admin_settings_analytics_path, alert: "Initialize analytics before connecting Google Search Console."
+          redirect_to google_search_console_settings_path, alert: "Initialize analytics before connecting Google Search Console."
           return
         end
 
@@ -43,7 +43,7 @@ module Admin
         end
 
         if site.blank?
-          redirect_to admin_settings_analytics_path, alert: "Analytics site could not be resolved for this Google Search Console connection."
+          redirect_to google_search_console_settings_path, alert: "Analytics site could not be resolved for this Google Search Console connection."
           return
         end
 
@@ -101,27 +101,27 @@ module Admin
         end
 
         if property.blank?
-          redirect_to analytics_settings_paths.fetch(:settings), alert: "Select a verified Search Console property."
+          redirect_to google_search_console_settings_path, alert: "Select a verified Search Console property."
           return
         end
 
         @google_search_console_connection.store_property!(property)
         enqueue_google_search_console_sync(@google_search_console_connection)
 
-        redirect_to analytics_settings_paths.fetch(:settings), notice: "Updated Google Search Console property to #{property.fetch(:label)}."
+        redirect_to google_search_console_settings_path, notice: "Updated Google Search Console property to #{property.fetch(:label)}."
       rescue ::Analytics::GoogleSearchConsole::Client::Error => e
-        redirect_to analytics_settings_paths.fetch(:settings), alert: e.message
+        redirect_to google_search_console_settings_path, alert: e.message
       end
 
       def destroy
         @google_search_console_connection.disconnect!
 
-        redirect_to analytics_settings_paths.fetch(:settings), notice: "Disconnected Google Search Console."
+        redirect_to google_search_console_settings_path, notice: "Disconnected Google Search Console."
       end
 
       def sync
         unless @google_search_console_connection.configured?
-          redirect_to analytics_settings_paths.fetch(:settings), alert: "Select a verified Search Console property first."
+          redirect_to google_search_console_settings_path, alert: "Select a verified Search Console property first."
           return
         end
 
@@ -133,7 +133,7 @@ module Admin
           to_date: to_date,
           search_type: ::Analytics::GoogleSearchConsole::Syncer::DEFAULT_SEARCH_TYPE
         )
-          redirect_to analytics_settings_paths.fetch(:settings), notice: "A Google Search Console sync is already in progress."
+          redirect_to google_search_console_settings_path, notice: "A Google Search Console sync is already in progress."
           return
         end
 
@@ -143,21 +143,21 @@ module Admin
           to_date: to_date.iso8601
         )
 
-        redirect_to analytics_settings_paths.fetch(:settings), notice: "Queued a Google Search Console sync."
+        redirect_to google_search_console_settings_path, notice: "Queued a Google Search Console sync."
       end
 
       private
         def ensure_google_search_console_available
           return if ::Analytics::GoogleSearchConsole::Configuration.configured?
 
-          redirect_to analytics_settings_paths.fetch(:settings), alert: "Google Search Console is not configured for this environment."
+          redirect_to google_search_console_settings_path, alert: "Google Search Console is not configured for this environment."
         end
 
         def set_google_search_console_connection
           @google_search_console_connection = current_google_search_console_connection
           return if @google_search_console_connection.present?
 
-          redirect_to analytics_settings_paths.fetch(:settings), alert: "Connect Google Search Console first."
+          redirect_to google_search_console_settings_path, alert: "Connect Google Search Console first."
         end
 
         def google_search_console_oauth_state_key
@@ -210,14 +210,15 @@ module Admin
         end
 
         def redirect_to_google_search_console_settings(site, notice: nil, alert: nil)
-          path =
-            if site.present?
-              ::Analytics::Paths.new(site:, helpers: self).settings
-            else
-              admin_settings_analytics_path
-            end
+          redirect_to google_search_console_settings_path(site), notice:, alert:
+        end
 
-          redirect_to path, notice:, alert:
+        def google_search_console_settings_path(site = ::Analytics::Current.site)
+          if site.present? && !::Analytics::Configuration.single_site_mode?
+            admin_settings_analytics_path(site: site.public_id, tab: "integrations")
+          else
+            admin_settings_analytics_path(tab: "integrations")
+          end
         end
     end
   end

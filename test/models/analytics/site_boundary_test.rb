@@ -59,28 +59,34 @@ class Analytics::SiteBoundaryTest < ActiveSupport::TestCase
   end
 
   test "admin site selection is required when multiple sites are active" do
-    Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
-    Analytics::Site.create!(name: "Blog", canonical_hostname: "blog.example.test")
+    with_analytics_mode(:multi_site) do
+      Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+      Analytics::Site.create!(name: "Blog", canonical_hostname: "blog.example.test")
 
-    assert_equal true, Analytics::AdminSiteResolver.selection_required?
-    assert_equal false, Analytics::AdminSiteResolver.selection_required?(explicit_site_id: "docs.example.test")
+      assert_equal true, Analytics::AdminSiteResolver.selection_required?
+      assert_equal false, Analytics::AdminSiteResolver.selection_required?(explicit_site_id: "docs.example.test")
+    end
   end
 
   test "admin site resolver returns nil without explicit selection in multi-site mode" do
-    Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
-    Analytics::Site.create!(name: "Blog", canonical_hostname: "blog.example.test")
+    with_analytics_mode(:multi_site) do
+      Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+      Analytics::Site.create!(name: "Blog", canonical_hostname: "blog.example.test")
 
-    assert_nil Analytics::AdminSiteResolver.resolve
+      assert_nil Analytics::AdminSiteResolver.resolve
+    end
   end
 
   test "admin site resolver can use a unique host match in multi-site mode" do
-    local = Analytics::Site.create!(name: "Local", canonical_hostname: "localhost")
-    Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    with_analytics_mode(:multi_site) do
+      local = Analytics::Site.create!(name: "Local", canonical_hostname: "localhost")
+      Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
 
-    resolution = Analytics::AdminSiteResolver.resolve(request: Struct.new(:host).new("localhost"))
+      resolution = Analytics::AdminSiteResolver.resolve(request: Struct.new(:host).new("localhost"))
 
-    assert_not_nil resolution
-    assert_equal local, resolution.site
+      assert_not_nil resolution
+      assert_equal local, resolution.site
+    end
   end
 
   test "admin site resolver only resolves active explicit sites" do
@@ -108,4 +114,13 @@ class Analytics::SiteBoundaryTest < ActiveSupport::TestCase
     assert_equal "/docs", Analytics::SiteBoundary.normalize_path_prefix("docs/")
     assert_equal "/", Analytics::SiteBoundary.normalize_path_prefix(nil)
   end
+
+  private
+    def with_analytics_mode(mode)
+      original_mode = Analytics.config.mode
+      Analytics.config.mode = mode
+      yield
+    ensure
+      Analytics.config.mode = original_mode
+    end
 end

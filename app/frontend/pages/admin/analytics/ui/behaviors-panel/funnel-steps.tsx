@@ -2,6 +2,7 @@ import { ArrowDown } from "lucide-react"
 
 import { percentageFormatter } from "../../lib/number-formatter"
 import type { BehaviorsPayload } from "../../types"
+import SelectionTabDropdown from "./selection-tab-dropdown"
 
 type FunnelData = Extract<BehaviorsPayload, { funnels: string[] }>
 type FunnelStep = FunnelData["active"]["steps"][number]
@@ -11,7 +12,17 @@ const compactNumberFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 1,
 })
 
-export default function FunnelSteps({ data }: { data: FunnelData }) {
+export default function FunnelSteps({
+  data,
+  availableFunnels,
+  selectedFunnel,
+  onSelectFunnel,
+}: {
+  data: FunnelData
+  availableFunnels: string[]
+  selectedFunnel?: string
+  onSelectFunnel: (name: string) => void
+}) {
   const funnel = data.active
   if (!funnel) return null
 
@@ -32,12 +43,24 @@ export default function FunnelSteps({ data }: { data: FunnelData }) {
 
   return (
     <div className="space-y-8">
-      <div className="space-y-1">
-        <p className="text-lg font-semibold text-foreground">{funnel.name}</p>
-        <p className="text-sm text-muted-foreground">
-          {steps.length}-step funnel • {percentageFormatter(overallRate)}{" "}
-          conversion rate
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
+          <p className="text-lg font-semibold text-foreground">{funnel.name}</p>
+          <p className="text-sm text-muted-foreground">
+            {steps.length}-step funnel • {percentageFormatter(overallRate)}{" "}
+            conversion rate
+          </p>
+        </div>
+        {availableFunnels.length > 1 ? (
+          <SelectionTabDropdown
+            active
+            label={selectedFunnel ?? funnel.name}
+            options={availableFunnels}
+            value={selectedFunnel ?? funnel.name}
+            searchPlaceholder="Search funnels"
+            onSelect={onSelectFunnel}
+          />
+        ) : null}
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(20rem,1fr)]">

@@ -11,7 +11,10 @@ module Admin
             gsc_configured: gsc_configured?,
             goals: ::Analytics::Goals.available_names,
             goal_definitions: ::Analytics::Goal.definition_payloads,
+            goal_suggestions: analytics_goal_suggestions,
             allowed_event_props: ::Analytics::Properties.available_keys,
+            funnel_page_suggestions: analytics_funnel_page_suggestions,
+            tracking_rules: analytics_tracking_rules_payload,
             google_search_console: google_search_console_payload,
             tracker: analytics_tracker_payload
           }
@@ -91,6 +94,83 @@ module Admin
 
         def analytics_tracker_payload
           ::Analytics::TrackerSnippet.build(site: ::Analytics::Current.site, request: request)
+        end
+
+        def analytics_tracking_rules_payload
+          rules = ::Analytics::TrackingRules.load(site: ::Analytics::Current.site)
+          effective = ::Analytics::TrackingRules.effective(site: ::Analytics::Current.site)
+
+          {
+            include_paths: rules.include_paths,
+            exclude_paths: rules.exclude_paths,
+            effective_include_paths: effective.include_paths,
+            effective_exclude_paths: effective.exclude_paths
+          }
+        end
+
+        def analytics_goal_suggestions
+          ::Analytics::GoalSuggestions.suggested_event_names(
+            site: ::Analytics::Current.site,
+            exclude: ::Analytics::Goal.effective_scope.where.not(event_name: nil).pluck(:event_name)
+          )
+        end
+
+        def analytics_funnel_page_suggestions
+          site = ::Analytics::Current.site
+          return [] if site.blank?
+
+          raw_counts = Ahoy::Event
+            .for_analytics_site(site)
+            .where(name: "pageview")
+            .where("properties ? 'page'")
+            .group(Arel.sql("properties ->> 'page'"))
+            .order(Arel.sql("COUNT(*) DESC"))
+            .limit(24)
+            .count
+
+          grouped = raw_counts.each_with_object(Hash.new(0)) do |(raw_path, count), memo|
+            path = ::Analytics::Urls.normalized_path_only(raw_path)
+            next if path.blank?
+            next if tracker_internal_path?(path)
+
+            memo[path] += count.to_i
+          end
+
+          grouped
+            .sort_by { |(path, count)| [ -count, path ] }
+            .first(6)
+            .map do |(path, _)|
+              {
+                label: analytics_funnel_page_label(path),
+                value: path,
+                match: "equals"
+              }
+            end
+        end
+
+        def tracker_internal_path?(path)
+          normalized = path.to_s
+          ::Analytics::InternalPaths.tracker_exclude_prefixes.any? do |prefix|
+            normalized.start_with?(prefix)
+          end
+        end
+
+        def analytics_funnel_page_label(path)
+          return "Homepage" if path == "/"
+
+          segments = path.sub(%r{\A/}, "").split("/").reject(&:blank?)
+          return path if segments.empty?
+
+          label = segments.map do |segment|
+            segment
+              .tr("_-", " ")
+              .squeeze(" ")
+              .split
+              .map(&:capitalize)
+              .join(" ")
+          end.join(" / ")
+
+          segments.length == 1 ? "#{label} page" : label
         end
 
         def analytics_google_search_console_callback_path
