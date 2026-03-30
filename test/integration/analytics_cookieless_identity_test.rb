@@ -16,6 +16,8 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
   setup do
     Ahoy::Event.delete_all
     Ahoy::Visit.delete_all
+    Analytics::SiteBoundary.delete_all
+    Analytics::Site.delete_all
   end
 
   test "cookieless event ingestion reuses the recent server-side visit without client tokens" do
@@ -32,7 +34,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
 
     assert_no_difference -> { Ahoy::Visit.count } do
       assert_difference -> { Ahoy::Event.count }, +1 do
-        post "/ahoy/events",
+        post "/analytics/events",
           params: {
             events: [
               {
@@ -64,7 +66,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :success
-    assert_includes response.headers["Set-Cookie"].to_s, AnalyticsBrowserIdentity::COOKIE_NAME
+    assert_includes response.headers["Set-Cookie"].to_s, Analytics::BrowserIdentity::COOKIE_NAME
   end
 
   test "signed-in visits persist identity name and email on the analytics profile" do
@@ -107,6 +109,25 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
       assert_equal "pageview", event.name
       assert_equal expected_page, event.properties["page"]
     end
+  end
+
+  test "server-side tracking respects site include path rules" do
+    site = Analytics::Bootstrap.ensure_default_site!(host: "localhost")
+    Analytics::TrackingRules.save!(
+      include_paths: [ "/blog/**" ],
+      exclude_paths: [],
+      site: site
+    )
+
+    perform_analytics_jobs do
+      assert_no_difference -> { Ahoy::Visit.count } do
+        assert_no_difference -> { Ahoy::Event.count } do
+          get root_path, headers: BROWSER_HEADERS
+        end
+      end
+    end
+
+    assert_response :success
   end
 
   test "server-side tracking includes authenticated app dashboard pages" do
@@ -160,6 +181,145 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     assert_equal "Desktop", visit.device_type
   end
 
+  test "server-side tracking assigns analytics site scope from the request host" do
+    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    boundary = site.boundaries.find_by!(primary: true)
+
+    host! "docs.example.test"
+
+    perform_analytics_jobs do
+      get root_path, headers: BROWSER_HEADERS
+    end
+
+    assert_response :success
+
+    visit = Ahoy::Visit.order(:id).last
+    event = Ahoy::Event.order(:id).last
+
+    assert_equal site.id, visit.analytics_site_id
+    assert_equal boundary.id, visit.analytics_site_boundary_id
+    assert_equal site.id, event.analytics_site_id
+    assert_equal boundary.id, event.analytics_site_boundary_id
+  end
+
+  test "server-side tracking broadcasts live updates for the resolved analytics site" do
+    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    captured_sites = []
+    analytics_live_state_singleton = class << Analytics::LiveState; self; end
+
+    host! "docs.example.test"
+
+    analytics_live_state_singleton.alias_method :__test_original_broadcast_later, :broadcast_later
+    analytics_live_state_singleton.define_method(:broadcast_later) do |site: nil, **|
+      captured_sites << site
+    end
+
+    begin
+      get root_path, headers: BROWSER_HEADERS
+    ensure
+      analytics_live_state_singleton.alias_method :broadcast_later, :__test_original_broadcast_later
+      analytics_live_state_singleton.remove_method :__test_original_broadcast_later
+    end
+
+    assert_includes captured_sites, site
+  ensure
+    host! "www.example.com"
+  end
+
+  test "public event ingest respects site exclude path rules" do
+    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    token = Analytics::TrackerSiteToken.generate(site: site, mode: "external", expires_in: 180.days)
+    Analytics::TrackingRules.save!(
+      include_paths: [],
+      exclude_paths: [ "/private/**" ],
+      site: site
+    )
+
+    assert_no_difference -> { Ahoy::Event.count } do
+      post "/analytics/events",
+        params: {
+          events: [
+            {
+              name: "pageview",
+              site_token: token,
+              properties: {
+                page: "/private/plan",
+                url: "https://docs.example.test/private/plan",
+                title: "Private",
+                referrer: "",
+                screen_size: "1440x900"
+              },
+              time: Time.current.iso8601
+            }
+          ]
+        },
+        as: :json,
+        headers: BROWSER_HEADERS
+    end
+
+    assert_response :success
+  end
+
+  test "public event ingest broadcasts live updates for the resolved analytics site" do
+    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    token = Analytics::TrackerSiteToken.generate(site: site, mode: "external", expires_in: 180.days)
+    captured_sites = []
+    analytics_live_state_singleton = class << Analytics::LiveState; self; end
+
+    analytics_live_state_singleton.alias_method :__test_original_broadcast_later, :broadcast_later
+    analytics_live_state_singleton.define_method(:broadcast_later) do |site: nil, **|
+      captured_sites << site
+    end
+
+    begin
+      post "/analytics/events",
+        params: {
+          events: [
+            {
+              name: "pageview",
+              site_token: token,
+              properties: {
+                page: "/pricing",
+                url: "https://docs.example.test/pricing",
+                title: "Pricing",
+                referrer: "",
+                screen_size: "1440x900"
+              },
+              time: Time.current.iso8601
+            }
+          ]
+        },
+        as: :json,
+        headers: BROWSER_HEADERS
+    ensure
+      analytics_live_state_singleton.alias_method :broadcast_later, :__test_original_broadcast_later
+      analytics_live_state_singleton.remove_method :__test_original_broadcast_later
+    end
+
+    assert_response :success
+    assert_includes captured_sites, site
+  end
+
+  test "server-side tracking uses the bootstrapped default analytics site in singleton mode" do
+    host! "localhost:3000"
+    site = Analytics::Bootstrap.ensure_default_site!(host: "localhost")
+
+    perform_analytics_jobs do
+      get root_path, headers: BROWSER_HEADERS
+    end
+
+    assert_response :success
+
+    visit = Ahoy::Visit.order(:id).last
+    event = Ahoy::Event.order(:id).last
+
+    assert_not_nil site
+    assert_equal "localhost", site.canonical_hostname
+    assert_equal site.id, visit.analytics_site_id
+    assert_equal site.id, event.analytics_site_id
+    assert_equal site.boundaries.find_by(primary: true)&.id, visit.analytics_site_boundary_id
+  end
+
   test "separate browsers with the same ip and user agent get distinct anonymous visits" do
     browser_a = open_session
     browser_b = open_session
@@ -187,7 +347,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
 
     assert_no_difference -> { Ahoy::Visit.count } do
       assert_difference -> { Ahoy::Event.count }, +1 do
-        post "/ahoy/events",
+        post "/analytics/events",
           params: {
             visit_token: SecureRandom.uuid,
             visitor_token: SecureRandom.uuid,
@@ -217,7 +377,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
   test "non-engagement event creates a visit and backfills landing page and screen size" do
     assert_difference -> { Ahoy::Visit.count }, +1 do
       assert_difference -> { Ahoy::Event.count }, +1 do
-        post "/ahoy/events",
+        post "/analytics/events",
           params: {
             events: [
               {
@@ -248,7 +408,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
   end
 
   test "ahoy events controller seeds the analytics browser cookie" do
-    post "/ahoy/events",
+    post "/analytics/events",
       params: {
         events: [
           {
@@ -268,7 +428,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
       headers: BROWSER_HEADERS
 
     assert_response :success
-    assert_includes response.headers["Set-Cookie"].to_s, AnalyticsBrowserIdentity::COOKIE_NAME
+    assert_includes response.headers["Set-Cookie"].to_s, Analytics::BrowserIdentity::COOKIE_NAME
   end
 
   test "cookieless event ingestion reuses the recent visit across daily rotation" do
@@ -284,7 +444,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     travel_to Time.utc(2026, 3, 26, 0, 0, 10) do
       assert_no_difference -> { Ahoy::Visit.count } do
         assert_difference -> { Ahoy::Event.count }, +1 do
-          post "/ahoy/events",
+          post "/analytics/events",
             params: {
               events: [
                 {
@@ -323,7 +483,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     travel_to Time.utc(2026, 3, 25, 10, 31, 0) do
       assert_no_difference -> { Ahoy::Visit.count } do
         assert_no_difference -> { Ahoy::Event.count } do
-          post "/ahoy/events",
+          post "/analytics/events",
             params: {
               events: [
                 {

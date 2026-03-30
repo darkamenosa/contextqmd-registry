@@ -4,8 +4,13 @@ module Analytics
   class LiveBroadcastJob < ApplicationJob
     queue_as :default
 
-    def perform
-      Analytics::LiveState.broadcast_now
+    def perform(site_public_id = nil)
+      site =
+        if site_public_id.present?
+          Analytics::Site.find_by(public_id: site_public_id)
+        end
+
+      Analytics::LiveState.broadcast_now(site:)
     end
   end
 end

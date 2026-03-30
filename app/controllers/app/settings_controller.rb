@@ -37,7 +37,7 @@ module App
           redirect_to app_path, notice: message, status: :see_other
         else
           clear_stored_location_for(:identity)
-          AnalyticsVisitBoundary.mark_sign_out!(session: session, identity_id: Current.identity.id)
+          Analytics::VisitBoundary.mark_sign_out!(session: session, identity_id: Current.identity.id)
           sign_out(:identity)
           Current.reset
           redirect_to root_path, notice: message, status: :see_other

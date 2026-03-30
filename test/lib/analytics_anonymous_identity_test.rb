@@ -16,8 +16,8 @@ class AnalyticsAnonymousIdentityTest < ActiveSupport::TestCase
     evening = Time.utc(2026, 3, 25, 20, 0, 0)
 
     assert_equal(
-      AnalyticsAnonymousIdentity.current(request, now: morning),
-      AnalyticsAnonymousIdentity.current(request, now: evening)
+      Analytics::AnonymousIdentity.current(request, now: morning),
+      Analytics::AnonymousIdentity.current(request, now: evening)
     )
   end
 
@@ -33,12 +33,12 @@ class AnalyticsAnonymousIdentityTest < ActiveSupport::TestCase
     before_rotation = Time.utc(2026, 3, 25, 23, 59, 50)
     after_rotation = Time.utc(2026, 3, 26, 0, 0, 10)
 
-    previous_current = AnalyticsAnonymousIdentity.current(request, now: before_rotation)
-    rotated_current = AnalyticsAnonymousIdentity.current(request, now: after_rotation)
+    previous_current = Analytics::AnonymousIdentity.current(request, now: before_rotation)
+    rotated_current = Analytics::AnonymousIdentity.current(request, now: after_rotation)
 
     refute_equal previous_current, rotated_current
-    assert_equal previous_current, AnalyticsAnonymousIdentity.previous(request, now: after_rotation)
-    assert_equal [ rotated_current, previous_current ], AnalyticsAnonymousIdentity.tokens(request, now: after_rotation)
+    assert_equal previous_current, Analytics::AnonymousIdentity.previous(request, now: after_rotation)
+    assert_equal [ rotated_current, previous_current ], Analytics::AnonymousIdentity.tokens(request, now: after_rotation)
   end
 
   private

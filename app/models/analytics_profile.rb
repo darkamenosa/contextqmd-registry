@@ -14,6 +14,7 @@ class AnalyticsProfile < AnalyticsRecord
   has_many :visits, class_name: "Ahoy::Visit", foreign_key: :analytics_profile_id, dependent: :nullify
   has_one :summary, class_name: "AnalyticsProfileSummary", dependent: :destroy
   has_many :sessions, class_name: "AnalyticsProfileSession", dependent: :destroy
+  belongs_to :analytics_site, class_name: "Analytics::Site", optional: true
 
   belongs_to :merged_into, class_name: "AnalyticsProfile", optional: true
   has_many :merged_profiles, class_name: "AnalyticsProfile", foreign_key: :merged_into_id, dependent: :nullify
@@ -28,6 +29,7 @@ class AnalyticsProfile < AnalyticsRecord
 
   scope :canonical, -> { where(merged_into_id: nil) }
   scope :anonymous, -> { canonical.where(status: STATUS_ANONYMOUS) }
+  scope :for_analytics_site, ->(site = ::Analytics::Current.site) { Analytics::Scope.apply(all, site:) }
 
   def self.available?
     connection.data_source_exists?(table_name)
@@ -73,6 +75,9 @@ class AnalyticsProfile < AnalyticsRecord
     return self if other.blank? || other == self || other.merged_into_id.present?
 
     transaction do
+      return self if analytics_site_id.present? && other.analytics_site_id.present? && analytics_site_id != other.analytics_site_id
+
+      update!(analytics_site_id: other.analytics_site_id) if analytics_site_id.blank? && other.analytics_site_id.present?
       move_keys_from!(other)
       Ahoy::Visit.where(analytics_profile_id: other.id).update_all(analytics_profile_id: id)
 
@@ -117,6 +122,7 @@ class AnalyticsProfile < AnalyticsRecord
       resolver_version: RESOLVER_VERSION,
       last_seen_at: [ last_seen_at, observed_at ].compact.max
     }
+    updates[:analytics_site_id] = analytics_site_id || ::Analytics::Current.site&.id
     updates[:status] = STATUS_IDENTIFIED if strong_keys.any?
 
     merged_traits = traits.to_h.merge(identity_traits)
@@ -142,11 +148,12 @@ class AnalyticsProfile < AnalyticsRecord
     event_seen = [ last_event_at, observed_at ].compact.max
 
     update!(
+      analytics_site_id: analytics_site_id || visit.analytics_site_id,
       first_seen_at: first_seen,
       last_seen_at: last_seen,
       last_event_at: event_seen,
-      resolver_version: RESOLVER_VERSION
-    )
+    resolver_version: RESOLVER_VERSION
+  )
   end
 
   private
@@ -163,7 +170,7 @@ class AnalyticsProfile < AnalyticsRecord
 
     def move_keys_from!(other)
       other.profile_keys.find_each do |key|
-        existing = profile_keys.find_or_initialize_by(kind: key.kind, value: key.value)
+        existing = profile_keys.find_or_initialize_by(kind: key.kind, value: key.value, analytics_site_id: analytics_site_id)
         existing.source ||= key.source
         existing.verified ||= key.verified
         existing.first_seen_at ||= key.first_seen_at

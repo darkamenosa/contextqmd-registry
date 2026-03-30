@@ -211,6 +211,28 @@ test("analytics initial report query resolution falls back to initialQuery durin
   assert.deepEqual(resolved.filters, { page: "/server-prop" })
 })
 
+test("analytics initial report query resolution treats an empty client search as a real URL state", async () => {
+  const api = await loadAnalyticsApiModule()
+  const defaultQuery = {
+    period: "day",
+    comparison: null,
+    filters: {},
+    labels: {},
+    withImported: false,
+    matchDayOfWeek: true,
+  }
+  const initialQuery = {
+    ...defaultQuery,
+    period: "7d",
+    filters: { page: "/server-prop" },
+  }
+
+  const resolved = api.resolveInitialReportQuery("", initialQuery, defaultQuery)
+
+  assert.equal(resolved.period, "day")
+  assert.deepEqual(resolved.filters, {})
+})
+
 test("analytics api surfaces structured JSON errors on failed requests", async () => {
   const api = await loadAnalyticsApiModule()
   const originalFetch = globalThis.fetch

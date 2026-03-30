@@ -53,7 +53,7 @@ const navAnalytics = [
   },
   {
     title: "Reports",
-    url: "/admin/analytics/reports",
+    url: "/admin/analytics",
     icon: BarChart3,
   },
 ]
@@ -82,6 +82,7 @@ const navSystem = [
     items: [
       { title: "General", url: "/admin/settings" },
       { title: "Team", url: "/admin/settings/team" },
+      { title: "Analytics", url: "/admin/settings/analytics" },
     ],
   },
 ]

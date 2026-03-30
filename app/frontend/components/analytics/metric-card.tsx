@@ -58,7 +58,7 @@ export function MetricCard({
     <Card className="overflow-hidden rounded-lg border border-border bg-card !py-0">
       <CardContent className="px-4 py-3">
         <div className="flex flex-col gap-2">
-          <span className="text-sm font-semibold text-muted-foreground">
+          <span className="text-sm/5 font-semibold text-muted-foreground">
             {title}
           </span>
 
@@ -67,8 +67,8 @@ export function MetricCard({
               <span
                 className={
                   variant === "large"
-                    ? "text-lg font-semibold text-foreground"
-                    : "text-lg font-semibold text-foreground"
+                    ? "text-xl/7 font-semibold text-foreground"
+                    : "text-lg/7 font-semibold text-foreground"
                 }
               >
                 {value}
@@ -76,7 +76,7 @@ export function MetricCard({
 
               {showChange &&
                 (hasMeaningfulChange ? (
-                  <div className="flex items-center gap-1 text-xs">
+                  <div className="flex items-center gap-1 text-xs/4">
                     {isPositive && (
                       <ArrowUpIcon className="size-3 text-emerald-600 dark:text-emerald-400" />
                     )}
@@ -94,7 +94,7 @@ export function MetricCard({
                     </span>
                   </div>
                 ) : (
-                  <span className="text-xs font-medium text-muted-foreground">
+                  <span className="text-xs/4 font-medium text-muted-foreground">
                     —
                   </span>
                 ))}

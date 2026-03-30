@@ -8,9 +8,18 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
   setup do
     Ahoy::Event.delete_all
     Ahoy::Visit.delete_all
-    AnalyticsSetting.delete_all
-    Goal.delete_all
-    Funnel.delete_all
+    AnalyticsProfileSession.delete_all if defined?(AnalyticsProfileSession)
+    AnalyticsProfileSummary.delete_all if defined?(AnalyticsProfileSummary)
+    AnalyticsProfileKey.delete_all if defined?(AnalyticsProfileKey)
+    AnalyticsProfile.delete_all if defined?(AnalyticsProfile)
+    Analytics::GoogleSearchConsole::QueryRow.delete_all
+    Analytics::GoogleSearchConsole::Sync.delete_all
+    Analytics::GoogleSearchConsoleConnection.delete_all
+    Analytics::AllowedEventProperty.delete_all if defined?(Analytics::AllowedEventProperty)
+    Analytics::Goal.delete_all
+    Analytics::Funnel.delete_all
+    Analytics::SiteBoundary.delete_all
+    Analytics::Site.delete_all
   end
 
   test "classifies facebook cpc traffic as paid social" do
@@ -536,7 +545,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
 
   test "configured event goals use display names and custom props" do
     travel_to Time.zone.parse("2026-03-25 14:00:00") do
-      Goal.create!(
+      Analytics::Goal.create!(
         display_name: "Signup Pro",
         event_name: "Signup",
         custom_props: { "plan" => "Pro" }
@@ -579,7 +588,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
 
   test "configured page goals count matching pageviews" do
     travel_to Time.zone.parse("2026-03-25 14:00:00") do
-      Goal.create!(
+      Analytics::Goal.create!(
         display_name: "Visit Pricing",
         page_path: "/pricing",
         scroll_threshold: -1,
@@ -617,7 +626,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
 
   test "configured wildcard page goals match nested paths like plausible" do
     travel_to Time.zone.parse("2026-03-25 14:00:00") do
-      Goal.create!(
+      Analytics::Goal.create!(
         display_name: "Visit /blog*",
         page_path: "/blog*",
         scroll_threshold: -1,
@@ -655,7 +664,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
 
   test "configured wildcard page goals do not match sibling prefixes" do
     travel_to Time.zone.parse("2026-03-25 14:00:00") do
-      Goal.create!(
+      Analytics::Goal.create!(
         display_name: "Visit /blog*",
         page_path: "/blog*",
         scroll_threshold: -1,
@@ -687,7 +696,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
   end
 
   test "configured scroll goals count matching engagement events" do
-    Goal.create!(
+    Analytics::Goal.create!(
       display_name: "Scroll Docs",
       page_path: "/docs",
       scroll_threshold: 60,
@@ -986,6 +995,8 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
 
   test "conversions payload ignores property filters in total visitor denominator" do
     travel_to Time.zone.parse("2026-03-25 14:00:00") do
+      Analytics::Goal.create!(display_name: "Signup", event_name: "Signup", custom_props: {})
+
       converting_visit = Ahoy::Visit.create!(
         visit_token: SecureRandom.hex(16),
         visitor_token: "conversions-pro",
@@ -1070,7 +1081,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
     assert_equal 50.0, totals[:conversion_rate]
   end
 
-  test "goals available uses cheap existence checks for unmanaged analytics" do
+  test "observed custom events do not count as configured goals" do
     refute Analytics::Goals.available?
 
     visit = Ahoy::Visit.create!(
@@ -1085,10 +1096,10 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
       properties: {}
     )
 
-    assert Analytics::Goals.available?
+    refute Analytics::Goals.available?
   end
 
-  test "properties available uses cheap existence checks for unmanaged analytics" do
+  test "observed custom event properties do not count as configured custom properties" do
     refute Analytics::Properties.available?
 
     visit = Ahoy::Visit.create!(
@@ -1103,7 +1114,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
       properties: { plan: "pro" }
     )
 
-    assert Analytics::Properties.available?
+    refute Analytics::Properties.available?
   end
 
   test "screen size categorization matches ingestion breakpoints" do
@@ -1114,40 +1125,130 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
     assert_equal "Desktop", Analytics::Devices.categorize_screen_size("1440x900")
   end
 
-  test "search terms payload counts unique visitors" do
-    travel_to Time.zone.parse("2026-03-25 14:00:00") do
-      Ahoy::Visit.create!(
-        visit_token: SecureRandom.hex(16),
-        visitor_token: "search-repeat",
-        started_at: Time.zone.parse("2026-03-25 09:00:00"),
-        referring_domain: "google.com",
-        referrer: "https://google.com/search?q=rails"
-      )
-      Ahoy::Visit.create!(
-        visit_token: SecureRandom.hex(16),
-        visitor_token: "search-repeat",
-        started_at: Time.zone.parse("2026-03-25 09:10:00"),
-        referring_domain: "google.com",
-        referrer: "https://google.com/search?q=rails"
-      )
-      Ahoy::Visit.create!(
-        visit_token: SecureRandom.hex(16),
-        visitor_token: "search-unique",
-        started_at: Time.zone.parse("2026-03-25 09:20:00"),
-        referring_domain: "google.com",
-        referrer: "https://google.com/search?q=rails"
-      )
+  test "search terms payload reads cached search console facts for the current site" do
+    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    connection = Analytics::GoogleSearchConsoleConnection.rotate_for_site!(
+      site: site,
+      attributes: {
+        google_uid: "google-user-789",
+        google_email: "owner@example.com",
+        access_token: "access-token",
+        refresh_token: "refresh-token",
+        expires_at: 1.hour.from_now,
+        scopes: Analytics::GoogleSearchConsole::Client::SCOPES,
+        metadata: {},
+        property_identifier: "sc-domain:example.test",
+        property_type: "domain",
+        permission_level: "siteOwner",
+        last_verified_at: Time.current
+      }
+    )
+    sync = connection.syncs.create!(
+      property_identifier: connection.property_identifier,
+      search_type: "web",
+      from_date: Date.new(2026, 3, 25),
+      to_date: Date.new(2026, 3, 25),
+      started_at: Time.current,
+      finished_at: Time.current,
+      status: Analytics::GoogleSearchConsole::Sync::STATUS_SUCCEEDED
+    )
+    Analytics::GoogleSearchConsole::QueryRow.create!(
+      analytics_site: site,
+      sync: sync,
+      date: Date.new(2026, 3, 25),
+      search_type: "web",
+      query: "rails",
+      page: "https://docs.example.test/docs/install",
+      country: "VNM",
+      device: "desktop",
+      clicks: 25,
+      impressions: 100,
+      position_impressions_sum: 320
+    )
 
-      payload = Analytics::SearchTermsDatasetQuery.payload(
-        query: { period: "day", filters: {} },
-        limit: 100,
-        page: 1
-      )
+    ::Analytics::Current.site = site
 
-      row = payload.fetch(:results).find { |item| item.fetch(:name) == "rails" }
-      assert_not_nil row
-      assert_equal 2, row.fetch(:visitors)
-    end
+    payload = Analytics::SearchTermsDatasetQuery.payload(
+      query: { period: "day", date: "2026-03-25", filters: {} },
+      limit: 100,
+      page: 1
+    )
+
+    row = payload.fetch(:results).find { |item| item.fetch(:name) == "rails" }
+    assert_not_nil row
+    assert_equal 25, row.fetch(:visitors)
+    assert_equal 100, row.fetch(:impressions)
+    assert_equal 25.0, row.fetch(:ctr)
+    assert_equal 3.2, row.fetch(:position)
+  ensure
+    Current.reset
+  end
+
+  test "profile resolution does not reuse a browser profile across analytics sites" do
+    site_a = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    site_b = Analytics::Site.create!(name: "Blog", canonical_hostname: "blog.example.test")
+    browser_id = SecureRandom.uuid
+
+    visit_a = Ahoy::Visit.create!(
+      visit_token: SecureRandom.hex(16),
+      visitor_token: "site-a-visitor",
+      analytics_site: site_a,
+      started_at: Time.zone.now.change(usec: 0)
+    )
+    profile_a = visit_a.resolve_profile_now(browser_id:, strong_keys: [], occurred_at: visit_a.started_at)
+
+    visit_b = Ahoy::Visit.create!(
+      visit_token: SecureRandom.hex(16),
+      visitor_token: "site-b-visitor",
+      analytics_site: site_b,
+      started_at: (Time.zone.now + 1.minute).change(usec: 0)
+    )
+    profile_b = visit_b.resolve_profile_now(browser_id:, strong_keys: [], occurred_at: visit_b.started_at)
+
+    assert_not_nil profile_a
+    assert_not_nil profile_b
+    assert_not_equal profile_a.id, profile_b.id
+    assert_equal site_a.id, profile_a.analytics_site_id
+    assert_equal site_b.id, profile_b.analytics_site_id
+  end
+
+  test "sources payload scopes results to the current analytics site" do
+    now = Time.zone.now.change(usec: 0)
+    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    other_site = Analytics::Site.create!(name: "Blog", canonical_hostname: "blog.example.test")
+
+    Ahoy::Visit.create!(
+      visit_token: SecureRandom.hex(16),
+      visitor_token: "site-scope-docs",
+      analytics_site: site,
+      started_at: now,
+      utm_source: "chatgpt"
+    )
+    Ahoy::Visit.create!(
+      visit_token: SecureRandom.hex(16),
+      visitor_token: "site-scope-blog",
+      analytics_site: other_site,
+      started_at: now,
+      utm_source: "facebook_ads",
+      utm_medium: "cpc"
+    )
+
+    ::Analytics::Current.site = site
+
+    payload = sources_payload(
+      {
+        period: "custom",
+        from: now.to_date.iso8601,
+        to: now.to_date.iso8601,
+        filters: {},
+        advanced_filters: {},
+        mode: "all"
+      },
+      limit: 20,
+      page: 1
+    )
+
+    assert_equal [ "ChatGPT" ], payload.fetch(:results).map { |row| row.fetch(:name) }
   end
 
   private

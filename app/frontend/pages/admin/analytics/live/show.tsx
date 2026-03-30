@@ -48,15 +48,25 @@ const DESKTOP_GAP = 24
 const DESKTOP_PADDING = 24
 const DESKTOP_HEADER_SPACING = 40
 const DESKTOP_BOTTOM_PADDING = 16
+const DESKTOP_ACTIVITY_PANEL_RESERVED = 120
+const SEARCH_RESULTS_PANEL_CLASSNAME =
+  "absolute z-20 mt-2 overflow-hidden rounded-lg border border-border/70 bg-card/95 text-sm shadow-lg backdrop-blur-md"
+const FLOATING_CONTROL_CLASSNAME =
+  "border border-border/70 bg-card/80 text-foreground shadow-xs backdrop-blur-xs"
 
 export default function LiveAnalytics({
   initialStats,
+  liveSubscriptionToken,
 }: {
   initialStats?: LiveStats
+  liveSubscriptionToken?: string | null
 }) {
   const hydrated = useHydrated()
   const resolvedInitialStats = initialStats ?? EMPTY_STATS
-  const { stats, connectionStatus } = useLiveStats(resolvedInitialStats)
+  const { stats, connectionStatus } = useLiveStats(
+    resolvedInitialStats,
+    liveSubscriptionToken
+  )
   const { Component: VisitorGlobeComponent } = useClientComponent(
     loadVisitorGlobeComponent,
     { preload: true }
@@ -197,13 +207,9 @@ export default function LiveAnalytics({
     [clearSessionAnchors, setView]
   )
 
-  const selectSession = useCallback(
-    (sessionId: string | null) => {
-      setSelectedSessionId(sessionId)
-      clearSessionAnchors()
-    },
-    [clearSessionAnchors]
-  )
+  const selectSession = useCallback((sessionId: string | null) => {
+    setSelectedSessionId(sessionId)
+  }, [])
 
   const closeSelectedSession = useCallback(() => {
     selectionRequestRef.current += 1
@@ -429,7 +435,7 @@ export default function LiveAnalytics({
                   <div className="flex items-center gap-4 text-sm">
                     <div className="flex items-center gap-2">
                       <div className="size-3 rounded-full bg-blue-600 shadow-[0_0_8px_oklch(0.546_0.245_262/0.55)] dark:bg-blue-500" />
-                      <span className="text-foreground">
+                      <span className="text-sm/5 text-foreground">
                         Visitors right now
                       </span>
                     </div>
@@ -462,14 +468,16 @@ export default function LiveAnalytics({
                     {(showSearchHint ||
                       isSearchPending ||
                       visibleSuggestions.length > 0) && (
-                      <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-sm border border-border bg-card text-sm shadow-lg">
+                      <div
+                        className={`${SEARCH_RESULTS_PANEL_CLASSNAME} w-full`}
+                      >
                         {showSearchHint ? (
-                          <div className="px-3 py-2 text-muted-foreground">
+                          <div className="px-3 py-2 text-sm/5 text-muted-foreground">
                             Type one more character…
                           </div>
                         ) : isSearchPending &&
                           visibleSuggestions.length === 0 ? (
-                          <div className="flex items-center gap-2 px-3 py-2 text-muted-foreground">
+                          <div className="flex items-center gap-2 px-3 py-2 text-sm/5 text-muted-foreground">
                             <Loader2 className="size-4 animate-spin" />{" "}
                             Searching…
                           </div>
@@ -477,7 +485,7 @@ export default function LiveAnalytics({
                           visibleSuggestions.map((s, i) => (
                             <button
                               key={`${s.name}-${i}`}
-                              className="w-full truncate px-3 py-2 text-left hover:bg-accent"
+                              className="w-full truncate px-3 py-2 text-left text-sm/5 transition hover:bg-accent/70"
                               onClick={() => {
                                 setSuggestions([])
                                 setIsSearchVisible(false)
@@ -642,12 +650,12 @@ export default function LiveAnalytics({
                       : "Disconnected"
                 }
               />
-              <h1 className="text-lg font-semibold">Live View</h1>
-              <span className="text-xs text-muted-foreground">
+              <h1 className="text-lg/7 font-semibold">Live View</h1>
+              <span className="text-xs/4 text-muted-foreground">
                 {formattedTimestamp}
               </span>
               {connectionStatus === "disconnected" && (
-                <span className="text-xs text-destructive">
+                <span className="text-xs/4 text-destructive">
                   Reconnecting...
                 </span>
               )}
@@ -655,7 +663,7 @@ export default function LiveAnalytics({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-8 border border-border bg-card/80 text-foreground backdrop-blur-xs"
+                  className={`size-8 ${FLOATING_CONTROL_CLASSNAME}`}
                   onClick={toggleCardsVisibility}
                 >
                   <EyeOff className="size-4" />
@@ -672,7 +680,7 @@ export default function LiveAnalytics({
                 <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="Search location"
-                  className="w-[22rem] border-border bg-card/80 pr-8 pl-9 text-foreground"
+                  className={`w-[22rem] pr-8 pl-9 text-foreground ${FLOATING_CONTROL_CLASSNAME}`}
                   value={query}
                   onFocus={() => setDesktopFocused(true)}
                   onBlur={() => {
@@ -722,20 +730,22 @@ export default function LiveAnalytics({
                   (isSearchPending ||
                     visibleSuggestions.length > 0 ||
                     showSearchHint) && (
-                    <div className="absolute z-20 mt-2 w-[22rem] overflow-hidden rounded-sm border border-border bg-card text-sm shadow-lg">
+                    <div
+                      className={`${SEARCH_RESULTS_PANEL_CLASSNAME} w-[22rem]`}
+                    >
                       {showSearchHint ? (
-                        <div className="px-3 py-2 text-muted-foreground">
+                        <div className="px-3 py-2 text-sm/5 text-muted-foreground">
                           Type one more character…
                         </div>
                       ) : isSearchPending && visibleSuggestions.length === 0 ? (
-                        <div className="flex items-center gap-2 px-3 py-2 text-muted-foreground">
+                        <div className="flex items-center gap-2 px-3 py-2 text-sm/5 text-muted-foreground">
                           <Loader2 className="size-4 animate-spin" /> Searching…
                         </div>
                       ) : (
                         visibleSuggestions.map((s, i) => (
                           <button
                             key={`${s.name}-${i}`}
-                            className={`w-full truncate px-3 py-2 text-left hover:bg-accent ${i === activeIndex ? "bg-accent" : ""}`}
+                            className={`w-full truncate px-3 py-2 text-left text-sm/5 transition hover:bg-accent/70 ${i === activeIndex ? "bg-accent/70" : ""}`}
                             onMouseDown={(e) => e.preventDefault()}
                             onClick={() => {
                               setSuggestions([])
@@ -752,7 +762,7 @@ export default function LiveAnalytics({
               <Button
                 variant="ghost"
                 size="icon"
-                className="border border-border bg-card/80 text-foreground backdrop-blur-xs"
+                className={FLOATING_CONTROL_CLASSNAME}
                 onClick={toggleCardsVisibility}
                 aria-pressed={areCardsVisible}
               >
@@ -770,7 +780,7 @@ export default function LiveAnalytics({
               <Button
                 variant="ghost"
                 size="icon"
-                className="border border-border bg-card/80 text-foreground backdrop-blur-xs"
+                className={FLOATING_CONTROL_CLASSNAME}
                 onClick={toggleFullscreen}
               >
                 {isFullscreen ? (
@@ -789,7 +799,8 @@ export default function LiveAnalytics({
               style={{
                 top: DESKTOP_PADDING + DESKTOP_HEADER_SPACING,
                 left: DESKTOP_PADDING,
-                bottom: DESKTOP_BOTTOM_PADDING,
+                bottom:
+                  DESKTOP_BOTTOM_PADDING + DESKTOP_ACTIVITY_PANEL_RESERVED,
                 transform: `translateX(${cardsTranslateX}px)`,
                 transition: "transform 420ms cubic-bezier(0.22, 0.61, 0.36, 1)",
                 willChange: "transform",
@@ -848,10 +859,10 @@ export default function LiveAnalytics({
               className="pointer-events-none absolute z-30 flex items-end gap-3"
               style={{ bottom: DESKTOP_BOTTOM_PADDING, right: DESKTOP_PADDING }}
             >
-              <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-border bg-card/80 px-3 py-1.5 text-xs text-muted-foreground">
+              <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-border/70 bg-card/80 px-3 py-1.5 text-xs/4 text-muted-foreground shadow-xs backdrop-blur-xs">
                 <div className="flex items-center gap-1.5">
                   <div className="size-2.5 rounded-full bg-blue-600 shadow-[0_0_6px_oklch(0.546_0.245_262/0.6)] ring-1 ring-blue-400/60 dark:bg-blue-500" />
-                  <span className="text-muted-foreground">
+                  <span className="text-xs/4 text-muted-foreground">
                     Visitors right now
                   </span>
                 </div>
@@ -860,7 +871,7 @@ export default function LiveAnalytics({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="border border-border bg-card/80 text-foreground"
+                  className={FLOATING_CONTROL_CLASSNAME}
                   onClick={handleZoomIn}
                   disabled={zoomAtClosest}
                 >
@@ -870,7 +881,7 @@ export default function LiveAnalytics({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="border border-border bg-card/80 text-foreground"
+                  className={FLOATING_CONTROL_CLASSNAME}
                   onClick={handleZoomOut}
                   disabled={zoomAtFarthest}
                 >

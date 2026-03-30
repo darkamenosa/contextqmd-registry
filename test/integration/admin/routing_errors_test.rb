@@ -14,7 +14,7 @@ class Admin::RoutingErrorsTest < ActionDispatch::IntegrationTest
   end
 
   test "unauthenticated users visiting unknown admin paths are redirected to login" do
-    get "/admin/analytics"
+    get "/admin/not-a-real-path"
 
     assert_redirected_to new_identity_session_path
   ensure
@@ -30,7 +30,7 @@ class Admin::RoutingErrorsTest < ActionDispatch::IntegrationTest
 
     sign_in(staff_identity)
 
-    get "/admin/analytics"
+    get "/admin/not-a-real-path"
 
     assert_response :not_found
     assert_equal "admin/errors/show", page_payload.fetch("component")

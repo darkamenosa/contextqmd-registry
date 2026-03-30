@@ -10,27 +10,20 @@ module Analytics::Properties
       key.to_s.delete_prefix("prop:").presence
     end
 
-    def configured_keys
-      Analytics::Lists.normalize_strings(AnalyticsSetting.get_json("allowed_event_props", fallback: []))
+    def configured_keys(site = ::Analytics::Current.site_or_default)
+      configured_typed_keys(site)
     end
 
-    def available_keys(events = nil)
-      return configured_keys if managed_keys?
-
-      scope = events || Ahoy::Event.where.not(properties: [ nil, {} ])
-      event_keys(scope)
+    def available_keys(_events = nil, site: ::Analytics::Current.site_or_default)
+      configured_keys(site)
     end
 
-    def available?
-      if managed_keys?
-        configured_keys.any?
-      else
-        Ahoy::Event.where.not(properties: [ nil, {} ]).limit(1).exists?
-      end
+    def available?(site: ::Analytics::Current.site_or_default)
+      configured_keys(site).any?
     end
 
-    def managed_keys?
-      AnalyticsSetting.exists?(key: "allowed_event_props")
+    def managed_keys?(site: ::Analytics::Current.site_or_default)
+      configured_typed_keys(site).any?
     end
 
     def event_keys(events)
@@ -94,6 +87,14 @@ module Analytics::Properties
     end
 
     private
+      def configured_typed_keys(site)
+        return [] unless Analytics::AllowedEventProperty.table_exists?
+
+        Analytics::AllowedEventProperty.configured_keys(site)
+      rescue ActiveRecord::NoDatabaseError, ActiveRecord::StatementInvalid
+        []
+      end
+
       def properties_column
         Ahoy::Event.arel_table[:properties]
       end

@@ -157,6 +157,79 @@ class Identities::SessionsRedirectTest < ActionDispatch::IntegrationTest
     assert_redirected_to root_path
   end
 
+  test "inertia sign out from rankings preserves a public referer with query params" do
+    identity, = create_tenant(
+      email: "session-rankings-sign-out-#{SecureRandom.hex(4)}@example.com",
+      name: "Session Rankings Sign Out"
+    )
+
+    post identity_session_path, params: {
+      identity: {
+        email: identity.email,
+        password: "password123"
+      }
+    }
+
+    assert_redirected_to app_path
+
+    delete destroy_identity_session_path, headers: {
+      "X-Inertia" => "true",
+      "X-Requested-With" => "XMLHttpRequest",
+      "Referer" => rankings_url(page: 2)
+    }
+
+    assert_redirected_to "/rankings?page=2"
+  end
+
+  test "inertia sign out from admin falls back to login" do
+    identity, = create_tenant(
+      email: "session-admin-inertia-sign-out-#{SecureRandom.hex(4)}@example.com",
+      name: "Session Admin Inertia Sign Out"
+    )
+    identity.update!(staff: true)
+
+    post identity_session_path, params: {
+      identity: {
+        email: identity.email,
+        password: "password123"
+      }
+    }
+
+    assert_redirected_to app_path
+
+    delete destroy_identity_session_path, headers: {
+      "X-Inertia" => "true",
+      "X-Requested-With" => "XMLHttpRequest",
+      "Referer" => admin_dashboard_url
+    }
+
+    assert_redirected_to new_identity_session_path
+  end
+
+  test "inertia sign out from app falls back to login" do
+    identity, account, = create_tenant(
+      email: "session-app-inertia-sign-out-#{SecureRandom.hex(4)}@example.com",
+      name: "Session App Inertia Sign Out"
+    )
+
+    post identity_session_path, params: {
+      identity: {
+        email: identity.email,
+        password: "password123"
+      }
+    }
+
+    assert_redirected_to app_path
+
+    delete destroy_identity_session_path, headers: {
+      "X-Inertia" => "true",
+      "X-Requested-With" => "XMLHttpRequest",
+      "Referer" => app_dashboard_url(account_id: account.external_account_id)
+    }
+
+    assert_redirected_to new_identity_session_path
+  end
+
   test "inertia sign out redirects to login to avoid host redirect issues" do
     identity, = create_tenant(
       email: "session-inertia-sign-out-#{SecureRandom.hex(4)}@example.com",

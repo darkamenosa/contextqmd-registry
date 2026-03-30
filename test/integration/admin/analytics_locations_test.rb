@@ -8,6 +8,8 @@ class Admin::AnalyticsLocationsTest < ActionDispatch::IntegrationTest
   setup do
     Ahoy::Event.delete_all
     Ahoy::Visit.delete_all
+    Analytics::SiteBoundary.delete_all
+    Analytics::Site.delete_all
   end
 
   test "locations map endpoint returns country metadata" do
@@ -16,6 +18,7 @@ class Admin::AnalyticsLocationsTest < ActionDispatch::IntegrationTest
       name: "Staff Locations"
     )
     staff_identity.update!(staff: true)
+    site = Analytics::Bootstrap.ensure_default_site!(host: "localhost")
 
     Ahoy::Visit.create!(
       visit_token: SecureRandom.hex(16),
@@ -26,7 +29,7 @@ class Admin::AnalyticsLocationsTest < ActionDispatch::IntegrationTest
 
     sign_in(staff_identity)
 
-    get "/admin/analytics/locations",
+    get "/admin/analytics/sites/#{site.public_id}/locations",
         params: { period: "day", mode: "map", with_imported: "false" },
         headers: { "ACCEPT" => "application/json" }
 

@@ -38,18 +38,10 @@ class Analytics::StorageTest < ActiveSupport::TestCase
 
   private
     def with_analytics_storage(value)
-      previous = ENV["ANALYTICS_STORAGE"]
-      if value.nil?
-        ENV.delete("ANALYTICS_STORAGE")
-      else
-        ENV["ANALYTICS_STORAGE"] = value
-      end
+      previous = Analytics::Configuration.config.storage
+      Analytics::Configuration.config.storage = value
       yield
     ensure
-      if previous.nil?
-        ENV.delete("ANALYTICS_STORAGE")
-      else
-        ENV["ANALYTICS_STORAGE"] = previous
-      end
+      Analytics::Configuration.config.storage = previous
     end
 end

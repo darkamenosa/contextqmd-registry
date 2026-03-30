@@ -18,7 +18,7 @@ class Analytics::QueryTest < ActiveSupport::TestCase
     assert_equal [ [ "contains", "page", "/pricing" ] ], query.advanced_filters
     assert_equal "day", query.time_range_key
     assert_equal [ [ :eq, :page, "/pricing" ], [ :contains, :page, "/pricing" ] ], query.filter_clauses
-    assert_equal [ [ :visitors, :desc ] ], query.order_by
+    assert_equal [ "visitors", "desc" ], query.order_by
   end
 
   test "merge returns a new analytics query" do
@@ -54,13 +54,23 @@ class Analytics::QueryTest < ActiveSupport::TestCase
     assert_equal "2026-03-01", query.time_range[:from]
     assert_equal "2026-03-15", query.time_range[:to]
     assert_equal "pages", query.mode
-    assert_equal [ [ :visitors, :desc ] ], query.order_by
+    assert_equal [ "visitors", "desc" ], query.order_by
     assert_equal 25, query.limit
     assert_equal 50, query.offset
     assert_equal [
       [ :eq, :page, "/pricing" ],
       [ :contains, :source, "google" ]
     ], query.filter_clauses
+  end
+
+  test "from_ui_params accepts flat order_by pairs used by runtime controllers" do
+    query = Analytics::Query.from_ui_params(
+      { period: "day" },
+      dataset: :pages,
+      order_by: [ "percentage", "asc" ]
+    )
+
+    assert_equal [ "percentage", "asc" ], query.order_by
   end
 
   test "comparison filters normalize names and codes" do

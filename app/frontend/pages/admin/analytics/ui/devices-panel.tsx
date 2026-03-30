@@ -20,6 +20,7 @@ import {
   parseDialogFromPath,
 } from "../lib/dialog-path"
 import { inferDevicesModeFromFilters } from "../lib/panel-mode"
+import { analyticsScopedPath } from "../lib/path-prefix"
 import {
   analyticsPreferenceKey,
   writeAnalyticsPreference,
@@ -271,7 +272,7 @@ export default function DevicesPanel({
           }
         }}
         title={`Top ${activeTitle}`}
-        endpoint={"/admin/analytics/devices"}
+        endpoint={analyticsScopedPath("/devices")}
         extras={{ mode }}
         firstColumnLabel={firstColumnLabel}
         defaultSortKey={"visitors"}

@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 class Analytics::PagesDatasetQuery::Postgres
+  SEO_METRICS = %i[clicks impressions ctr position visitors pageviews].freeze
+  SEO_GOAL_METRICS = %i[clicks impressions ctr position visitors conversion_rate].freeze
+
   def initialize(query:, limit:, page:, search:, order_by:)
     @query = Analytics::Query.wrap(query)
     @limit = limit
@@ -57,6 +60,7 @@ class Analytics::PagesDatasetQuery::Postgres
 
     def paginated_payload
       case mode
+      when "seo" then seo_payload(paginated: true)
       when "pages" then paginated_pages_payload
       when "entry" then paginated_entry_payload
       else
@@ -66,6 +70,7 @@ class Analytics::PagesDatasetQuery::Postgres
 
     def full_payload
       case mode
+      when "seo" then seo_payload(paginated: false)
       when "pages" then full_pages_payload
       when "entry" then full_entry_payload
       else
@@ -185,6 +190,26 @@ class Analytics::PagesDatasetQuery::Postgres
           }
         }
       end
+    end
+
+    def seo_payload(paginated:)
+      return seo_empty_payload if unsupported_seo_filters?
+
+      analytics_rows = seo_analytics_rows
+      gsc_rows = seo_google_search_console_rows
+      names = (analytics_rows.keys + gsc_rows.keys).uniq
+      names = sort_seo_names(names, analytics_rows, gsc_rows)
+      names, has_more = paginate_seo_names(names, paginated:)
+
+      {
+        results: names.map { |name| seo_result_row(name, analytics_rows, gsc_rows) },
+        metrics: seo_metrics,
+        meta: {
+          has_more: has_more,
+          skip_imported_reason: Analytics::Imports.skip_reason(query),
+          metric_labels: seo_metric_labels
+        }
+      }
     end
 
     def paginated_entry_payload
@@ -579,6 +604,204 @@ class Analytics::PagesDatasetQuery::Postgres
           metric_labels: { percentage: "Percentage" }
         }
       }
+    end
+
+    def unsupported_seo_filters?
+      Analytics::GoogleSearchConsole.unsupported_pages_filters?(query)
+    end
+
+    def seo_metrics
+      goal.present? ? SEO_GOAL_METRICS : SEO_METRICS
+    end
+
+    def seo_metric_labels
+      labels = {}
+      if goal.present?
+        labels[:visitors] = "Conversions"
+        labels[:conversionRate] = "Conversion Rate"
+      end
+      labels
+    end
+
+    def seo_empty_payload
+      {
+        results: [],
+        metrics: seo_metrics,
+        meta: {
+          has_more: false,
+          skip_imported_reason: Analytics::Imports.skip_reason(query),
+          metric_labels: seo_metric_labels
+        }
+      }
+    end
+
+    def seo_analytics_rows
+      expression = "COALESCE(NULLIF(split_part(ahoy_events.properties->>'page', CHR(63), 1), ''), '(unknown)')"
+      relation = events
+
+      if pattern.present?
+        search_clause = "LOWER(COALESCE(NULLIF(split_part(ahoy_events.properties->>'page', CHR(63), 1), ''), '(unknown)')) LIKE ?"
+        relation = relation.where(search_clause, pattern)
+      end
+
+      grouped_visit_ids = relation.group(Arel.sql(expression)).pluck(Arel.sql("#{expression}, ARRAY_AGG(DISTINCT ahoy_events.visit_id)")).to_h
+      counts = Analytics::ReportMetrics.unique_counts_from_grouped_visit_ids(grouped_visit_ids, visits)
+      pageviews_by_page = relation.group(Arel.sql(expression)).count
+      Analytics::Pages.filter_groups!(grouped_visit_ids, counts, comparison_names, pageviews_by_page)
+
+      if goal.present?
+        denominator_counts = Analytics::Pages.goal_denominator_counts(query, mode: "pages", search: search)
+        conversions, = Analytics::ReportMetrics.conversions_and_rates(
+          grouped_visit_ids,
+          visits,
+          range,
+          query,
+          goal,
+          denominator_counts: denominator_counts
+        )
+
+        grouped_visit_ids.each_with_object({}) do |(name, _ids), result|
+          label = name.to_s.presence || "(none)"
+          result[label] = {
+            visitors: conversions[name] || 0,
+            conversion_rate: Analytics::ReportMetrics.goal_conversion_rate(
+              conversions[name] || 0,
+              denominator_counts[label]
+            )
+          }
+        end
+      else
+        grouped_visit_ids.each_with_object({}) do |(name, _ids), result|
+          label = name.to_s.presence || "(none)"
+          result[label] = {
+            visitors: counts[name] || 0,
+            pageviews: pageviews_by_page[name] || 0
+          }
+        end
+      end
+    end
+
+    def seo_google_search_console_rows
+      return {} if ::Analytics::Current.site.blank?
+
+      rows = seo_google_search_console_relation.to_a
+      rows.each_with_object({}) do |row, result|
+        name = row.name.to_s.presence || "(unknown)"
+        impressions = row.impressions.to_i
+
+        result[name] = {
+          clicks: row.clicks.to_i,
+          impressions: impressions,
+          ctr: impressions.positive? ? ((row.clicks.to_f / impressions) * 100.0).round(1) : 0.0,
+          position: impressions.positive? ? (row.position_impressions_sum.to_f / impressions).round(1) : 0.0
+        }
+      end
+    end
+
+    def seo_google_search_console_relation
+      relation = Analytics::GoogleSearchConsole::QueryRow
+        .for_site(::Analytics::Current.site)
+        .for_search_type(Analytics::GoogleSearchConsole::Syncer::DEFAULT_SEARCH_TYPE)
+        .within_dates(range.begin.to_date, range.end.to_date)
+
+      if (country_value = normalized_country_filter(query.filter_value(:country))).present?
+        relation = relation.where(country: country_value)
+      end
+
+      if (page_value = normalized_page_filter(query.filter_value(:page))).present?
+        relation = relation.where(page: page_value)
+      end
+
+      if pattern.present?
+        relation = relation.where("page ILIKE ?", pattern)
+      end
+
+      relation
+        .group(:page)
+        .select(
+          "page AS name",
+          "SUM(clicks) AS clicks",
+          "SUM(impressions) AS impressions",
+          "SUM(position_impressions_sum) AS position_impressions_sum"
+        )
+        .yield_self do |scope|
+          if comparison_names.any?
+            scope.having(page: comparison_names)
+          else
+            scope
+          end
+        end
+    end
+
+    def seo_result_row(name, analytics_rows, gsc_rows)
+      analytics = analytics_rows[name] || {}
+      gsc = gsc_rows[name] || {}
+
+      row = {
+        name: name,
+        clicks: gsc[:clicks].to_i,
+        impressions: gsc[:impressions].to_i,
+        ctr: gsc[:ctr].to_f,
+        position: gsc[:position].to_f,
+        visitors: analytics[:visitors].to_i
+      }
+
+      if goal.present?
+        row[:conversion_rate] = analytics[:conversion_rate]
+      else
+        row[:pageviews] = analytics[:pageviews].to_i
+      end
+
+      row
+    end
+
+    def sort_seo_names(names, analytics_rows, gsc_rows)
+      metric, direction = normalized_seo_order_by
+      sorted = names.sort_by do |name|
+        row = seo_result_row(name, analytics_rows, gsc_rows)
+        value = row.fetch(metric.to_sym) { row.fetch(metric.to_s, 0) }
+        [ value_for_seo_sort(value, metric), name.to_s.downcase ]
+      end
+
+      direction == "desc" ? sorted.reverse : sorted
+    end
+
+    def normalized_seo_order_by
+      metric, direction = Array(order_by)
+      allowed_metrics = seo_metrics.map(&:to_s) + [ "name" ]
+      normalized_metric = metric.to_s.presence
+      normalized_metric = "clicks" unless allowed_metrics.include?(normalized_metric)
+      normalized_direction = normalized_metric == "name" ? "asc" : "desc"
+      normalized_direction = direction.to_s if direction.to_s.in?(%w[asc desc])
+      [ normalized_metric, normalized_direction ]
+    end
+
+    def value_for_seo_sort(value, metric)
+      return value.to_s.downcase if metric == "name"
+
+      value.to_f
+    end
+
+    def paginate_seo_names(names, paginated:)
+      return [ names, false ] unless paginated
+
+      paged_names = names.slice((page - 1) * limit, limit) || []
+      has_more = names.length > ((page - 1) * limit + paged_names.length)
+      [ paged_names, has_more ]
+    end
+
+    def normalized_country_filter(country_value)
+      return if country_value.blank?
+
+      alpha2 = Ahoy::Visit.normalize_country_code(country_value)
+      ISO3166::Country[alpha2]&.alpha3
+    end
+
+    def normalized_page_filter(page_value)
+      value = page_value.to_s.strip
+      return if value.blank?
+
+      Analytics::Urls.normalized_path_only(value).presence || value
     end
 
     def full_exit_payload

@@ -1,6 +1,7 @@
 type LocationOrder = "city-first" | "country-first"
 type CompactLocationOptions = {
   flagShown?: boolean
+  appendCountryCode?: boolean
 }
 
 type LocationFields = {
@@ -108,7 +109,7 @@ export function maskEmail(email: string): string {
 }
 
 export function formatProfileDuration(seconds: number): string {
-  if (seconds <= 0) return "0m"
+  if (seconds <= 0) return "0s"
 
   const hrs = Math.floor(seconds / 3600)
   const mins = Math.floor((seconds % 3600) / 60)
@@ -117,6 +118,25 @@ export function formatProfileDuration(seconds: number): string {
   if (hrs > 0) return `${hrs}h ${mins}m`
   if (mins > 0) return `${mins}m ${secs}s`
   return `${secs}s`
+}
+
+export function formatProfileSessionDuration(seconds?: number | null): string {
+  const duration = Math.max(seconds ?? 0, 0)
+  if (duration > 0) return formatProfileDuration(duration)
+
+  return "Single hit"
+}
+
+export function formatProfileEngagedTime(
+  engagedMsTotal?: number | null
+): string | null {
+  const engagedMs = Math.max(engagedMsTotal ?? 0, 0)
+  if (engagedMs > 0 && engagedMs < 1000) return "<1s"
+  if (engagedMs >= 1000) {
+    return formatProfileDuration(Math.floor(engagedMs / 1000))
+  }
+
+  return null
 }
 
 const compactNumberFormatter = new Intl.NumberFormat("en-US", {
@@ -165,6 +185,7 @@ export function formatCompactLocation(
   const country = fields.country?.trim()
   const countryCode = fields.countryCode?.trim().toUpperCase()
   const flagShown = options.flagShown === true
+  const appendCountryCode = options.appendCountryCode === true
 
   const shortCountry = countryCode || country || null
   const shortRegion = abbreviateRegion(region, countryCode)
@@ -179,14 +200,23 @@ export function formatCompactLocation(
       (distinctRegion && distinctRegion.length <= 16 ? distinctRegion : null) ||
       (!flagShown ? shortCountry : null)
 
-    return [city, suffix].filter(Boolean).join(", ")
+    const parts = [city, suffix].filter(Boolean)
+    if (appendCountryCode && countryCode && suffix !== countryCode) {
+      parts.push(countryCode)
+    }
+
+    return parts.join(", ")
   }
 
   if (distinctRegion) {
-    return [distinctRegion, !flagShown ? shortCountry : null]
-      .filter(Boolean)
-      .join(", ")
+    const suffix = !flagShown ? shortCountry : null
+    const parts = [distinctRegion, suffix].filter(Boolean)
+    if (appendCountryCode && countryCode && suffix !== countryCode) {
+      parts.push(countryCode)
+    }
+
+    return parts.join(", ")
   }
 
-  return shortCountry || ""
+  return countryCode || shortCountry || ""
 }

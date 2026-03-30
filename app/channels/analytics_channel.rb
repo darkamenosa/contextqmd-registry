@@ -7,6 +7,15 @@ class AnalyticsChannel < ApplicationCable::Channel
       return
     end
 
-    stream_from "analytics"
+    stream = Analytics::LiveState.resolve_subscription_stream(
+      params[:subscription_token]
+    )
+
+    if stream.blank?
+      reject
+      return
+    end
+
+    stream_from stream
   end
 end

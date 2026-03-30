@@ -8,9 +8,10 @@ class Admin::AnalyticsSourceDebugTest < ActionDispatch::IntegrationTest
   setup do
     Ahoy::Event.delete_all
     Ahoy::Visit.delete_all
-    AnalyticsSetting.delete_all
-    Goal.delete_all
-    Funnel.delete_all
+    Analytics::SiteBoundary.delete_all
+    Analytics::Site.delete_all
+    Analytics::Goal.delete_all
+    Analytics::Funnel.delete_all
   end
 
   test "source debug shows normalized and raw source details for legacy aliases" do
@@ -19,6 +20,7 @@ class Admin::AnalyticsSourceDebugTest < ActionDispatch::IntegrationTest
       name: "Staff Source Debug"
     )
     staff_identity.update!(staff: true)
+    site = Analytics::Bootstrap.ensure_default_site!(host: "localhost")
 
     sign_in(staff_identity)
 
@@ -30,7 +32,7 @@ class Admin::AnalyticsSourceDebugTest < ActionDispatch::IntegrationTest
       started_at: Time.zone.now.change(usec: 0)
     )
 
-    get "/admin/analytics/source_debug",
+    get "/admin/analytics/sites/#{site.public_id}/source_debug",
         params: { source: "x.com", period: "day" },
         headers: { "ACCEPT" => "application/json" }
 

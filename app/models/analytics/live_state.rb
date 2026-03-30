@@ -1,11 +1,10 @@
 # frozen_string_literal: true
 
-require Rails.root.join("lib/analytics/country")
-
 class Analytics::LiveState
   LIVE_WINDOW = 5.minutes
   CACHE_KEY = "analytics:live:broadcast:scheduled".freeze
   COALESCE_WINDOW = 1.second
+  SUBSCRIPTION_PURPOSE = "analytics-live-subscription".freeze
 
   class << self
     def build(now: Time.zone.now, camelize: true)
@@ -13,14 +12,23 @@ class Analytics::LiveState
       camelize ? payload.deep_transform_keys { |key| key.to_s.camelize(:lower) } : payload
     end
 
-    def broadcast_later
-      Analytics::LiveBroadcastJob.perform_later if should_enqueue_broadcast?
+    def broadcast_later(site: ::Analytics::Current.site)
+      site_key = site_public_id(site)
+      Analytics::LiveBroadcastJob.perform_later(site_key) if should_enqueue_broadcast?(site_key:)
     rescue StandardError
       nil
     end
 
-    def broadcast_now(now: Time.zone.now)
-      ActionCable.server.broadcast("analytics", build(now:, camelize: true))
+    def broadcast_now(now: Time.zone.now, site: ::Analytics::Current.site)
+      resolved_site = resolve_site(site)
+      resolved_boundary = resolved_site&.boundaries&.find_by(primary: true)
+
+      ::Analytics::Current.set(site: resolved_site, site_boundary: resolved_boundary) do
+        ActionCable.server.broadcast(
+          broadcast_stream(site: resolved_site),
+          build(now:, camelize: true)
+        )
+      end
     end
 
     def current_visitors(now: Time.zone.now, window: LIVE_WINDOW)
@@ -35,11 +43,39 @@ class Analytics::LiveState
       Analytics::Realtime.active_visits_with_coordinates(now:, window:)
     end
 
+    def broadcast_stream(site: ::Analytics::Current.site_or_default)
+      site_key = site_public_id(site)
+      site_key.present? ? "analytics:#{site_key}" : "analytics"
+    end
+
+    def subscription_token(site: ::Analytics::Current.site_or_default)
+      subscription_verifier.generate(
+        { "site_public_id" => site_public_id(site) },
+        purpose: SUBSCRIPTION_PURPOSE,
+        expires_in: 1.day
+      )
+    end
+
+    def resolve_subscription_stream(token)
+      return nil if token.blank?
+
+      payload = subscription_verifier.verified(
+        token,
+        purpose: SUBSCRIPTION_PURPOSE
+      )
+      return nil unless payload.is_a?(Hash) && payload.key?("site_public_id")
+
+      site_key = payload["site_public_id"]
+      return nil if site_key != nil && !site_key.is_a?(String)
+
+      broadcast_stream(site: site_key.presence)
+    end
+
     private
-      def should_enqueue_broadcast?
+      def should_enqueue_broadcast?(site_key:)
         if cache_available?
           Rails.cache.write(
-            CACHE_KEY,
+            broadcast_cache_key(site_key),
             true,
             unless_exist: true,
             expires_in: COALESCE_WINDOW
@@ -56,6 +92,32 @@ class Analytics::LiveState
       rescue StandardError
         true
       end
+
+      def broadcast_cache_key(site_key)
+        [ CACHE_KEY, site_key.presence || "global" ].join(":")
+      end
+
+      def site_public_id(site)
+        case site
+        when Analytics::Site
+          site.public_id
+        else
+          site.presence
+        end
+      end
+
+      def resolve_site(site)
+        case site
+        when Analytics::Site, nil
+          site
+        else
+          Analytics::Site.find_by(public_id: site.to_s)
+        end
+      end
+
+      def subscription_verifier
+        Rails.application.message_verifier(SUBSCRIPTION_PURPOSE)
+      end
   end
 
   def initialize(now:, window: LIVE_WINDOW)
@@ -66,8 +128,8 @@ class Analytics::LiveState
   def build
     today_range = today
     yesterday_range = yesterday
-    today_sessions_count = Ahoy::Visit.where(started_at: today_range).count
-    yesterday_sessions_count = Ahoy::Visit.where(started_at: yesterday_range).count
+    today_sessions_count = Ahoy::Visit.for_analytics_site.where(started_at: today_range).count
+    yesterday_sessions_count = Ahoy::Visit.for_analytics_site.where(started_at: yesterday_range).count
     buckets = 1.hour
 
     {
@@ -101,6 +163,7 @@ class Analytics::LiveState
 
     def sessions_by_location(range)
       Ahoy::Visit
+        .for_analytics_site
         .where(started_at: range)
         .group(:country_code, :region, :city)
         .order(Arel.sql("COUNT(*) DESC"))

@@ -3,7 +3,7 @@
 class Analytics::Storage
   class << self
     def current
-      (ENV["ANALYTICS_STORAGE"] || "postgres").to_s
+      Analytics::Configuration.storage.to_s
     end
 
     def adapter_for(query_class)

@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
-require "zlib"
-
 class Analytics::SearchTermsDatasetQuery::Postgres
+  FETCH_LIMIT = 500
+  METRICS = %i[visitors impressions ctr position].freeze
+
   def initialize(query:, limit:, page:, search:, order_by:)
     @query = Analytics::Query.wrap(query)
     @limit = limit
@@ -12,23 +13,30 @@ class Analytics::SearchTermsDatasetQuery::Postgres
   end
 
   def payload
-    counts = Analytics::ReportMetrics.unique_counts_from_grouped_visit_ids(grouped_terms, visits)
-    sorted_terms = sort_terms(counts)
-    paged_names, has_more = Analytics::Pagination.paginate_names(sorted_terms, limit: limit, page: page)
+    sorted_rows = sort_rows(filtered_rows)
+    paged_rows = sorted_rows.slice(offset, limit) || []
+    has_more = sorted_rows.length > (offset + paged_rows.length)
 
-    results = paged_names.map do |term|
-      visitors = counts[term]
-      gsc = search_console_metrics_for(term:, visitors:)
-      {
-        name: term,
-        visitors: visitors,
-        impressions: gsc[:impressions],
-        ctr: gsc[:ctr],
-        position: gsc[:position]
+    {
+      results: paged_rows.map do |row|
+        {
+          name: row.fetch(:name),
+          visitors: row.fetch(:visitors),
+          impressions: row.fetch(:impressions),
+          ctr: row.fetch(:ctr),
+          position: row.fetch(:position)
+        }
+      end,
+      metrics: METRICS,
+      meta: {
+        has_more: has_more,
+        skip_imported_reason: nil,
+        metric_labels: {
+          visitors: "Visitors",
+          ctr: "CTR"
+        }
       }
-    end
-
-    { results: results, metrics: %i[visitors impressions ctr position], meta: { has_more: has_more, skip_imported_reason: nil } }
+    }
   end
 
   private
@@ -45,82 +53,116 @@ class Analytics::SearchTermsDatasetQuery::Postgres
       query.comparison_filter_names
     end
 
-    def visits
-      @visits ||= Analytics::VisitScope.visits(range, query)
-        .where("referring_domain ~* ?", 'google\\.')
-        .where.not(referrer: nil)
+    def offset
+      [ page - 1, 0 ].max * limit
     end
 
-    def grouped_terms
-      @grouped_terms ||= begin
-        grouped = Hash.new { |hash, key| hash[key] = [] }
-        visits.pluck(:id, :referrer).each do |visit_id, referrer|
-          term = search_term_from_referrer(referrer)
-          next if term.blank?
+    def filtered_rows
+      rows = raw_rows
+      if search.present?
+        needle = search.to_s.downcase
+        rows = rows.select { |row| row.fetch(:name).downcase.include?(needle) }
+      end
 
-          grouped[term] << visit_id
+      if comparison_names.any?
+        allowed = comparison_names.to_set
+        rows = rows.select { |row| allowed.include?(row.fetch(:name)) }
+      end
+
+      rows
+    end
+
+    def raw_rows
+      @raw_rows ||= begin
+        return [] if ::Analytics::Current.site.blank?
+
+        aggregated_rows.map do |row|
+          impressions = row.impressions.to_i
+          {
+            name: row.name.to_s,
+            visitors: row.clicks.to_i,
+            impressions: impressions,
+            ctr: impressions.positive? ? ((row.clicks.to_f / impressions) * 100.0).round(1) : 0.0,
+            position: impressions.positive? ? (row.position_impressions_sum.to_f / impressions).round(1) : 0.0
+          }
         end
-
-        if search.present?
-          needle = search.downcase
-          grouped.select! { |term, _| term.include?(needle) }
-        end
-
-        grouped.select! { |term, _| comparison_names.include?(term.to_s) } if comparison_names.any?
-        grouped
       end
     end
 
-    def search_term_from_referrer(referrer)
-      uri = URI.parse(referrer)
-      return if uri.query.blank?
+    def sort_rows(rows)
+      metric, direction = normalized_order_by
 
-      CGI.parse(uri.query)["q"]&.first&.downcase&.strip.presence
-    rescue URI::InvalidURIError
-      nil
+      sorted = rows.sort_by do |row|
+        value =
+          case metric
+          when "name"
+            row.fetch(:name).downcase
+          when "impressions"
+            row.fetch(:impressions)
+          when "ctr"
+            row.fetch(:ctr)
+          when "position"
+            row.fetch(:position)
+          else
+            row.fetch(:visitors)
+          end
+
+        [ value, row.fetch(:name).downcase ]
+      end
+
+      direction == "desc" ? sorted.reverse : sorted
     end
 
-    def sort_terms(counts)
-      return counts.sort_by { |name, visitors| [ visitors, name ] }.map(&:first).reverse if order_by.blank?
-
-      metric, direction = order_by
-      direction = direction&.downcase == "asc" ? "asc" : "desc"
-
-      names =
-        case metric
-        when "name"
-          counts.keys.sort
-        when "visitors", nil
-          counts.sort_by { |name, visitors| [ visitors, name ] }.map(&:first)
-        when "impressions", "ctr", "position"
-          derived = counts.each_with_object({}) do |(name, visitors), result|
-            result[name.to_s] = search_console_metrics_for(term: name, visitors: visitors)
-          end
-          counts.keys.sort_by do |name|
-            value = derived[name.to_s][metric.to_sym]
-            [ value || -Float::INFINITY, name ]
-          end
-        when "bounce_rate", "visit_duration"
-          metrics_all = Analytics::ReportMetrics.calculate_group_metrics(grouped_terms, range, query)
-          counts.keys.sort_by do |name|
-            value = metrics_all.dig(name, metric.to_sym)
-            [ value || -Float::INFINITY, name ]
-          end
-        else
-          counts.sort_by { |name, visitors| [ visitors, name ] }.map(&:first)
-        end
-
-      direction == "desc" ? names.reverse : names
+    def normalized_order_by
+      metric, direction = Array(order_by)
+      normalized_metric = metric.to_s.presence || "visitors"
+      normalized_direction = direction.to_s == "asc" ? "asc" : "desc"
+      [ normalized_metric, normalized_direction ]
     end
 
-    def search_console_metrics_for(term:, visitors:)
-      seed = term.to_s
-      crc = Zlib.crc32(seed)
-      factor = 1.5 + (crc % 4850) / 100.0
-      impressions = [ (visitors * factor).round, visitors ].max
-      ctr = (visitors.to_f / impressions.to_f) * 100.0
-      position = ((crc % 10) + 1 + (((crc / 10) % 10) / 10.0)).round(1)
+    def aggregated_rows
+      relation = Analytics::GoogleSearchConsole::QueryRow
+        .for_site(::Analytics::Current.site)
+        .for_search_type(Analytics::GoogleSearchConsole::Syncer::DEFAULT_SEARCH_TYPE)
+        .within_dates(range.begin.to_date, range.end.to_date)
 
-      { impressions: impressions, ctr: ctr, position: position }
+      if (page_value = query.filter_value(:page)).present?
+        relation = relation.where(page: normalized_page_filter(page_value))
+      end
+
+      if (country_value = normalized_country_filter(query.filter_value(:country))).present?
+        relation = relation.where(country: country_value)
+      end
+
+      if search.present?
+        relation = relation.where("query ILIKE ?", "%#{ActiveRecord::Base.sanitize_sql_like(search.to_s)}%")
+      end
+
+      if comparison_names.any?
+        relation = relation.where(query: comparison_names)
+      end
+
+      relation
+        .group(:query)
+        .select(
+          "query AS name",
+          "SUM(clicks) AS clicks",
+          "SUM(impressions) AS impressions",
+          "SUM(position_impressions_sum) AS position_impressions_sum"
+        )
+    end
+
+    def normalized_page_filter(page_value)
+      value = page_value.to_s.strip
+      return if value.blank?
+
+      Analytics::GoogleSearchConsole::QueryRow.normalize_page_value(value)
+    end
+
+    def normalized_country_filter(country_value)
+      return if country_value.blank?
+
+      alpha2 = Ahoy::Visit.normalize_country_code(country_value)
+      ISO3166::Country[alpha2]&.alpha3
     end
 end

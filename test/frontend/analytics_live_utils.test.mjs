@@ -86,7 +86,7 @@ test("liveEventLocation returns a compact live label", async () => {
       country: "United States",
       countryCode: "US",
     }),
-    "San Francisco, CA"
+    "San Francisco, CA, US"
   )
 })
 
@@ -103,6 +103,6 @@ test("liveEventLocation keeps region abbreviations to disambiguate repeated city
       country: "United States",
       countryCode: "US",
     }),
-    "Portland, OR"
+    "Portland, OR, US"
   )
 })

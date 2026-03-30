@@ -15,11 +15,21 @@ development:
     queue: default
     schedule: every 30 seconds
 
+  refresh_due_google_search_console_connections:
+    class: Analytics::RefreshDueGoogleSearchConsoleConnectionsJob
+    queue: default
+    schedule: every hour at minute 23
+
 production:
   analytics_live_update:
     class: Analytics::LiveBroadcastJob
     queue: default
     schedule: every 30 seconds
+
+  refresh_due_google_search_console_connections:
+    class: Analytics::RefreshDueGoogleSearchConsoleConnectionsJob
+    queue: default
+    schedule: every hour at minute 23
 
   check_due_library_sources:
     class: CheckDueLibrarySourcesJob

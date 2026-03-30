@@ -35,7 +35,7 @@ module Identities
           set_flash_message!(:notice, :updated)
           previous_identity_id = warden.user(resource_name)&.id
           sign_in(resource_name, resource)
-          AnalyticsVisitBoundary.mark_sign_in!(
+          Analytics::VisitBoundary.mark_sign_in!(
             session: session,
             previous_identity_id: previous_identity_id,
             next_identity_id: resource.id

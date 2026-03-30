@@ -3,7 +3,6 @@
 require "uri"
 require "set"
 require "cgi"
-require Rails.root.join("lib/analytics/country")
 
 module AnalyticsProfile::PayloadBuilder
   private
@@ -32,7 +31,7 @@ module AnalyticsProfile::PayloadBuilder
       )
     end
 
-    def build_profile_row(profile, latest_visit:, last_seen_at:, total_visits:, scoped_visits:, summary: nil)
+    def build_profile_row(profile, latest_visit:, last_seen_at:, total_visits:, scoped_visits:, summary: nil, recent_activity: nil)
       identity_snapshot = resolved_identity_snapshot(profile, latest_visit)
       latest_context = summary&.latest_context.to_h
       current_page = summary&.latest_current_page.presence || latest_context["current_page"].presence || current_page_for_visit(latest_visit)
@@ -64,6 +63,7 @@ module AnalyticsProfile::PayloadBuilder
         source: summary&.latest_source.presence || latest_context["source"].presence || latest_visit&.source_label.to_s.presence || latest_visit&.referring_domain.to_s.presence || "Direct / None",
         current_page: current_page,
         last_seen_at: last_seen_at&.iso8601,
+        recent_activity: recent_activity || [],
         total_visits: total_visits,
         scoped_visits: scoped_visits,
         total_sessions: summary&.total_sessions || total_visits,
@@ -155,6 +155,7 @@ module AnalyticsProfile::PayloadBuilder
       return unless visit
 
       pageview = Ahoy::Event
+        .for_analytics_site(::Analytics::Current.site)
         .where(visit_id: visit.id, name: "pageview")
         .order(time: :desc, id: :desc)
         .limit(1)
@@ -212,6 +213,7 @@ module AnalyticsProfile::PayloadBuilder
       return [] unless AnalyticsProfile::Projection.available?
 
       AnalyticsProfileSession
+        .for_analytics_site(::Analytics::Current.site)
         .where(analytics_profile_id: profile.id, visit_id: visit_ids)
         .order(started_at: :desc, id: :desc)
         .map { |session| serialize_session(session) }
@@ -221,6 +223,7 @@ module AnalyticsProfile::PayloadBuilder
       return [] unless AnalyticsProfile::Projection.available?
 
       AnalyticsProfileSession
+        .for_analytics_site(::Analytics::Current.site)
         .where(analytics_profile_id: profile.id)
         .order(started_at: :desc, id: :desc)
         .pluck(:started_at, :events_count)
@@ -259,6 +262,7 @@ module AnalyticsProfile::PayloadBuilder
         exit_page: session.exit_page,
         current_page: session.current_page,
         duration_seconds: session.duration_seconds,
+        engaged_ms_total: session.respond_to?(:engaged_ms_total) ? session.engaged_ms_total : 0,
         pageviews_count: session.pageviews_count,
         events_count: session.events_count,
         page_paths: session.page_paths,
@@ -310,7 +314,7 @@ module AnalyticsProfile::PayloadBuilder
 
     def filtered_session_events(visit_id, query)
       query = Analytics::Query.wrap(query)
-      events = Ahoy::Event.where(visit_id: visit_id).order(time: :desc, id: :desc).limit(200).to_a
+      events = Ahoy::Event.for_analytics_site.where(visit_id: visit_id).order(time: :desc, id: :desc).limit(200).to_a
       page_filter = query.filter_value(:page).presence
       goal_filter = query.filter_value(:goal).presence
       page_filter_clauses = query.filter_clauses.select { |_op, dim, _value| dim == :page }
@@ -377,45 +381,7 @@ module AnalyticsProfile::PayloadBuilder
     end
 
     def search_terms_for_visit(visit)
-      query = search_query_from_referrer(visit.referrer)
-      return [] if query.blank?
-
-      build_search_term_preview(query)
-    end
-
-    def search_query_from_referrer(referrer)
-      return if referrer.blank?
-
-      uri = URI.parse(referrer.to_s)
-      params = CGI.parse(uri.query.to_s)
-      %w[q query p text keyword k].each do |key|
-        value = Array(params[key]).first.to_s.strip
-        return value if value.present?
-      end
-
-      nil
-    rescue URI::InvalidURIError
-      nil
-    end
-
-    def build_search_term_preview(query)
-      terms = query.to_s.split(/\s+/).reject(&:blank?)
-      return [] if terms.empty?
-
-      rows = [ { "label" => query, "probability" => 74 } ]
-
-      if terms.length > 1
-        rows << {
-          "label" => terms.first(2).join(" "),
-          "probability" => 16
-        }
-        rows << {
-          "label" => terms.last,
-          "probability" => 10
-        }
-      end
-
-      rows.uniq { |row| row["label"].downcase }
+      Analytics::GoogleSearchConsole::SearchTermsPreview.for_visit(visit)
     end
 
     def dedupe_session_events(events)

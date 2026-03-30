@@ -3,6 +3,7 @@
 require "test_helper"
 
 class Analytics::LiveStateTest < ActiveSupport::TestCase
+  include ActiveJob::TestHelper
   include ActiveSupport::Testing::TimeHelpers
 
   setup do
@@ -160,6 +161,125 @@ class Analytics::LiveStateTest < ActiveSupport::TestCase
         assert_equal 1, Analytics::LiveState.current_visitors(now: Time.zone.parse("2026-03-28 10:00:00"))
       end
     end
+  end
+
+  test "broadcast_now uses the scoped analytics stream and payload" do
+    travel_to Time.utc(2026, 3, 28, 10, 0, 0) do
+      Time.use_zone("UTC") do
+        site_a = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test", time_zone: "UTC")
+        site_b = Analytics::Site.create!(name: "Blog", canonical_hostname: "blog.example.test", time_zone: "UTC")
+
+        profile_a = AnalyticsProfile.create!(
+          analytics_site: site_a,
+          status: AnalyticsProfile::STATUS_ANONYMOUS,
+          first_seen_at: 20.minutes.ago,
+          last_seen_at: 1.minute.ago
+        )
+        profile_b = AnalyticsProfile.create!(
+          analytics_site: site_b,
+          status: AnalyticsProfile::STATUS_ANONYMOUS,
+          first_seen_at: 20.minutes.ago,
+          last_seen_at: 1.minute.ago
+        )
+
+        visit_a = Ahoy::Visit.create!(
+          analytics_site: site_a,
+          analytics_profile: profile_a,
+          visit_token: SecureRandom.hex(16),
+          visitor_token: SecureRandom.hex(16),
+          started_at: 4.minutes.ago,
+          latitude: 10.0,
+          longitude: 10.0
+        )
+        visit_b = Ahoy::Visit.create!(
+          analytics_site: site_b,
+          analytics_profile: profile_b,
+          visit_token: SecureRandom.hex(16),
+          visitor_token: SecureRandom.hex(16),
+          started_at: 4.minutes.ago,
+          latitude: 20.0,
+          longitude: 20.0
+        )
+
+        Ahoy::Event.create!(
+          analytics_site: site_a,
+          visit: visit_a,
+          name: "pageview",
+          properties: { page: "/docs" },
+          time: 30.seconds.ago
+        )
+        Ahoy::Event.create!(
+          analytics_site: site_b,
+          visit: visit_b,
+          name: "pageview",
+          properties: { page: "/blog" },
+          time: 30.seconds.ago
+        )
+
+        broadcasts = []
+
+        server = ActionCable.server
+        original_broadcast = server.method(:broadcast)
+
+        server.define_singleton_method(:broadcast) do |stream, payload|
+          broadcasts << [ stream, payload ]
+        end
+
+        begin
+          Analytics::LiveState.broadcast_now(
+            now: Time.zone.parse("2026-03-28 10:00:00"),
+            site: site_a
+          )
+        ensure
+          server.define_singleton_method(:broadcast, original_broadcast)
+        end
+
+        assert_equal 1, broadcasts.size
+        stream, payload = broadcasts.first
+
+        assert_equal "analytics:#{site_a.public_id}", stream
+        assert_equal 1, payload.fetch("currentVisitors")
+        assert_equal [ "/docs" ], payload.fetch("recentEvents").map { |event| event.fetch("page") }
+      end
+    end
+  end
+
+  test "live subscription tokens resolve back to the scoped analytics stream" do
+    site = Analytics::Site.create!(
+      name: "Docs",
+      canonical_hostname: "docs.example.test",
+      time_zone: "UTC"
+    )
+
+    token = Analytics::LiveState.subscription_token(site: site)
+
+    assert_equal(
+      "analytics:#{site.public_id}",
+      Analytics::LiveState.resolve_subscription_stream(token)
+    )
+  end
+
+  test "live subscription stream resolution rejects invalid tokens" do
+    assert_nil Analytics::LiveState.resolve_subscription_stream("invalid-token")
+  end
+
+  test "live broadcast job resolves the scoped site before broadcasting" do
+    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test", time_zone: "UTC")
+    captured_site = :unset
+
+    original_broadcast_now = Analytics::LiveState.method(:broadcast_now)
+
+    Analytics::LiveState.define_singleton_method(:broadcast_now) do |site: nil, **|
+      captured_site = site
+    end
+
+    begin
+      Analytics::LiveBroadcastJob.perform_now(site.public_id)
+    ensure
+      Analytics::LiveState.define_singleton_method(:broadcast_now, original_broadcast_now)
+    end
+
+    assert_equal site, captured_site
   end
 
   test "visitor dots expose a non-city location label when coordinates are present" do

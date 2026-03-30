@@ -32,6 +32,23 @@ async function loadTrackerModule() {
 }
 
 function installBrowserStubs() {
+  const documentListeners = new Map()
+  const windowListeners = new Map()
+
+  const addListener = (store, type, listener) => {
+    const listeners = store.get(type) || []
+    listeners.push(listener)
+    store.set(type, listeners)
+  }
+
+  const removeListener = (store, type, listener) => {
+    const listeners = store.get(type) || []
+    store.set(
+      type,
+      listeners.filter((entry) => entry !== listener)
+    )
+  }
+
   globalThis.document = {
     referrer: "",
     title: "Test",
@@ -55,8 +72,12 @@ function installBrowserStubs() {
     getElementsByTagName() {
       return []
     },
-    addEventListener() {},
-    removeEventListener() {},
+    addEventListener(type, listener) {
+      addListener(documentListeners, type, listener)
+    },
+    removeEventListener(type, listener) {
+      removeListener(documentListeners, type, listener)
+    },
     hasFocus() {
       return true
     },
@@ -76,8 +97,12 @@ function installBrowserStubs() {
     innerWidth: 1440,
     innerHeight: 900,
     scrollY: 0,
-    addEventListener() {},
-    removeEventListener() {},
+    addEventListener(type, listener) {
+      addListener(windowListeners, type, listener)
+    },
+    removeEventListener(type, listener) {
+      removeListener(windowListeners, type, listener)
+    },
   }
   globalThis.window.top = globalThis.window
   globalThis.window.self = globalThis.window
@@ -97,10 +122,22 @@ function installBrowserStubs() {
   })
 
   globalThis.fetch = async () => ({ ok: true })
+  globalThis.HTMLElement = class {}
+  globalThis.HTMLAnchorElement = class extends globalThis.HTMLElement {}
+
+  return {
+    dispatchDocumentEvent(type, event) {
+      for (const listener of documentListeners.get(type) || []) {
+        listener(event)
+      }
+    },
+  }
 }
 
 function cleanupBrowserStubs() {
   delete globalThis.fetch
+  delete globalThis.HTMLAnchorElement
+  delete globalThis.HTMLElement
   delete globalThis.navigator
   delete globalThis.history
   delete globalThis.window
@@ -123,7 +160,7 @@ test("analytics tracker posts pageviews only through the events endpoint", async
     await Promise.resolve()
 
     assert.equal(requests.length, 1)
-    assert.equal(requests[0].url, "/ahoy/events")
+    assert.equal(requests[0].url, "/analytics/events")
     assert.equal(requests[0].options.keepalive, true)
 
     const body = JSON.parse(requests[0].options.body)
@@ -172,7 +209,7 @@ test("analytics tracker posts engagement events with fetch keepalive even when s
     await Promise.resolve()
 
     assert.equal(beaconCalls, 0)
-    const request = requests.find((entry) => entry.url === "/ahoy/events")
+    const request = requests.find((entry) => entry.url === "/analytics/events")
     assert.ok(request)
     assert.equal(request.options.keepalive, true)
   } finally {
@@ -196,7 +233,7 @@ test("analytics tracker still posts the pageview when the server has not pre-tra
     await Promise.resolve()
 
     assert.equal(requests.length, 1)
-    assert.equal(requests[0].url, "/ahoy/events")
+    assert.equal(requests[0].url, "/analytics/events")
   } finally {
     cleanupBrowserStubs()
   }
@@ -205,10 +242,14 @@ test("analytics tracker still posts the pageview when the server has not pre-tra
 test("analytics tracker skips the server-tracked initial pageview and seeds follow-up state", async () => {
   installBrowserStubs()
   globalThis.window.analyticsConfig = {
-    initialPageviewTracked: true,
-    initialPageKey: "/about",
-    trackVisits: false,
-    useBeaconForEvents: false,
+    tracking: {
+      initialPageviewTracked: true,
+      initialPageKey: "/about",
+    },
+    site: {
+      token: "signed-site-token",
+      domainHint: "localhost",
+    },
   }
 
   const requests = []
@@ -227,7 +268,118 @@ test("analytics tracker skips the server-tracked initial pageview and seeds foll
     assert.equal(requests.length, 0)
     assert.equal(analytics["lastTrackedPageKey"], "/about")
     assert.equal(analytics["lastTrackedHref"], "http://localhost/about")
+    assert.equal(analytics["config"].siteToken, "signed-site-token")
     assert.ok(analytics["runningEngagementStart"] > 0)
+  } finally {
+    cleanupBrowserStubs()
+  }
+})
+
+test("analytics tracker includes the signed site token on client events", async () => {
+  installBrowserStubs()
+  globalThis.window.analyticsConfig = {
+    site: { websiteId: "site_docs", token: "signed-site-token" },
+  }
+
+  const { StandaloneAnalytics } = await loadTrackerModule()
+  const analytics = new StandaloneAnalytics()
+
+  const requests = []
+  globalThis.fetch = async (url, options = {}) => {
+    requests.push({ url, options })
+    return { ok: true }
+  }
+
+  try {
+    analytics.init()
+    await Promise.resolve()
+
+    const body = JSON.parse(requests[0].options.body)
+    assert.equal(body.events[0].site_token, "signed-site-token")
+  } finally {
+    cleanupBrowserStubs()
+  }
+})
+
+test("analytics tracker exposes a public custom event api", async () => {
+  installBrowserStubs()
+  globalThis.window.analyticsConfig = {
+    site: { websiteId: "site_docs", token: "signed-site-token" },
+  }
+
+  const { StandaloneAnalytics } = await loadTrackerModule()
+  const analytics = new StandaloneAnalytics()
+
+  const requests = []
+  globalThis.fetch = async (url, options = {}) => {
+    requests.push({ url, options })
+    return { ok: true }
+  }
+
+  try {
+    analytics.init()
+    await Promise.resolve()
+    requests.length = 0
+
+    globalThis.window.analytics("signup", { plan: "pro" })
+    await Promise.resolve()
+
+    assert.equal(requests.length, 1)
+    const body = JSON.parse(requests[0].options.body)
+    assert.equal(body.events[0].name, "signup")
+    assert.equal(body.events[0].site_token, "signed-site-token")
+    assert.equal(body.events[0].properties.plan, "pro")
+  } finally {
+    cleanupBrowserStubs()
+  }
+})
+
+test("analytics tracker supports declarative data-analytics-goal clicks", async () => {
+  const browser = installBrowserStubs()
+  globalThis.window.analyticsConfig = {
+    site: { websiteId: "site_docs", token: "signed-site-token" },
+  }
+
+  const { StandaloneAnalytics } = await loadTrackerModule()
+  const analytics = new StandaloneAnalytics()
+
+  const requests = []
+  globalThis.fetch = async (url, options = {}) => {
+    requests.push({ url, options })
+    return { ok: true }
+  }
+
+  const goalEl = {
+    attributes: [
+      { name: "data-analytics-goal", value: "signup" },
+      { name: "data-analytics-prop-plan", value: "pro" },
+      { name: "data-analytics-prop-cta-label", value: "hero" },
+    ],
+    getAttribute(name) {
+      const attr = this.attributes.find((entry) => entry.name === name)
+      return attr ? attr.value : null
+    },
+  }
+
+  const childEl = {
+    closest(selector) {
+      return selector === "[data-analytics-goal]" ? goalEl : null
+    },
+  }
+
+  try {
+    analytics.init()
+    await Promise.resolve()
+    requests.length = 0
+
+    browser.dispatchDocumentEvent("click", { target: childEl, type: "click" })
+    await Promise.resolve()
+
+    assert.equal(requests.length, 1)
+    const body = JSON.parse(requests[0].options.body)
+    assert.equal(body.events[0].name, "signup")
+    assert.equal(body.events[0].properties.plan, "pro")
+    assert.equal(body.events[0].properties.cta_label, "hero")
   } finally {
     cleanupBrowserStubs()
   }

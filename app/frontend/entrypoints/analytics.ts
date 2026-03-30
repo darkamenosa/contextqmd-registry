@@ -7,18 +7,17 @@
  * - Hybrid apps (mix of both)
  *
  * Similar to Plausible.io, wraps the History API to detect navigation.
- * Usage: Add to <head> with <%= vite_typescript_tag "analytics" %>
+ * Usage: load through the analytics loader at /analytics/script.js
  */
 
 interface AnalyticsConfig {
-  // Ahoy endpoints
+  // Analytics endpoints
   eventsEndpoint: string
+  siteToken?: string
   // Filters
   excludePaths: string[]
   includePaths?: string[] // if provided, only paths matching any will be tracked (plausible-style)
   excludeAssets: string[]
-  // Transport
-  useBeaconForEvents: boolean // legacy flag; events use fetch keepalive by default
   initialPageviewTracked?: boolean // true when the server already tracked the current full-page load
   initialPageKey?: string // server-tracked dedupe key for the current page
   // Routing behavior
@@ -27,10 +26,41 @@ interface AnalyticsConfig {
   debug?: boolean
 }
 
+type EventContext = {
+  page: string
+  url: string
+  title: string
+  referrer: string
+  screenSize: string
+}
+
 declare global {
   interface Window {
     __analyticsInitialized?: boolean
-    analyticsConfig?: Partial<AnalyticsConfig>
+    __analyticsQueue?: Array<[string, Record<string, unknown> | undefined]>
+    analyticsConfig?: {
+      version?: number
+      transport?: {
+        eventsEndpoint?: string
+      }
+      site?: {
+        websiteId?: string | null
+        token?: string | null
+        domainHint?: string | null
+      }
+      tracking?: {
+        hashBasedRouting?: boolean
+        initialPageviewTracked?: boolean
+        initialPageKey?: string
+      }
+      filters?: {
+        includePaths?: string[]
+        excludePaths?: string[]
+        excludeAssets?: string[]
+      }
+      debug?: boolean
+    }
+    analytics?: (name: string, props?: Record<string, unknown>) => void
   }
 }
 
@@ -52,10 +82,9 @@ class StandaloneAnalytics {
 
   constructor() {
     this.config = {
-      eventsEndpoint: "/ahoy/events",
-      // Defaults similar to our app; can be overridden by data-* attributes or window.analyticsConfig
-      // Exclude internal/system endpoints to avoid accidental tracking
-      excludePaths: ["/admin", "/.well-known", "/ahoy", "/cable"],
+      eventsEndpoint: "/analytics/events",
+      // Exclude internal/system endpoints to avoid accidental tracking.
+      excludePaths: ["/admin", "/.well-known", "/analytics", "/ahoy", "/cable"],
       excludeAssets: [
         ".png",
         ".jpg",
@@ -82,7 +111,6 @@ class StandaloneAnalytics {
         ".map",
         ".json",
       ],
-      useBeaconForEvents: false,
       hashBasedRouting: false,
       debug: false,
     }
@@ -101,14 +129,13 @@ class StandaloneAnalytics {
     try {
       const overrides = window.analyticsConfig
       if (overrides && typeof overrides === "object") {
-        this.config = { ...this.config, ...overrides }
+        this.config = { ...this.config, ...this.normalizeConfig(overrides) }
       }
     } catch {
       // Ignore malformed runtime overrides and keep the default config.
     }
 
-    // Read plausible-style include/exclude from script tag if present
-    this.readScriptAttributes()
+    this.installPublicApi()
 
     this.bootstrapServerTrackedPageview()
 
@@ -142,6 +169,7 @@ class StandaloneAnalytics {
     // Engagement and auto-capture listeners
     this.initEngagement()
     this.initAutoCapture()
+    this.initDeclarativeGoalCapture()
   }
 
   private bootstrapServerTrackedPageview(): void {
@@ -152,7 +180,7 @@ class StandaloneAnalytics {
 
     this.lastTrackedHref = href
     this.lastTrackedPageKey = pageKey
-    this.postPageview({ url: href, page: pageKey })
+    this.postPageview(href)
   }
 
   private setupNavigationListener(): void {
@@ -219,7 +247,6 @@ class StandaloneAnalytics {
 
     const href = window.location.href
     const pathname = window.location.pathname
-    const pathQuery = pathname + window.location.search
     const pageKey = this.currentPageKey()
 
     // Skip if same path+query as last tracked (ignore hash-only changes)
@@ -236,20 +263,16 @@ class StandaloneAnalytics {
       return
     }
 
-    const referrer = this.lastTrackedHref || document.referrer || ""
-
-    // Plausible-style event name and props
-    this.sendEvent({
-      name: "pageview",
-      page: pathQuery,
-      url: href,
-      title: document.title,
-      referrer,
-      screenSize: `${window.innerWidth}x${window.innerHeight}`,
-    })
+    this.sendEvent(
+      this.currentEventContext({
+        name: "pageview",
+        url: href,
+        referrer: this.lastTrackedHref || document.referrer || "",
+      })
+    )
 
     this.lastTrackedHref = href
-    this.postPageview({ url: href, page: pathQuery })
+    this.postPageview(href)
   }
 
   private currentPageKey(): string {
@@ -308,14 +331,7 @@ class StandaloneAnalytics {
   }
 
   private sendEvent(
-    properties: {
-      name: string
-      page: string
-      url: string
-      title: string
-      referrer: string
-      screenSize: string
-    },
+    properties: EventContext & { name: string },
     extra?: Record<string, unknown>
   ): void {
     if (typeof window === "undefined") return
@@ -323,6 +339,7 @@ class StandaloneAnalytics {
 
     const event = {
       name: properties.name,
+      site_token: this.config.siteToken,
       properties: {
         page: properties.page,
         url: properties.url,
@@ -403,9 +420,9 @@ class StandaloneAnalytics {
     }
   }
 
-  private postPageview(payload: { url: string; page: string }): void {
+  private postPageview(url: string): void {
     this.currentEngagementIgnored = false
-    this.currentEngagementURL = payload.url
+    this.currentEngagementURL = url
     this.currentEngagementMaxScrollDepth = -1
     this.currentEngagementTime = 0
     this.runningEngagementStart = Date.now()
@@ -472,14 +489,10 @@ class StandaloneAnalytics {
           : 0
       const url = this.currentEngagementURL || window.location.href
       this.sendEvent(
-        {
+        this.currentEventContext({
           name: "engagement",
-          page: window.location.pathname + window.location.search,
-          url,
-          title: document.title,
-          referrer: document.referrer || "",
-          screenSize: `${window.innerWidth}x${window.innerHeight}`,
-        },
+          url: url,
+        }),
         { engaged_ms: engagementTime, scroll_depth: sd }
       )
       // Reset timers
@@ -535,65 +548,152 @@ class StandaloneAnalytics {
       }
       const hrefWithoutQuery = link.href.split("?")[0]
       if (this.isOutboundLink(link)) {
-        this.sendEvent({
-          name: "Outbound Link: Click",
-          page: window.location.pathname + window.location.search,
-          url: link.href,
-          title: document.title,
-          referrer: document.referrer || "",
-          screenSize: `${window.innerWidth}x${window.innerHeight}`,
-        })
+        this.sendEvent(
+          this.currentEventContext({
+            name: "Outbound Link: Click",
+            url: link.href,
+          })
+        )
         return
       }
       if (this.isDownloadToTrack(hrefWithoutQuery)) {
-        this.sendEvent({
-          name: "File Download",
-          page: window.location.pathname + window.location.search,
-          url: hrefWithoutQuery,
-          title: document.title,
-          referrer: document.referrer || "",
-          screenSize: `${window.innerWidth}x${window.innerHeight}`,
-        })
+        this.sendEvent(
+          this.currentEventContext({
+            name: "File Download",
+            url: hrefWithoutQuery,
+          })
+        )
       }
     }
     document.addEventListener("click", handler)
     document.addEventListener("auxclick", handler)
   }
 
-  // Parse plausible-style data attributes from the <script> element that loaded this file
-  private readScriptAttributes(): void {
-    try {
-      const scripts = Array.from(
-        document.getElementsByTagName("script")
-      ) as HTMLScriptElement[]
-      // Heuristic: find a script whose src contains 'analytics' and either data-include or data-exclude set
-      const el = scripts
-        .reverse()
-        .find(
-          (s) =>
-            s.getAttribute("data-include") ||
-            s.getAttribute("data-exclude") ||
-            (s.src && s.src.includes("analytics"))
-        )
-      if (!el) return
+  private initDeclarativeGoalCapture(): void {
+    document.addEventListener("click", (event) => {
+      const goalEl = this.getDeclarativeGoalEl(event.target as Element | null)
+      if (!goalEl) return
 
-      const includeAttr = el.getAttribute("data-include")
-      const excludeAttr = el.getAttribute("data-exclude")
-      if (includeAttr)
-        this.config.includePaths = includeAttr
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean)
-      if (excludeAttr)
-        this.config.excludePaths = [
-          ...this.config.excludePaths,
-          ...excludeAttr
-            .split(",")
-            .map((t) => t.trim())
-            .filter(Boolean),
-        ]
-    } catch {
-      // Ignore malformed tracker script attributes.
+      const goalName = goalEl.getAttribute("data-analytics-goal")?.trim()
+      if (!goalName) return
+
+      this.trackCustomEvent(goalName, this.extractDeclarativeGoalProps(goalEl))
+    })
+  }
+
+  private installPublicApi(): void {
+    if (typeof window === "undefined") return
+
+    const queued = Array.isArray(window.__analyticsQueue)
+      ? [...window.__analyticsQueue]
+      : []
+
+    window.analytics = (name: string, props?: Record<string, unknown>) => {
+      this.trackCustomEvent(name, props)
+    }
+
+    window.__analyticsQueue = []
+
+    for (const [name, props] of queued) {
+      this.trackCustomEvent(name, props)
+    }
+  }
+
+  private trackCustomEvent(
+    name: string,
+    props?: Record<string, unknown>
+  ): void {
+    const normalizedName = typeof name === "string" ? name.trim() : ""
+    if (!normalizedName) return
+
+    this.sendEvent(this.currentEventContext({ name: normalizedName }), props)
+  }
+
+  private getDeclarativeGoalEl(element: Element | null): Element | null {
+    if (!element || typeof element.closest !== "function") return null
+    return element.closest("[data-analytics-goal]")
+  }
+
+  private extractDeclarativeGoalProps(
+    element: Element
+  ): Record<string, unknown> | undefined {
+    const attrs =
+      "attributes" in element && element.attributes
+        ? Array.from(element.attributes)
+        : []
+
+    const props = attrs.reduce<Record<string, unknown>>((memo, attr) => {
+      const name = attr.name
+      if (!name.startsWith("data-analytics-prop-")) return memo
+
+      const rawKey = name.slice("data-analytics-prop-".length).trim()
+      const key = rawKey.replace(/-/g, "_")
+      if (!key) return memo
+
+      memo[key] = attr.value
+      return memo
+    }, {})
+
+    return Object.keys(props).length > 0 ? props : undefined
+  }
+
+  private normalizeConfig(
+    overrides: Window["analyticsConfig"]
+  ): Partial<AnalyticsConfig> {
+    if (!overrides) return {}
+
+    const normalized: Partial<AnalyticsConfig> = {}
+    const transport = overrides.transport
+    const site = overrides.site
+    const tracking = overrides.tracking
+    const filters = overrides.filters
+
+    if (typeof transport?.eventsEndpoint === "string") {
+      normalized.eventsEndpoint = transport.eventsEndpoint
+    }
+
+    if (typeof site?.token === "string") {
+      normalized.siteToken = site.token
+    }
+
+    if (Array.isArray(filters?.includePaths))
+      normalized.includePaths = filters.includePaths
+
+    if (Array.isArray(filters?.excludePaths))
+      normalized.excludePaths = filters.excludePaths
+
+    if (Array.isArray(filters?.excludeAssets))
+      normalized.excludeAssets = filters.excludeAssets
+
+    if (typeof tracking?.hashBasedRouting === "boolean") {
+      normalized.hashBasedRouting = tracking.hashBasedRouting
+    }
+
+    if (typeof tracking?.initialPageviewTracked === "boolean") {
+      normalized.initialPageviewTracked = tracking.initialPageviewTracked
+    }
+
+    if (typeof tracking?.initialPageKey === "string") {
+      normalized.initialPageKey = tracking.initialPageKey
+    }
+
+    if (typeof overrides.debug === "boolean") normalized.debug = overrides.debug
+
+    return normalized
+  }
+
+  private currentEventContext(overrides: {
+    name: string
+    url?: string
+    referrer?: string
+  }): EventContext & { name: string } {
+    return {
+      name: overrides.name,
+      page: window.location.pathname + window.location.search,
+      url: overrides.url ?? window.location.href,
+      title: document.title,
+      referrer: overrides.referrer ?? (document.referrer || ""),
+      screenSize: `${window.innerWidth}x${window.innerHeight}`,
     }
   }
 

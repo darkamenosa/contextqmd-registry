@@ -2,6 +2,7 @@
 
 class AnalyticsProfileKey < AnalyticsRecord
   belongs_to :analytics_profile
+  belongs_to :analytics_site, class_name: "Analytics::Site", optional: true
 
   before_validation :assign_seen_timestamps
 
@@ -16,7 +17,7 @@ class AnalyticsProfileKey < AnalyticsRecord
     false
   end
 
-  def self.matching_profiles(strong_keys)
+  def self.matching_profiles(strong_keys, site: ::Analytics::Current.site)
     return AnalyticsProfile.none unless available?
 
     normalized_keys = normalize_strong_keys(strong_keys)
@@ -28,7 +29,7 @@ class AnalyticsProfileKey < AnalyticsRecord
       matching_keys = matching_keys.or(where(kind: key[:kind], value: key[:value]))
     end
 
-    AnalyticsProfile.canonical.where(id: matching_keys.select(:analytics_profile_id).distinct)
+    AnalyticsProfile.canonical.for_analytics_site(site).where(id: matching_keys.select(:analytics_profile_id).distinct)
   end
 
   def self.normalize_strong_keys(strong_keys)
@@ -59,5 +60,6 @@ class AnalyticsProfileKey < AnalyticsRecord
       now = Time.current
       self.first_seen_at ||= now
       self.last_seen_at ||= self.first_seen_at || now
+      self.analytics_site_id ||= analytics_profile&.analytics_site_id
     end
 end

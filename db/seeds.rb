@@ -139,9 +139,9 @@ if Rails.env.development?
       create_profiles!(now)
 
       puts "Seeded analytics demo data:"
-      puts "  Goals: #{Goal.order(:display_name).pluck(:display_name).join(', ')}"
+      puts "  Goals: #{Analytics::Goal.order(:display_name).pluck(:display_name).join(', ')}"
       puts "  Property keys: #{Analytics::Properties.available_keys.join(', ')}"
-      puts "  Funnels: #{Funnel.order(:name).pluck(:name).join(', ')}"
+      puts "  Funnels: #{Analytics::Funnel.order(:name).pluck(:name).join(', ')}"
       puts "  Seed source labels: #{seed_source_labels.join(', ')}"
       puts "  Seed browsers: #{DEVICES.map { |device| device[:browser] }.uniq.join(', ')}"
       puts "  Seed operating systems: #{DEVICES.map { |device| device[:os] }.uniq.join(', ')}"
@@ -223,19 +223,21 @@ if Rails.env.development?
         AnalyticsProfile::Projection.rebuild(profile) if AnalyticsProfile::Projection.available?
       end
 
-      puts "  Profiles: #{AnalyticsProfile.count} (#{AnalyticsProfile.where(status: 'identified').count} identified)"
+      seed_profiles = AnalyticsProfile.where("public_id LIKE ?", "#{PREFIX}-profile-%")
+      puts "  Profiles: #{seed_profiles.count} (#{seed_profiles.where(status: 'identified').count} identified)"
     end
 
     def ensure_behavior_config!
-      Goal.sync_from_definitions!(DEMO_GOAL_DEFINITIONS)
-      AnalyticsSetting.set_bool("goals_managed", true)
-      AnalyticsSetting.set_json(
-        "allowed_event_props",
-        (Analytics::Properties.available_keys + DEMO_ALLOWED_EVENT_PROPS).uniq.sort
+      site = Analytics::Bootstrap.ensure_default_site!(host: HOSTNAME, name: "ContextQMD")
+
+      Analytics::Goal.sync_from_definitions!(DEMO_GOAL_DEFINITIONS)
+      Analytics::AllowedEventProperty.sync_keys!(
+        (Analytics::Properties.available_keys(site:) + DEMO_ALLOWED_EVENT_PROPS).uniq.sort,
+        site: site
       )
 
       DEMO_FUNNELS.each do |payload|
-        funnel = Funnel.find_or_initialize_by(name: payload.fetch(:name))
+        funnel = Analytics::Funnel.find_or_initialize_by(name: payload.fetch(:name))
         funnel.steps = payload.fetch(:steps)
         funnel.save!
       end
@@ -287,6 +289,8 @@ if Rails.env.development?
       pages = scenario.fetch(:pages)
       second_offset = ((burst_index * 7) % 50).seconds
       started_at = [ bucket_time + second_offset, Time.zone.now.change(usec: 0) ].min
+      landing_page = scenario[:landing_page] || pages.first
+      site_scope = resolved_site_scope_for(landing_page)
 
       visit = Ahoy::Visit.create!(
         visit_token: "#{PREFIX}-visit-#{sequence}",
@@ -294,7 +298,7 @@ if Rails.env.development?
         started_at: started_at,
         ip: "203.0.113.#{(burst_index % 200) + 1}",
         user_agent: "ContextQMD Dev Seed",
-        landing_page: scenario[:landing_page] || pages.first,
+        landing_page: landing_page,
         hostname: HOSTNAME,
         browser: device[:browser],
         browser_version: device[:browser_version],
@@ -311,12 +315,16 @@ if Rails.env.development?
         referring_domain: source[:referring_domain],
         utm_source: source[:utm_source],
         utm_medium: source[:utm_medium],
-        utm_campaign: source[:utm_campaign]
+        utm_campaign: source[:utm_campaign],
+        analytics_site_id: site_scope[:analytics_site_id],
+        analytics_site_boundary_id: site_scope[:analytics_site_boundary_id]
       )
 
       pages.each_with_index do |page, event_index|
         Ahoy::Event.create!(
           visit: visit,
+          analytics_site_id: visit.analytics_site_id,
+          analytics_site_boundary_id: visit.analytics_site_boundary_id,
           name: "pageview",
           time: [ started_at + event_index.minutes + 5.seconds, Time.zone.now.change(usec: 0) ].min,
           properties: {
@@ -331,6 +339,8 @@ if Rails.env.development?
       scenario.fetch(:events).each_with_index do |event_payload, index|
         Ahoy::Event.create!(
           visit: visit,
+          analytics_site_id: visit.analytics_site_id,
+          analytics_site_boundary_id: visit.analytics_site_boundary_id,
           name: event_payload.fetch(:name),
           time: [ started_at + (index + 1).minutes + 20.seconds, Time.zone.now.change(usec: 0) ].min,
           properties: event_payload.fetch(:properties)
@@ -344,6 +354,8 @@ if Rails.env.development?
 
       Ahoy::Event.create!(
         visit: visit,
+        analytics_site_id: visit.analytics_site_id,
+        analytics_site_boundary_id: visit.analytics_site_boundary_id,
         name: "engagement",
         time: [ started_at + 45.seconds, Time.zone.now.change(usec: 0) ].min,
         properties: {
@@ -493,6 +505,16 @@ if Rails.env.development?
           utm_source: source[:utm_source]
         ).source_label
       end.uniq
+    end
+
+    def resolved_site_scope_for(path)
+      boundary = Analytics::SiteBoundary.resolve(host: HOSTNAME, path: path)
+      return {} if boundary.blank?
+
+      {
+        analytics_site_id: boundary.analytics_site_id,
+        analytics_site_boundary_id: boundary.id
+      }
     end
   end
 

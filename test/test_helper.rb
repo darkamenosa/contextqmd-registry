@@ -14,7 +14,10 @@ end
 module ActiveSupport
   class TestCase
     include TenantTestHelper
-    teardown { Current.reset }
+    teardown do
+      Current.reset
+      ::Analytics::Current.reset if defined?(::Analytics::Current)
+    end
 
     parallelize(workers: :number_of_processors)
 

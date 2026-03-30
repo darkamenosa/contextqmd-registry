@@ -74,7 +74,7 @@ class AnalyticsProfile::Journey
 
     ensure_projection!
 
-    visit = Ahoy::Visit.where(analytics_profile_id: profile.id, id: visit_id).take!
+    visit = Ahoy::Visit.for_analytics_site.where(analytics_profile_id: profile.id, id: visit_id).take!
     session = AnalyticsProfileSession.find_by!(analytics_profile_id: profile.id, visit_id: visit.id)
     events = filtered_session_events(visit.id, query)
     journey_events = dedupe_session_events(
@@ -93,12 +93,12 @@ class AnalyticsProfile::Journey
     attr_reader :date
 
     def profile
-      @profile ||= AnalyticsProfile.find_by!(public_id: public_id)
+      @profile ||= AnalyticsProfile.for_analytics_site.find_by!(public_id: public_id)
     end
 
     def visits_scope
       @visits_scope ||= begin
-        scope = Ahoy::Visit.where(analytics_profile_id: profile.id)
+        scope = Ahoy::Visit.for_analytics_site.where(analytics_profile_id: profile.id)
         scope = scope.where(started_at: date.beginning_of_day..date.end_of_day) if date
         scope.order(started_at: :desc, id: :desc)
       end
@@ -107,19 +107,19 @@ class AnalyticsProfile::Journey
     def latest_visit
       @latest_visit ||= begin
         latest_visit_id = summary&.latest_visit_id
-        latest_visit_id.present? ? Ahoy::Visit.find_by(id: latest_visit_id) : visits_scope.first
+        latest_visit_id.present? ? Ahoy::Visit.for_analytics_site.find_by(id: latest_visit_id) : visits_scope.first
       end
     end
 
     def summary
       return unless projected?
 
-      @summary ||= AnalyticsProfileSummary.find_by(analytics_profile_id: profile.id)
+      @summary ||= AnalyticsProfileSummary.for_analytics_site(profile.analytics_site).find_by(analytics_profile_id: profile.id)
     end
 
     def sessions_scope
       @sessions_scope ||= begin
-        scope = AnalyticsProfileSession.where(analytics_profile_id: profile.id)
+        scope = AnalyticsProfileSession.for_analytics_site(profile.analytics_site).where(analytics_profile_id: profile.id)
         scope = scope.where(started_at: date.beginning_of_day..date.end_of_day) if date
         scope.order(started_at: :desc, id: :desc)
       end

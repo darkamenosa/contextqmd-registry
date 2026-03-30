@@ -6,7 +6,7 @@ class Analytics::VisitScope
       query = normalize_query(query_or_filters, advanced_filters:)
       filters = query.filters
       advanced_filters = query.advanced_filters
-      scope = Ahoy::Visit.all
+      scope = Ahoy::Visit.for_analytics_site
 
       if filters.present?
         if (source = filters["source"]).present?
@@ -128,7 +128,10 @@ class Analytics::VisitScope
         by_landing = visits.where(Arel.sql("#{expr} = ?"), label)
 
         candidate_ids = visits
-          .where("landing_page IS NULL OR landing_page = '' OR regexp_replace(landing_page, '^(https://|http://)[^/]+', '') SIMILAR TO ?", "(/ahoy%|/cable%|/rails/%|/assets/%|/up%|/jobs%|/webhooks%)")
+          .where(
+            "landing_page IS NULL OR landing_page = '' OR regexp_replace(landing_page, '^(https://|http://)[^/]+', '') SIMILAR TO ?",
+            Analytics::InternalPaths.report_internal_sql_similar_pattern
+          )
           .pluck(:id)
 
         derived_ids = []
@@ -227,6 +230,7 @@ class Analytics::VisitScope
       exit_page = basic_filters.delete("exit_page")
 
       pageviews = Ahoy::Event
+        .for_analytics_site
         .where(name: "pageview", time: range)
         .joins(:visit)
         .merge(filtered(basic_filters, advanced_filters: advanced_filters))

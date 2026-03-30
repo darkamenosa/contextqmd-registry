@@ -5,6 +5,7 @@ import {
   fetchBehaviorPropertyValues,
   fetchListPage,
 } from "../../api"
+import { analyticsScopedPath } from "../../lib/path-prefix"
 import { useQueryContext } from "../../query-context"
 import type { AnalyticsQuery, ListPayload } from "../../types"
 import type { SuggestionOption } from "./shared"
@@ -29,7 +30,7 @@ export function usePageFetcher(mode: "default" | "entry" | "exit") {
 
       try {
         const payload: ListPayload = await fetchListPage(
-          "/admin/analytics/pages",
+          analyticsScopedPath("/pages"),
           query as AnalyticsQuery,
           extras,
           { limit: 20, page: 1, search: input }
@@ -49,7 +50,7 @@ export function useLocationFetcher(mode: "countries" | "regions" | "cities") {
     async (input: string) => {
       try {
         const payload: ListPayload = await fetchListPage(
-          "/admin/analytics/locations",
+          analyticsScopedPath("/locations"),
           query as AnalyticsQuery,
           { mode },
           { limit: 20, page: 1, search: input }
@@ -79,7 +80,7 @@ export function useSourcesFetcher(
     async (input: string) => {
       try {
         const payload: ListPayload = await fetchListPage(
-          "/admin/analytics/sources",
+          analyticsScopedPath("/sources"),
           query as AnalyticsQuery,
           { mode },
           { limit: 20, page: 1, search: input }
@@ -106,7 +107,7 @@ export function useDeviceFetcher(
     async (input: string) => {
       try {
         const payload: ListPayload = await fetchListPage(
-          "/admin/analytics/devices",
+          analyticsScopedPath("/devices"),
           query as AnalyticsQuery,
           { mode },
           { limit: 20, page: 1, search: input }
@@ -126,7 +127,7 @@ export function useBehaviorFetcher(mode: "conversions") {
     async (input: string) => {
       try {
         const payload: ListPayload = await fetchListPage(
-          "/admin/analytics/behaviors",
+          analyticsScopedPath("/behaviors"),
           query as AnalyticsQuery,
           { mode },
           { limit: 20, page: 1, search: input }

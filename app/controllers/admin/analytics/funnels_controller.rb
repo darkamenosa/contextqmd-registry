@@ -3,8 +3,10 @@
 module Admin
   module Analytics
     class FunnelsController < BaseController
+      include FunnelScoped
+
       def create
-        funnel = Funnel.new(funnel_params)
+        funnel = ::Analytics::Funnel.new(funnel_params)
         funnel.created_by_id = Current.identity&.id
 
         if funnel.save
@@ -15,29 +17,35 @@ module Admin
       end
 
       def update
-        funnel = Funnel.find_by!(name: params[:id])
-        funnel.assign_attributes(update_funnel_params)
+        @funnel.assign_attributes(update_funnel_params)
 
-        if funnel.save
-          render json: camelize_keys({ funnel: { name: funnel.name, steps: funnel.steps } })
+        if @funnel.save
+          render json: camelize_keys({ funnel: { name: @funnel.name, steps: @funnel.steps } })
         else
-          render json: { error: funnel.errors.full_messages.join(", ") }, status: :unprocessable_entity
+          render json: { error: @funnel.errors.full_messages.join(", ") }, status: :unprocessable_entity
         end
       end
 
       def destroy
-        funnel = Funnel.find_by!(name: params[:id])
-        funnel.destroy
+        @funnel.destroy
         head :no_content
       end
 
       private
         def funnel_params
-          params.expect(funnel: [ :name, steps: [] ])
+          raw = params.require(:funnel).to_unsafe_h.slice("name", "steps").with_indifferent_access
+          raw[:steps] = normalize_steps(raw[:steps])
+          raw
         end
 
         def update_funnel_params
-          params.expect(funnel: [ :name, steps: [] ]).compact
+          raw = params.require(:funnel).to_unsafe_h.slice("name", "steps").with_indifferent_access.compact
+          raw[:steps] = normalize_steps(raw[:steps]) if raw.key?(:steps)
+          raw
+        end
+
+        def normalize_steps(steps)
+          ::Analytics::Funnel.normalize_steps(steps)
         end
     end
   end

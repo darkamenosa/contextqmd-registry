@@ -1,6 +1,7 @@
 import { Input } from "@/components/ui/input"
 
 import { useBehaviorsPanelController } from "../hooks/use-behaviors-panel-controller"
+import { analyticsScopedPath } from "../lib/path-prefix"
 import type { BottomPanelPayload, ListMetricKey } from "../types"
 import FunnelSteps from "./behaviors-panel/funnel-steps"
 import ProfilesList from "./behaviors-panel/profiles-list"
@@ -53,7 +54,6 @@ export default function BehaviorsPanel({
     setProfilesSearch,
     setSelectedProfile,
     selectModeWithValue,
-    showNoGoalsHint,
     tablePayload,
   } = useBehaviorsPanelController({
     initialData,
@@ -61,6 +61,20 @@ export default function BehaviorsPanel({
     initialFunnel,
     initialProperty,
   })
+
+  const hasPropertiesTab = behaviourTabs.some((tab) => tab.value === "props")
+  const hasFunnelsTab = behaviourTabs.some((tab) => tab.value === "funnels")
+  const goalsAllZero =
+    mode === "conversions" &&
+    !!tablePayload &&
+    tablePayload.results.length > 0 &&
+    tablePayload.results.every(
+      (item) => Number(item.uniques ?? 0) <= 0 && Number(item.total ?? 0) <= 0
+    )
+  const visitorsEmptyState =
+    profilesSearch.trim().length > 0
+      ? "No visitors match your search"
+      : "No visitors found for this filter"
 
   return (
     <section className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
@@ -78,55 +92,74 @@ export default function BehaviorsPanel({
                 {tab.label}
               </PanelTab>
             ))}
-          {propertyOptions.length > 0 ? (
-            <SelectionTabDropdown
-              active={mode === "props"}
-              label="Properties"
-              options={propertyOptions}
-              value={activeProperty ?? undefined}
-              searchPlaceholder="Search properties"
-              onSelect={(value) => {
-                selectModeWithValue("props", value)
-              }}
-            />
-          ) : (
-            <PanelTab
-              active={mode === "props"}
-              onClick={() => setAndStoreMode("props")}
-            >
-              Properties
-            </PanelTab>
-          )}
-          {availableFunnels.length > 0 ? (
-            <SelectionTabDropdown
-              active={mode === "funnels"}
-              label="Funnels"
-              options={availableFunnels}
-              value={selectedFunnel}
-              searchPlaceholder="Search funnels"
-              onSelect={(value) => {
-                selectModeWithValue("funnels", value)
-              }}
-            />
-          ) : (
+          {hasPropertiesTab ? (
+            propertyOptions.length > 0 ? (
+              <SelectionTabDropdown
+                active={mode === "props"}
+                label="Properties"
+                options={propertyOptions}
+                value={activeProperty ?? undefined}
+                searchPlaceholder="Search properties"
+                onSelect={(value) => {
+                  selectModeWithValue("props", value)
+                }}
+              />
+            ) : (
+              <PanelTab
+                active={mode === "props"}
+                onClick={() => setAndStoreMode("props")}
+              >
+                Properties
+              </PanelTab>
+            )
+          ) : null}
+          {hasFunnelsTab ? (
             <PanelTab
               active={mode === "funnels"}
               onClick={() => setAndStoreMode("funnels")}
             >
               Funnels
             </PanelTab>
-          )}
+          ) : null}
         </PanelTabs>
       </header>
 
-      {showNoGoalsHint ? (
-        <p className="text-sm text-muted-foreground">
-          No goals configured yet. Explore properties or funnels in the
-          meantime.
-        </p>
-      ) : null}
-
-      {mode === "visitors" ? (
+      {mode === "conversions" && !tablePayload ? (
+        <PanelEmptyState>
+          <div className="text-center">
+            <span className="font-medium text-foreground">
+              No goals configured yet
+            </span>
+            <span className="mt-1 block">
+              Open Analytics Settings &gt; Goals to add a managed goal or
+              promote a detected custom event.
+            </span>
+          </div>
+        </PanelEmptyState>
+      ) : mode === "props" && !tablePayload ? (
+        <PanelEmptyState>
+          <div className="text-center">
+            <span className="font-medium text-foreground">
+              No custom properties configured
+            </span>
+            <span className="mt-1 block">
+              Add a property in Analytics Settings to break down events here.
+            </span>
+          </div>
+        </PanelEmptyState>
+      ) : mode === "funnels" && !hasRenderableFunnels ? (
+        <PanelEmptyState>
+          <div className="text-center">
+            <span className="font-medium text-foreground">
+              No funnels configured yet
+            </span>
+            <span className="mt-1 block">
+              Build a funnel in Analytics Settings to track step-by-step
+              dropoff.
+            </span>
+          </div>
+        </PanelEmptyState>
+      ) : mode === "visitors" ? (
         <div className="space-y-4">
           <div className="flex items-center justify-end">
             <div className="relative w-full sm:max-w-xs">
@@ -162,7 +195,17 @@ export default function BehaviorsPanel({
               ) : null}
             </>
           ) : (
-            <PanelEmptyState>No visitors found for this filter</PanelEmptyState>
+            <PanelEmptyState>
+              <div className="text-center">
+                <span className="font-medium text-foreground">
+                  {visitorsEmptyState}
+                </span>
+                <span className="mt-1 block">
+                  Try a different period, remove filters, or wait for more
+                  traffic.
+                </span>
+              </div>
+            </PanelEmptyState>
           )}
           <ProfileJourneySheet
             open={journeyOpen}
@@ -172,10 +215,27 @@ export default function BehaviorsPanel({
         </div>
       ) : loading ? (
         <PanelListSkeleton firstColumnLabel={firstColumnLabel} />
+      ) : goalsAllZero ? (
+        <PanelEmptyState>
+          <div className="text-center">
+            <span className="font-medium text-foreground">
+              No goals completed in this period
+            </span>
+            <span className="mt-1 block">
+              Try a wider date range or remove filters to see historical goal
+              performance.
+            </span>
+          </div>
+        </PanelEmptyState>
       ) : hasRenderableFunnels && funnelData ? (
-        <FunnelSteps data={funnelData} />
-      ) : mode === "funnels" ? (
-        <p className="text-sm text-muted-foreground">No funnels available</p>
+        <FunnelSteps
+          data={funnelData}
+          availableFunnels={availableFunnels}
+          selectedFunnel={selectedFunnel}
+          onSelectFunnel={(name: string) =>
+            selectModeWithValue("funnels", name)
+          }
+        />
       ) : tablePayload ? (
         <>
           {mode === "props" && activeProperty ? (
@@ -206,15 +266,24 @@ export default function BehaviorsPanel({
           </div>
         </>
       ) : (
-        <PanelEmptyState>No data available</PanelEmptyState>
+        <PanelEmptyState>
+          <div className="text-center">
+            <span className="font-medium text-foreground">
+              No data available
+            </span>
+            <span className="mt-1 block">
+              Try a different period or remove filters.
+            </span>
+          </div>
+        </PanelEmptyState>
       )}
 
-      {tablePayload ? (
+      {tablePayload && mode !== "visitors" ? (
         <RemoteDetailsDialog
           open={detailsOpen}
           onOpenChange={setDetailsDialogOpen}
           title={activeTitle}
-          endpoint="/admin/analytics/behaviors"
+          endpoint={analyticsScopedPath("/behaviors")}
           extras={{
             mode,
             funnel: selectedFunnel,

@@ -3,17 +3,7 @@
 module ServerSidePageviewTracking
   extend ActiveSupport::Concern
 
-  EXCLUDED_PREFIXES = %w[
-    /admin
-    /api
-    /ahoy
-    /rails/
-    /assets/
-    /up
-    /jobs
-    /webhooks
-    /.well-known
-  ].freeze
+  EXCLUDED_PREFIXES = Analytics::InternalPaths.server_excluded_prefixes.freeze
 
   EXCLUDED_PATHS = %w[
     /favicon.ico
@@ -35,6 +25,7 @@ module ServerSidePageviewTracking
     def prepare_server_side_pageview_tracking
       return unless analytics_bootstrap_enabled?
 
+      Analytics::BrowserIdentity.ensure!(request, cookies:)
       @analytics_initial_pageview_tracked = true
       @analytics_initial_page_key = analytics_page_key
     end
@@ -52,7 +43,7 @@ module ServerSidePageviewTracking
     end
 
     def analytics_bootstrap_enabled?
-      return false unless Rails.configuration.x.analytics.server_visits
+      return false unless Analytics::Configuration.server_visits?
 
       # Be explicit here: HEAD is routed like GET in Rails, but we only want
       # full HTML document renders to bootstrap/track analytics.
@@ -67,6 +58,11 @@ module ServerSidePageviewTracking
       return false if path.include?("apple-touch-icon")
       return false if speculative_prefetch_request?
       return false if ahoy.exclude?
+      return false unless ::Analytics::TrackingRules.trackable_path?(
+        path,
+        site: ::Analytics::TrackingRules.site_for_request(request),
+        include_internal_defaults: false
+      )
 
       true
     end

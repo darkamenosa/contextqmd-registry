@@ -80,6 +80,39 @@ test("panel mode helpers fall back to legacy mode param", async () => {
   )
 })
 
+test("behaviors mode respects available capabilities", async () => {
+  const panelMode = await loadPanelModeModule()
+
+  assert.equal(
+    panelMode.getBehaviorsModeFromSearch(
+      "?behaviors_mode=props",
+      undefined,
+      true,
+      false,
+      false
+    ),
+    null
+  )
+  assert.equal(
+    panelMode.getBehaviorsModeFromSearch(
+      "?behaviors_mode=funnels",
+      undefined,
+      true,
+      false,
+      false
+    ),
+    null
+  )
+  assert.equal(
+    panelMode.getBehaviorsMode("visitors", true, false, false),
+    "visitors"
+  )
+  assert.equal(
+    panelMode.getBehaviorsMode("conversions", true, false, false),
+    "conversions"
+  )
+})
+
 test("channel filters do not force channels mode", async () => {
   const panelMode = await loadPanelModeModule()
 

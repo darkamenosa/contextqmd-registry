@@ -195,12 +195,14 @@ class Analytics::BehaviorsDatasetQuery::Postgres
 
     def funnels_payload
       visits = Analytics::VisitScope.visits(range, query)
-      names = Funnel.order(:name).pluck(:name)
+      names = Analytics::Funnel.effective_scope.order(:name).pluck(:name)
       active_name = query.funnel.presence || names.first
       return { funnels: names, active: { name: "", steps: [] } } if active_name.blank?
 
-      funnel = Funnel.find_by(name: active_name)
+      funnel = Analytics::Funnel.effective_find_by_name(active_name)
       return { funnels: names, active: { name: "", steps: [] } } unless funnel
+      steps = funnel.normalized_steps
+      return { funnels: names, active: { name: funnel.name, steps: [] } } if steps.empty?
 
       event_rows = Ahoy::Event
         .joins(:visit)
@@ -217,30 +219,20 @@ class Analytics::BehaviorsDatasetQuery::Postgres
       token_by_visit = visits.pluck(:id, :visitor_token).to_h
       total_visitors = visits.distinct.count(:visitor_token)
 
-      sets = Array.new(funnel.steps.length) { Set.new }
+      sets = Array.new(steps.length) { Set.new }
       by_visit.each do |visit_id, events|
         next if events.empty?
 
         step_index = 0
         current_time = Time.at(0)
-        while step_index < funnel.steps.length
-          step = funnel.steps[step_index].to_h.with_indifferent_access
-          step_type = step[:type].to_s
-          match = step[:match].to_s
-          value = step[:value].to_s
+        while step_index < steps.length
+          step = steps[step_index].with_indifferent_access
           found = false
 
           events.each do |time, name, page|
             next if time < current_time
 
-            matched = case step_type
-            when "event"
-              match == "equals" ? (name == value) : name.include?(value)
-            when "page"
-              match == "contains" ? page.include?(value) : page == value
-            else
-              false
-            end
+            matched = funnel_step_match?(step, name:, page:)
 
             next unless matched
 
@@ -272,7 +264,7 @@ class Analytics::BehaviorsDatasetQuery::Postgres
           0.0
         end
 
-      steps = funnel.steps.each_with_index.map do |step, index|
+      steps = steps.each_with_index.map do |step, index|
         step = step.with_indifferent_access
         visitors = sets[index].size
         previous_visitors = index.zero? ? entering_visitors : sets[index - 1].size
@@ -304,7 +296,7 @@ class Analytics::BehaviorsDatasetQuery::Postgres
           else
             0.0
           end
-        label = step[:name] || step[:type].to_s.capitalize
+        label = step[:name].presence || step[:goal_key].presence || step[:value].presence || step[:type].to_s.capitalize
 
         {
           name: label,
@@ -332,18 +324,49 @@ class Analytics::BehaviorsDatasetQuery::Postgres
       }
     end
 
+    def funnel_step_match?(step, name:, page:)
+      step_type = step[:type].to_s
+      match = step[:match].to_s
+
+      case step_type
+      when "goal", "event"
+        goal_key = step[:goal_key].presence || step[:value].to_s
+        return false if goal_key.blank?
+
+        name == goal_key
+      when "page_visit", "page"
+        value = step[:value].to_s
+        return false if value.blank?
+
+        case match
+        when "contains"
+          page.include?(value)
+        when "starts_with"
+          page.start_with?(value)
+        when "ends_with"
+          page.end_with?(value)
+        else
+          page == value
+        end
+      else
+        false
+      end
+    end
+
     def conversions_payload
       names = Analytics::Goals.available_names
       names = names.select { |name| comparison_names.include?(name.to_s) } if comparison_names.any?
 
       rows = names.map do |goal_name|
+        configured_goal = Analytics::Goals.configured(goal_name)
         totals = Analytics::ReportMetrics.goal_metric_totals(
           range,
           query.with_filter(:goal, goal_name.to_s)
         )
 
         {
-          name: goal_name.to_s,
+          name: Analytics::Goals.display_label(configured_goal || goal_name),
+          filter_value: goal_name.to_s,
           uniques: totals[:unique_conversions],
           total: totals[:total_conversions],
           conversion_rate: totals[:conversion_rate]

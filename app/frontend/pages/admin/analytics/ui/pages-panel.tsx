@@ -13,7 +13,9 @@ import {
   pagesModeForSegment,
   pagesSegmentForMode,
   parseDialogFromPath,
+  type PagesMode,
 } from "../lib/dialog-path"
+import { analyticsScopedPath } from "../lib/path-prefix"
 import {
   analyticsPreferenceKey,
   writeAnalyticsPreference,
@@ -27,7 +29,13 @@ import { MetricTable, PanelEmptyState, PanelListSkeleton } from "./list-table"
 import { PanelTab, PanelTabs } from "./panel-tabs"
 import RemoteDetailsDialog from "./remote-details-dialog"
 
-const PAGE_TABS: Array<{ value: string; label: string; short: string }> = [
+type CardPagesMode = "pages" | "entry" | "exit"
+
+const PAGE_TABS: Array<{
+  value: CardPagesMode
+  label: string
+  short: string
+}> = [
   { value: "pages", label: "Top Pages", short: "Top Pages" },
   { value: "entry", label: "Entry Pages", short: "Entry Pages" },
   { value: "exit", label: "Exit Pages", short: "Exit Pages" },
@@ -35,11 +43,44 @@ const PAGE_TABS: Array<{ value: string; label: string; short: string }> = [
 
 const TITLE_FOR_MODE: Record<string, string> = {
   pages: "Top Pages",
+  seo: "SEO Pages",
   entry: "Entry Pages",
   exit: "Exit Pages",
 }
 
 const STORAGE_PREFIX = "admin.analytics.pages"
+
+function normalizeCardMode(mode: string): CardPagesMode {
+  switch (mode) {
+    case "entry":
+    case "exit":
+      return mode
+    default:
+      return "pages"
+  }
+}
+
+function firstColumnLabelForMode(mode: PagesMode) {
+  switch (mode) {
+    case "entry":
+      return "Entry page"
+    case "exit":
+      return "Exit page"
+    default:
+      return "Page"
+  }
+}
+
+function drillKeyForMode(mode: PagesMode) {
+  switch (mode) {
+    case "entry":
+      return "entry_page"
+    case "exit":
+      return "exit_page"
+    default:
+      return "page"
+  }
+}
 
 type PagesPanelProps = {
   initialData: ListPayload
@@ -53,7 +94,9 @@ export default function PagesPanel({
   const { query, pathname, updateQuery } = useQueryContext()
   const site = useSiteContext()
 
-  const [preferredMode, setPreferredMode] = useState(() => initialMode)
+  const [preferredMode, setPreferredMode] = useState<CardPagesMode>(() =>
+    normalizeCardMode(initialMode)
+  )
   const { value: baseQuery } = useScopedQuery(query, {
     omitMode: true,
     omitMetric: true,
@@ -65,10 +108,11 @@ export default function PagesPanel({
     if (parsed.type !== "segment") return null
     return pagesModeForSegment(parsed.segment)
   }, [pathname])
-  const mode = dialogMode ?? preferredMode
+  const mode = preferredMode
+  const detailsMode: PagesMode = dialogMode ?? preferredMode
   const detailsOpen = Boolean(dialogMode)
   const initialRequestKey = useMemo(
-    () => JSON.stringify([baseQuery, initialMode]),
+    () => JSON.stringify([baseQuery, normalizeCardMode(initialMode)]),
     [baseQuery, initialMode]
   )
   const requestKey = useMemo(
@@ -92,37 +136,22 @@ export default function PagesPanel({
   )
 
   const activeTitle = useMemo(() => TITLE_FOR_MODE[mode] ?? "Pages", [mode])
+  const detailsTitle = useMemo(
+    () => TITLE_FOR_MODE[detailsMode] ?? "Pages",
+    [detailsMode]
+  )
 
-  const firstColumnLabel = useMemo(() => {
-    switch (mode) {
-      case "entry":
-        return "Entry page"
-      case "exit":
-        return "Exit page"
-      default:
-        return "Page"
-    }
-  }, [mode])
-
-  const drillKey = useMemo(() => {
-    switch (mode) {
-      case "entry":
-        return "entry_page"
-      case "exit":
-        return "exit_page"
-      default:
-        return "page"
-    }
-  }, [mode])
+  const firstColumnLabel = useMemo(() => firstColumnLabelForMode(mode), [mode])
 
   const drillInto = useCallback(
-    (value: string) => {
+    (value: string, modeValue: PagesMode = mode) => {
+      const drillKey = drillKeyForMode(modeValue)
       updateQuery((current) => ({
         ...current,
         filters: { ...current.filters, [drillKey]: value },
       }))
     },
-    [drillKey, updateQuery]
+    [mode, updateQuery]
   )
 
   // Limit card view to top 9 by the first metric; Details uses full list
@@ -202,9 +231,7 @@ export default function PagesPanel({
               data-testid="pages-details-btn"
               onClick={() => {
                 try {
-                  const seg = pagesSegmentForMode(
-                    mode as "pages" | "entry" | "exit"
-                  )
+                  const seg = pagesSegmentForMode(mode)
                   openReportsDialogRoute((search) =>
                     buildDialogPath(seg, search)
                   )
@@ -223,7 +250,7 @@ export default function PagesPanel({
         open={detailsOpen}
         onOpenChange={(open) => {
           try {
-            const seg = pagesSegmentForMode(mode as "pages" | "entry" | "exit")
+            const seg = pagesSegmentForMode(detailsMode)
             syncReportsDialogRoute(open, (search) =>
               buildDialogPath(seg, search)
             )
@@ -231,13 +258,13 @@ export default function PagesPanel({
             // Ignore history errors when syncing the modal route.
           }
         }}
-        title={activeTitle}
-        endpoint={"/admin/analytics/pages"}
-        extras={{ mode }}
-        defaultSortKey={"visitors"}
-        firstColumnLabel={firstColumnLabel}
+        title={detailsTitle}
+        endpoint={analyticsScopedPath("/pages")}
+        extras={{ mode: detailsMode }}
+        defaultSortKey={detailsMode === "seo" ? "clicks" : "visitors"}
+        firstColumnLabel={firstColumnLabelForMode(detailsMode)}
         onRowClick={(item) => {
-          drillInto(String(item.name))
+          drillInto(String(item.name), detailsMode)
           closeDetailsDialog()
         }}
       />

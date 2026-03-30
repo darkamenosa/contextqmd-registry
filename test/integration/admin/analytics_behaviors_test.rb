@@ -8,9 +8,12 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
   setup do
     Ahoy::Event.delete_all
     Ahoy::Visit.delete_all
-    AnalyticsSetting.delete_all
-    Goal.delete_all
-    Funnel.delete_all
+    Analytics::AllowedEventProperty.delete_all if defined?(Analytics::AllowedEventProperty)
+    Analytics::SiteBoundary.delete_all
+    Analytics::Site.delete_all
+    Analytics::Goal.delete_all
+    Analytics::Funnel.delete_all
+    Analytics::Bootstrap.ensure_default_site!(host: "localhost")
   end
 
   test "behaviors props endpoint returns real property keys and selected value breakdown" do
@@ -50,9 +53,11 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
       time: Time.zone.now.change(usec: 0)
     )
 
+    configure_allowed_props("plan", "source")
+
     sign_in(staff_identity)
 
-    get "/admin/analytics/behaviors",
+    get behaviors_path,
         params: { period: "day", mode: "props", property: "plan", with_imported: "false" },
         headers: { "ACCEPT" => "application/json" }
 
@@ -97,9 +102,11 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
       time: Time.zone.now.change(usec: 0)
     )
 
+    configure_allowed_props("plan")
+
     sign_in(staff_identity)
 
-    get "/admin/analytics/behaviors?period=day&mode=props&property=plan&f=is,prop:plan,Pro",
+    get "#{behaviors_path}?period=day&mode=props&property=plan&f=is,prop:plan,Pro",
         headers: { "ACCEPT" => "application/json" }
 
     assert_response :success
@@ -136,9 +143,11 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
       time: Time.zone.now.change(usec: 0)
     )
 
+    configure_allowed_props("plan")
+
     sign_in(staff_identity)
 
-    get "/admin/analytics/behaviors?period=day&mode=props&property=plan&f=is_not,prop:plan,Pro",
+    get "#{behaviors_path}?period=day&mode=props&property=plan&f=is_not,prop:plan,Pro",
         headers: { "ACCEPT" => "application/json" }
 
     assert_response :success
@@ -173,9 +182,11 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
       )
     end
 
+    Analytics::Goal.create!(display_name: "Signup", event_name: "Signup", custom_props: {})
+
     sign_in(staff_identity)
 
-    get "/admin/analytics/behaviors",
+    get behaviors_path,
         params: { period: "day", mode: "conversions", with_imported: "false" },
         headers: { "ACCEPT" => "application/json" }
 
@@ -199,7 +210,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
     )
     staff_identity.update!(staff: true)
 
-    Goal.create!(display_name: "Signup", event_name: "Signup", custom_props: {})
+    Analytics::Goal.create!(display_name: "Signup", event_name: "Signup", custom_props: {})
 
     visit = Ahoy::Visit.create!(
       visit_token: SecureRandom.hex(16),
@@ -216,7 +227,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
 
     sign_in(staff_identity)
 
-    get "/admin/analytics/behaviors",
+    get behaviors_path,
         params: { period: "day", mode: "conversions", with_imported: "false" },
         headers: { "ACCEPT" => "application/json" }
 
@@ -230,6 +241,44 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
     Current.reset
   end
 
+  test "behaviors conversions endpoint humanizes raw event-style goal labels while preserving filter values" do
+    staff_identity, = create_tenant(
+      email: "staff-behaviors-humanized-goals-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Behaviors Humanized Goals"
+    )
+    staff_identity.update!(staff: true)
+
+    Analytics::Goal.create!(display_name: "add_site", event_name: "add_site", custom_props: {})
+
+    visit = Ahoy::Visit.create!(
+      visit_token: SecureRandom.hex(16),
+      visitor_token: SecureRandom.hex(16),
+      started_at: Time.zone.now.change(usec: 0)
+    )
+
+    Ahoy::Event.create!(
+      visit: visit,
+      name: "add_site",
+      properties: {},
+      time: Time.zone.now.change(usec: 0)
+    )
+
+    sign_in(staff_identity)
+
+    get behaviors_path,
+        params: { period: "day", mode: "conversions", with_imported: "false" },
+        headers: { "ACCEPT" => "application/json" }
+
+    assert_response :success
+
+    row = JSON.parse(response.body).fetch("results").first
+    assert_equal "Add Site", row.fetch("name")
+    assert_equal "add_site", row.fetch("filterValue")
+    assert_equal 1, row.fetch("uniques")
+  ensure
+    Current.reset
+  end
+
   test "behaviors conversions endpoint supports configured page and scroll goals" do
     staff_identity, = create_tenant(
       email: "staff-behaviors-page-scroll-goals-#{SecureRandom.hex(4)}@example.com",
@@ -237,8 +286,8 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
     )
     staff_identity.update!(staff: true)
 
-    Goal.create!(display_name: "Visit /blog*", page_path: "/blog*", scroll_threshold: -1, custom_props: {})
-    Goal.create!(display_name: "Scroll Docs", page_path: "/docs/getting-started", scroll_threshold: 60, custom_props: {})
+    Analytics::Goal.create!(display_name: "Visit /blog*", page_path: "/blog*", scroll_threshold: -1, custom_props: {})
+    Analytics::Goal.create!(display_name: "Scroll Docs", page_path: "/docs/getting-started", scroll_threshold: 60, custom_props: {})
 
     page_visit = Ahoy::Visit.create!(
       visit_token: SecureRandom.hex(16),
@@ -266,7 +315,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
 
     sign_in(staff_identity)
 
-    get "/admin/analytics/behaviors",
+    get behaviors_path,
         params: { period: "day", mode: "conversions", with_imported: "false" },
         headers: { "ACCEPT" => "application/json" }
 
@@ -286,7 +335,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
     )
     staff_identity.update!(staff: true)
 
-    Goal.create!(display_name: "Visit /blog*", page_path: "/blog*", scroll_threshold: -1, custom_props: {})
+    Analytics::Goal.create!(display_name: "Visit /blog*", page_path: "/blog*", scroll_threshold: -1, custom_props: {})
 
     matching_visit = Ahoy::Visit.create!(
       visit_token: SecureRandom.hex(16),
@@ -312,9 +361,11 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
       time: Time.zone.now.change(usec: 0)
     )
 
+    configure_allowed_props("plan")
+
     sign_in(staff_identity)
 
-    get "/admin/analytics/behaviors?period=day&mode=props&property=plan&with_imported=false&f=is,goal,Visit%20%2Fblog*",
+    get "#{behaviors_path}?period=day&mode=props&property=plan&with_imported=false&f=is,goal,Visit%20%2Fblog*",
         headers: { "ACCEPT" => "application/json" }
 
     assert_response :success
@@ -365,9 +416,12 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
       )
     end
 
+    Analytics::Goal.create!(display_name: "Signup", event_name: "Signup", custom_props: {})
+    configure_allowed_props("plan")
+
     sign_in(staff_identity)
 
-    get "/admin/analytics/behaviors?period=day&mode=props&property=plan&with_imported=false&f=is,goal,Signup",
+    get "#{behaviors_path}?period=day&mode=props&property=plan&with_imported=false&f=is,goal,Signup",
         headers: { "ACCEPT" => "application/json" }
 
     assert_response :success
@@ -389,8 +443,6 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
     )
     staff_identity.update!(staff: true)
 
-    AnalyticsSetting.set_json("allowed_event_props", [ "plan" ])
-
     visit = Ahoy::Visit.create!(
       visit_token: SecureRandom.hex(16),
       visitor_token: SecureRandom.hex(16),
@@ -404,9 +456,11 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
       time: Time.zone.now.change(usec: 0)
     )
 
+    configure_allowed_props("plan")
+
     sign_in(staff_identity)
 
-    get "/admin/analytics/behaviors",
+    get behaviors_path,
         params: { period: "day", mode: "props", with_imported: "false" },
         headers: { "ACCEPT" => "application/json" }
 
@@ -453,9 +507,11 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
         )
       end
 
+      configure_allowed_props("plan")
+
       sign_in(staff_identity)
 
-      get "/admin/analytics/behaviors",
+      get behaviors_path,
           params: { period: "day", mode: "props", property: "plan", comparison: "previous_period", match_day_of_week: "false", with_imported: "false" },
           headers: { "ACCEPT" => "application/json" }
 
@@ -504,9 +560,11 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
         )
       end
 
+      Analytics::Goal.create!(display_name: "Signup", event_name: "Signup", custom_props: {})
+
       sign_in(staff_identity)
 
-      get "/admin/analytics/behaviors",
+      get behaviors_path,
           params: { period: "day", mode: "conversions", comparison: "previous_period", match_day_of_week: "false", with_imported: "false" },
           headers: { "ACCEPT" => "application/json" }
 
@@ -554,9 +612,11 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
       time: Time.zone.now.change(usec: 0)
     )
 
+    configure_allowed_props("plan")
+
     sign_in(staff_identity)
 
-    get "/admin/analytics/behaviors?period=day&mode=props&property=plan&f=is_not,browser,Chrome",
+    get "#{behaviors_path}?period=day&mode=props&property=plan&f=is_not,browser,Chrome",
         headers: { "ACCEPT" => "application/json" }
 
     assert_response :success
@@ -574,10 +634,10 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
     )
     staff_identity.update!(staff: true)
 
-    Funnel.create!(
+    Analytics::Funnel.create!(
       name: "Signup Funnel",
       steps: [
-        { name: "Signup", type: "event", match: "equals", value: "Signup" }
+        { name: "Signup", type: "goal", match: "completes", goal_key: "Signup" }
       ]
     )
 
@@ -609,7 +669,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
 
     sign_in(staff_identity)
 
-    get "/admin/analytics/behaviors?period=day&mode=funnels&funnel=Signup+Funnel&f=is_not,browser,Chrome",
+    get "#{behaviors_path}?period=day&mode=funnels&funnel=Signup+Funnel&f=is_not,browser,Chrome",
         headers: { "ACCEPT" => "application/json" }
 
     assert_response :success
@@ -627,11 +687,11 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
     )
     staff_identity.update!(staff: true)
 
-    Funnel.create!(
+    Analytics::Funnel.create!(
       name: "Signup Funnel",
       steps: [
-        { name: "View pricing", type: "page", match: "equals", value: "/pricing" },
-        { name: "Signup", type: "event", match: "equals", value: "Signup" }
+        { name: "View pricing", type: "page_visit", match: "starts_with", value: "/pricing" },
+        { name: "Signup", type: "goal", match: "completes", goal_key: "Signup" }
       ]
     )
 
@@ -680,7 +740,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
 
     sign_in(staff_identity)
 
-    get "/admin/analytics/behaviors?period=day&mode=funnels&funnel=Signup+Funnel",
+    get "#{behaviors_path}?period=day&mode=funnels&funnel=Signup+Funnel",
         headers: { "ACCEPT" => "application/json" }
 
     assert_response :success
@@ -712,4 +772,14 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
   ensure
     Current.reset
   end
+
+  private
+    def configure_allowed_props(*keys)
+      site = Analytics::Site.active.order(:id).first
+      Analytics::AllowedEventProperty.sync_keys!(keys.flatten, site: site)
+    end
+
+    def behaviors_path
+      "/admin/analytics/sites/#{Analytics::Site.sole_active.public_id}/behaviors"
+    end
 end

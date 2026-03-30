@@ -6,7 +6,7 @@ import DeviceTypeIcon from "@/components/analytics/device-type-icon"
 import { flagFromIso2 } from "../../lib/country-flag"
 import { getBrowserIcon, getOSIcon } from "../../lib/device-visuals"
 import { getSourceFaviconDomain } from "../../lib/source-visuals"
-import { formatProfileLocation } from "./formatters"
+import { formatCompactLocation, formatProfileLocation } from "./formatters"
 
 export function ProfileLocationText({
   city,
@@ -32,6 +32,57 @@ export function ProfileLocationText({
     <span className={className}>
       {flag ? `${flag} ` : ""}
       {label}
+    </span>
+  )
+}
+
+export function ProfileCompactLocationText({
+  city,
+  region,
+  country,
+  countryCode,
+  className,
+}: {
+  city?: string | null
+  region?: string | null
+  country?: string | null
+  countryCode?: string | null
+  className?: string
+}) {
+  const label = formatCompactLocation(
+    { city, region, country, countryCode },
+    { flagShown: true }
+  )
+  const flag = flagFromIso2(countryCode ?? undefined)
+
+  if (!label) return null
+
+  return (
+    <span className={className}>
+      {flag ? `${flag} ` : ""}
+      {label}
+    </span>
+  )
+}
+
+export function ProfileCountryText({
+  country,
+  countryCode,
+  className,
+}: {
+  country?: string | null
+  countryCode?: string | null
+  className?: string
+}) {
+  const label = countryCode?.trim().toUpperCase() || country?.trim()
+  const flag = flagFromIso2(countryCode ?? undefined)
+
+  if (!label) return null
+
+  return (
+    <span className={cn("inline-flex items-center gap-1", className)}>
+      {flag ? <span aria-hidden>{flag}</span> : null}
+      <span>{label}</span>
     </span>
   )
 }
