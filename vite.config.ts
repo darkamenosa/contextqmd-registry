@@ -17,7 +17,6 @@ export default defineConfig({
     sourcemap: false,
     rollupOptions: {
       output: {
-        onlyExplicitManualChunks: true,
         manualChunks(id) {
           if (
             id.includes("/node_modules/chart.js/") ||

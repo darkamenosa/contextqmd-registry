@@ -1,4 +1,4 @@
-import { Github, Mail } from "lucide-react"
+import { GitBranch, Mail } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import PublicLayout from "@/layouts/public-layout"
@@ -44,7 +44,7 @@ export default function Contact({ seo }: Props) {
                 />
               }
             >
-              <Github className="size-5" />
+              <GitBranch className="size-5" />
               GitHub
             </Button>
             <Button

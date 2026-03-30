@@ -91,3 +91,4 @@ gem "ahoy_matey"
 gem "maxminddb"
 
 gem "countries", "~> 8.1"
+gem "lograge"

@@ -6,11 +6,10 @@ import { SidebarBreadcrumbHeader } from "@/components/shared/sidebar-breadcrumb-
 function getBreadcrumbs(url: string) {
   const path = url.split("?")[0].split("#")[0]
   const scopedMatch = path.match(/^\/app\/(\d+)(?:\/(.*))?$/)
-  let basePath = "/app"
-  let stripped = ""
+  const basePath = scopedMatch ? `/app/${scopedMatch[1]}` : "/app"
+  let stripped: string
 
   if (scopedMatch) {
-    basePath = `/app/${scopedMatch[1]}`
     stripped = scopedMatch[2] || ""
   } else if (path === "/app") {
     return [{ label: "Dashboard" }]
