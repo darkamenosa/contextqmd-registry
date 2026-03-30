@@ -16,6 +16,11 @@ class ApplicationController < ActionController::Base
 
   before_action :redirect_trailing_slash
 
+  def append_info_to_payload(payload)
+    super
+    payload[:cache_control] = response.headers["Cache-Control"]
+  end
+
   private
 
     # Prevent duplicate content from trailing-slash URLs (preserves query params)

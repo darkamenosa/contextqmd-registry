@@ -40,7 +40,6 @@ Rails.application.configure do
   config.lograge.keep_original_rails_log = false
   config.lograge.custom_payload do |controller|
     request = controller.request
-    response = controller.response
 
     {
       request_id: request.request_id,
@@ -51,12 +50,13 @@ Rails.application.configure do
       format: request.format&.symbol,
       method: request.request_method,
       query: request.query_string.presence,
-      response_content_type: response.media_type,
-      cache_control: response.headers["Cache-Control"]
+      response_content_type: controller.response.media_type,
+      cache_control: nil
     }
   end
   config.lograge.custom_options = lambda do |event|
     exceptions = Array(event.payload[:exception])
+    custom_payload = event.payload[:custom_payload] || {}
 
     {
       params: event.payload[:params]&.except(
@@ -68,6 +68,7 @@ Rails.application.configure do
         "password",
         "password_confirmation"
       ),
+      cache_control: event.payload[:cache_control] || custom_payload[:cache_control],
       db: event.payload[:db_runtime]&.round(1),
       view: event.payload[:view_runtime]&.round(1),
       exception: exceptions.presence,
