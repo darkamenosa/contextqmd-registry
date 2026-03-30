@@ -3,6 +3,8 @@
 require "test_helper"
 
 class LibraryPageCachingTest < ActionDispatch::IntegrationTest
+  include Devise::Test::IntegrationHelpers
+
   setup do
     hex = SecureRandom.hex(4)
     account = Account.system
@@ -43,6 +45,7 @@ class LibraryPageCachingTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_includes response.headers["Cache-Control"], "public"
     assert_includes response.headers["Cache-Control"], "max-age=3600"
+    assert_equal "public, max-age=3600, stale-while-revalidate=60", response.headers["Cloudflare-CDN-Cache-Control"]
 
     etag = response.headers["ETag"]
     assert etag.present?
@@ -67,5 +70,29 @@ class LibraryPageCachingTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal "true", response.headers["X-Inertia"]
     assert_equal "application/json; charset=utf-8", response.content_type
+    assert_equal "no-store", response.headers["Cache-Control"]
+    assert_nil response.headers["Cloudflare-CDN-Cache-Control"]
+  end
+
+  test "authenticated html request does not emit public cache headers" do
+    identity = Identity.create!(
+      email: "cache-test-#{SecureRandom.hex(4)}@example.com",
+      password: "password123",
+      password_confirmation: "password123"
+    )
+    User.create!(
+      account: @library.account,
+      identity: identity,
+      name: "Cache Test User",
+      role: "member"
+    )
+
+    sign_in(identity)
+
+    get "/libraries/#{@library.slug}/versions/#{@version.version}/pages/#{@page.page_uid}"
+
+    assert_response :success
+    assert_equal "private, no-store", response.headers["Cache-Control"]
+    assert_nil response.headers["Cloudflare-CDN-Cache-Control"]
   end
 end

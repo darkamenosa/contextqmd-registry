@@ -27,6 +27,7 @@ Guidance for Claude Code when working with this Rails + InertiaJS React/TypeScri
 - Follow DHH/Rails conventions strictly (see patterns below)
 - Use `params.expect` (Rails 8+), not `params.require().permit()`
 - Inertia props: use **snake_case** in Ruby — `prop_transformer` auto-converts to camelCase
+- When implementing HTTP/CDN caching for Inertia routes, treat full HTML document requests and `X-Inertia` requests as different response types. Only cache explicitly public anonymous HTML responses; do not apply public/shared caching to Inertia requests or to HTML that can vary based on authenticated header/nav state (`Current.identity`, flash, cookies, session). In this app, use `Current.identity.present?` as the main personalization/auth boundary for cache safety on public pages
 - Never run migrations automatically — ask first
 - Always use gem's official generators — never manually write files that generators create
 - Generate migrations with Rails generators like `bin/rails generate migration ...` or `bin/rails generate model ...`; do not create migration files by hand

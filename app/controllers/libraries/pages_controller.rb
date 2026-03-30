@@ -5,6 +5,7 @@ class Libraries::PagesController < InertiaController
   disallow_account_scope
 
   CACHE_TTL = 1.hour
+  EDGE_CACHE_CONTROL = "public, max-age=#{CACHE_TTL.to_i}, stale-while-revalidate=60".freeze
 
   def show
     library = Library.find_by!(slug: params[:slug])
@@ -60,9 +61,18 @@ class Libraries::PagesController < InertiaController
   private
 
     def apply_public_cache_headers(library:, version:, page:)
-      return true if request.inertia?
+      if request.inertia?
+        mark_non_cacheable!(private_cache: false)
+        return true
+      end
+
+      if Current.identity.present?
+        mark_non_cacheable!(private_cache: true)
+        return true
+      end
 
       expires_in CACHE_TTL, public: true
+      response.set_header("Cloudflare-CDN-Cache-Control", EDGE_CACHE_CONTROL)
 
       stale?(
         etag: [
@@ -75,6 +85,11 @@ class Libraries::PagesController < InertiaController
         last_modified: [ library.updated_at, version.updated_at, page.updated_at ].compact.max,
         public: true
       )
+    end
+
+    def mark_non_cacheable!(private_cache:)
+      response.delete_header("Cloudflare-CDN-Cache-Control")
+      response.headers["Cache-Control"] = private_cache ? "private, no-store" : "no-store"
     end
 
     def library_summary(library)
