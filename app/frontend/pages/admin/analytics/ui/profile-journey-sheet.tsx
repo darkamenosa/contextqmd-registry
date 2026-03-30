@@ -42,7 +42,8 @@ import type {
 } from "../types"
 import {
   formatCompactNumber,
-  formatProfileSessionEngagement,
+  formatProfileEngagedTime,
+  formatProfileSessionDuration,
   maskEmail,
 } from "./profile/formatters"
 import {
@@ -116,6 +117,41 @@ function EventIcon({ kind }: { kind: EventKind }) {
     default:
       return <Zap className="size-3.5 shrink-0 text-amber-500" />
   }
+}
+
+function SessionMetrics({ session }: { session: ProfileSessionItem }) {
+  const engagedTime = formatProfileEngagedTime(session.engagedMsTotal)
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+      <span>
+        Duration{" "}
+        <span className="font-medium text-foreground tabular-nums">
+          {formatProfileSessionDuration(session.durationSeconds)}
+        </span>
+      </span>
+      {engagedTime ? (
+        <span>
+          Engaged time{" "}
+          <span className="font-medium text-foreground tabular-nums">
+            {engagedTime}
+          </span>
+        </span>
+      ) : null}
+      <span>
+        Pageviews{" "}
+        <span className="font-medium text-foreground tabular-nums">
+          {session.pageviewsCount}
+        </span>
+      </span>
+      <span>
+        Events{" "}
+        <span className="font-medium text-foreground tabular-nums">
+          {session.eventsCount}
+        </span>
+      </span>
+    </div>
+  )
 }
 
 function shouldShowSecondaryPageLine(
@@ -619,31 +655,7 @@ export default function ProfileJourneySheet({
                                 ) : null}
                               </div>
 
-                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                                <span>
-                                  Engaged{" "}
-                                  <span className="font-medium text-foreground tabular-nums">
-                                    {formatProfileSessionEngagement({
-                                      engagedMsTotal: session.engagedMsTotal,
-                                      durationSeconds: session.durationSeconds,
-                                      pageviewsCount: session.pageviewsCount,
-                                      eventsCount: session.eventsCount,
-                                    })}
-                                  </span>
-                                </span>
-                                <span>
-                                  Pageviews{" "}
-                                  <span className="font-medium text-foreground tabular-nums">
-                                    {session.pageviewsCount}
-                                  </span>
-                                </span>
-                                <span>
-                                  Events{" "}
-                                  <span className="font-medium text-foreground tabular-nums">
-                                    {session.eventsCount}
-                                  </span>
-                                </span>
-                              </div>
+                              <SessionMetrics session={session} />
 
                               <div className="flex min-w-0 flex-wrap items-center gap-3 text-xs text-muted-foreground">
                                 <span className="inline-flex max-w-full min-w-0 items-center gap-1">

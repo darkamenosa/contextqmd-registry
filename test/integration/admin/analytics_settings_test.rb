@@ -16,6 +16,7 @@ class Admin::AnalyticsSettingsTest < ActionDispatch::IntegrationTest
     Ahoy::Event.delete_all
     Ahoy::Visit.delete_all
     Analytics::AllowedEventProperty.delete_all if defined?(Analytics::AllowedEventProperty)
+    Analytics::SiteTrackingRule.delete_all if defined?(Analytics::SiteTrackingRule)
     Analytics::Setting.delete_all
     Analytics::Goal.delete_all
     Analytics::Funnel.delete_all
@@ -367,7 +368,7 @@ class Admin::AnalyticsSettingsTest < ActionDispatch::IntegrationTest
     assert_equal [], payload.fetch("sites")
     assert_equal "/admin/settings/analytics", payload.fetch("paths").fetch("settings")
     tracker = payload.fetch("settings").fetch("tracker")
-    assert_equal "http://www.example.com/js/script.js", tracker.fetch("scriptUrl")
+    assert_equal "http://www.example.com/analytics/script.js", tracker.fetch("scriptUrl")
     assert_equal site.public_id, tracker.fetch("websiteId")
     assert_equal "docs.example.test", tracker.fetch("domainHint")
     assert_includes tracker.fetch("snippetHtml"), %(data-website-id="#{site.public_id}")

@@ -11,7 +11,7 @@
  */
 
 interface AnalyticsConfig {
-  // Ahoy endpoints
+  // Analytics endpoints
   eventsEndpoint: string
   websiteId?: string
   siteToken?: string
@@ -133,7 +133,7 @@ class StandaloneAnalytics {
       // Ignore malformed runtime overrides and keep the default config.
     }
 
-    // Read plausible-style include/exclude from script tag if present
+    // Read public tracker identifiers from the script tag if present.
     this.readScriptAttributes()
     this.installPublicApi()
 
@@ -351,7 +351,6 @@ class StandaloneAnalytics {
 
     const event = {
       name: properties.name,
-      website_id: this.config.websiteId,
       site_token: this.config.siteToken,
       properties: {
         page: properties.page,
@@ -674,39 +673,17 @@ class StandaloneAnalytics {
       const scripts = Array.from(
         document.getElementsByTagName("script")
       ) as HTMLScriptElement[]
-      // Heuristic: find a script whose src contains 'analytics' and either data-include or data-exclude set
       const el = scripts
         .reverse()
         .find(
           (s) =>
             s.getAttribute("data-website-id") ||
-            s.getAttribute("data-include") ||
-            s.getAttribute("data-exclude") ||
-            (s.src && s.src.includes("/js/script"))
+            (s.src && s.src.includes("/analytics/script"))
         )
       if (!el) return
 
       const websiteId = el.getAttribute("data-website-id")
-      const domainHint = el.getAttribute("data-domain")
-      const eventsEndpoint = el.getAttribute("data-api")
-      const includeAttr = el.getAttribute("data-include")
-      const excludeAttr = el.getAttribute("data-exclude")
       if (websiteId) this.config.websiteId = websiteId
-      if (domainHint) this.config.domainHint = domainHint
-      if (eventsEndpoint) this.config.eventsEndpoint = eventsEndpoint
-      if (includeAttr)
-        this.config.includePaths = includeAttr
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean)
-      if (excludeAttr)
-        this.config.excludePaths = [
-          ...this.config.excludePaths,
-          ...excludeAttr
-            .split(",")
-            .map((t) => t.trim())
-            .filter(Boolean),
-        ]
     } catch {
       // Ignore malformed tracker script attributes.
     }

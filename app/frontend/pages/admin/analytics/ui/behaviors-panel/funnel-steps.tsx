@@ -193,9 +193,9 @@ export default function FunnelSteps({
                         {compactNumberFormatter.format(step.visitors)}
                       </span>
                     </div>
-                    <div className="h-2.5 overflow-hidden rounded-sm bg-muted">
+                    <div className="h-2.5 overflow-hidden rounded-xs bg-muted">
                       <div
-                        className="h-full rounded-sm bg-primary"
+                        className="h-full rounded-xs bg-primary"
                         style={{
                           width:
                             step.visitors > 0

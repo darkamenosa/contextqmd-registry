@@ -7,6 +7,8 @@ require_relative "browser_identity"
 require_relative "visit_boundary"
 
 class Analytics::AhoyStore < Ahoy::DatabaseStore
+  class InvalidTrackedSiteClaim < StandardError; end
+
   def visit_columns
     super + %i[hostname screen_size browser_version browser_id country_code analytics_site_id analytics_site_boundary_id]
   end
@@ -42,6 +44,8 @@ class Analytics::AhoyStore < Ahoy::DatabaseStore
     resolve_analytics_profile(visit, occurred_at: visit&.started_at)
     Analytics::LiveState.broadcast_later(site: Analytics::SiteLocator.from_record(visit))
     visit
+  rescue InvalidTrackedSiteClaim
+    nil
   end
 
   def track_event(data)
@@ -68,13 +72,15 @@ class Analytics::AhoyStore < Ahoy::DatabaseStore
       return nil
     end
 
-    repair_visit_from_event!(visit, event, site_token: data[:site_token], website_id: data[:website_id])
+    repair_visit_from_event!(visit, event, site_token: data[:site_token])
     sync_event_site_scope!(event, visit)
     resolve_analytics_profile(visit, occurred_at: event.time)
     Analytics::LiveState.broadcast_later(
       site: Analytics::SiteLocator.from_record(visit) || Analytics::SiteLocator.from_record(event)
     )
     event
+  rescue InvalidTrackedSiteClaim
+    nil
   end
 
   def authenticate(data)
@@ -107,6 +113,8 @@ class Analytics::AhoyStore < Ahoy::DatabaseStore
       merge_resolved_site_scope!(attrs, req:)
 
       attrs
+    rescue InvalidTrackedSiteClaim
+      raise
     rescue StandardError
       attrs
     end
@@ -143,7 +151,7 @@ class Analytics::AhoyStore < Ahoy::DatabaseStore
       visit
     end
 
-    def repair_visit_from_event!(visit, event, site_token: nil, website_id: nil)
+    def repair_visit_from_event!(visit, event, site_token: nil)
       props = event.properties.to_h.with_indifferent_access
       updates = {}
       enrich_visit_technology!(updates, Current.request) if Current.request && visit_technology_missing?(visit)
@@ -155,19 +163,17 @@ class Analytics::AhoyStore < Ahoy::DatabaseStore
 
       url = props[:url]
       if url.present?
-        updates[:landing_page] = url if visit_needs_landing_page_fix?(visit) || site_token.present? || website_id.present?
-        if site_token.present? || website_id.present? || visit.hostname.blank?
+        updates[:landing_page] = url if visit_needs_landing_page_fix?(visit) || site_token.present?
+        if site_token.present? || visit.hostname.blank?
           resolved_host = host_from_url(url)
           updates[:hostname] = resolved_host if resolved_host.present?
         end
       end
 
-      if updates.key?(:landing_page) || updates.key?(:hostname) || site_scope_missing?(visit) || site_token.present? || website_id.present?
+      if updates.key?(:landing_page) || updates.key?(:hostname) || site_scope_missing?(visit) || site_token.present?
         updates[:site_token] = site_token if site_token.present?
-        updates[:website_id] = website_id if website_id.present?
         merge_resolved_site_scope!(updates, req: Current.request, fallback_visit: visit)
         updates.delete(:site_token)
-        updates.delete(:website_id)
       end
 
       persist_visit_repairs!(
@@ -347,103 +353,22 @@ class Analytics::AhoyStore < Ahoy::DatabaseStore
         site_token: attrs[:site_token].presence,
         website_id: attrs[:website_id].presence
       )
+      raise InvalidTrackedSiteClaim if resolved&.invalid_claim?
       return attrs if resolved.blank?
 
-      attrs[:analytics_site_id] ||= resolved.fetch(:analytics_site_id)
-      attrs[:analytics_site_boundary_id] ||= resolved.fetch(:analytics_site_boundary_id)
+      attrs[:analytics_site_id] ||= resolved.site.id
+      attrs[:analytics_site_boundary_id] ||= resolved.boundary&.id
       attrs
     end
 
     def resolved_site_scope(host:, url: nil, path: nil, site_token: nil, website_id: nil)
-      normalized_path = path.presence || path_from_url(url)
-      boundary_resolution = Analytics::TrackingSiteResolver.resolve(host:, path: normalized_path, url:)
-
-      if site_token.present?
-        token_resolution = Analytics::TrackerSiteToken.verify(
-          site_token,
-          host: host,
-          path: normalized_path,
-          environment: Rails.env
-        )
-
-        if token_resolution.blank?
-          log_invalid_site_token(host:, path: normalized_path)
-          return {}
-        end
-
-        if boundary_resolution.present? && boundary_resolution.site != token_resolution.site
-          log_site_token_mismatch(
-            token_site: token_resolution.site,
-            boundary_site: boundary_resolution.site,
-            host: host,
-            path: normalized_path
-          )
-          return {}
-        end
-
-        resolution = boundary_resolution.presence || token_resolution
-      elsif website_id.present?
-        explicit_site = Analytics::Site.active.find_by(public_id: website_id)
-        return {} if explicit_site.blank?
-
-        if boundary_resolution.present? && boundary_resolution.site != explicit_site
-          log_website_id_mismatch(
-            website_id: website_id,
-            website_site: explicit_site,
-            boundary_site: boundary_resolution.site,
-            host: host,
-            path: normalized_path
-          )
-          return {}
-        end
-
-        if boundary_resolution.present?
-          resolution = boundary_resolution
-        elsif same_site_host?(host, explicit_site.canonical_hostname)
-          resolution = Analytics::TrackingSiteResolver::Resolution.new(site: explicit_site, boundary: nil)
-        else
-          log_invalid_website_id(website_id:, host:, path: normalized_path)
-          return {}
-        end
-      else
-        resolution = boundary_resolution
-      end
-
-      return {} unless resolution
-
-      {
-        analytics_site_id: resolution.site.id,
-        analytics_site_boundary_id: resolution.boundary&.id
-      }
-    end
-
-    def path_from_url(url)
-      return nil if url.blank?
-
-      URI.parse(url.to_s).path
-    rescue URI::InvalidURIError
-      nil
-    end
-
-    def log_invalid_site_token(host:, path:)
-      Rails.logger.warn("[analytics] rejected invalid site token for host=#{host.inspect} path=#{path.inspect}")
-    end
-
-    def log_site_token_mismatch(token_site:, boundary_site:, host:, path:)
-      Rails.logger.warn(
-        "[analytics] rejected mismatched site token token_site=#{token_site.public_id.inspect} boundary_site=#{boundary_site.public_id.inspect} host=#{host.inspect} path=#{path.inspect}"
-      )
-    end
-
-    def log_invalid_website_id(website_id:, host:, path:)
-      Rails.logger.warn(
-        "[analytics] rejected website_id without matching site boundary website_id=#{website_id.inspect} host=#{host.inspect} path=#{path.inspect}"
-      )
-    end
-
-    def log_website_id_mismatch(website_id:, website_site:, boundary_site:, host:, path:)
-      Rails.logger.warn(
-        "[analytics] rejected mismatched website_id website_id=#{website_id.inspect} website_site=#{website_site.public_id.inspect} boundary_site=#{boundary_site.public_id.inspect} host=#{host.inspect} path=#{path.inspect}"
+      ::Analytics::TrackedSiteScope.resolve(
+        host: host,
+        url: url,
+        path: path,
+        site_token: site_token,
+        website_id: website_id,
+        environment: Rails.env
       )
     end
 

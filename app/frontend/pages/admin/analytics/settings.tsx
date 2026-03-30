@@ -485,7 +485,7 @@ function TrackingScriptTab({ tracker }: { tracker: AnalyticsTrackerSnippet }) {
             )}
           </button>
         </div>
-        <pre className="overflow-x-auto p-4 text-[13px] leading-6 text-zinc-300 select-all">
+        <pre className="overflow-x-auto p-4 text-[13px]/6 text-zinc-300 select-all">
           <code>{tracker.snippetHtml}</code>
         </pre>
       </div>

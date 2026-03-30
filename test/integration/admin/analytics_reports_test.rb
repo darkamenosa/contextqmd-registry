@@ -210,7 +210,6 @@ class Admin::AnalyticsReportsTest < ActionDispatch::IntegrationTest
     global_goal.update_column(:analytics_site_id, nil)
     global_funnel = Analytics::Funnel.create!(name: "Global Funnel", steps: [ { type: "goal", goal_key: "signup", match: "completes" } ])
     global_funnel.update_column(:analytics_site_id, nil)
-    Analytics::Setting.set_json("allowed_event_props", [ "plan" ], site: nil)
 
     sign_in(staff_identity)
 

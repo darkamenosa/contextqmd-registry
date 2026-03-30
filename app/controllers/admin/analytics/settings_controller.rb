@@ -36,12 +36,7 @@ module Admin
 
         if permitted.key?(:allowed_event_props)
           normalized_props = ::Analytics::Lists.normalize_strings(permitted[:allowed_event_props])
-
-          if ::Analytics::Current.site.present?
-            ::Analytics::AllowedEventProperty.sync_keys!(normalized_props, site: ::Analytics::Current.site)
-          else
-            ::Analytics::Setting.set_json("allowed_event_props", normalized_props)
-          end
+          ::Analytics::AllowedEventProperty.sync_keys!(normalized_props, site: ::Analytics::Current.site) if ::Analytics::Current.site.present?
         end
 
         if permitted.key?(:tracking_rules)

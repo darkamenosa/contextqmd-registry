@@ -295,7 +295,7 @@ export function ActivityHeatmap({
       />
       {tooltip ? (
         <div
-          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-md bg-[#1f2328] px-2 py-1 text-xs font-medium whitespace-nowrap text-white shadow-sm"
+          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-md bg-[#1f2328] px-2 py-1 text-xs font-medium whitespace-nowrap text-white shadow-xs"
           style={{
             left: Math.max(60, Math.min(tooltip.x, containerWidth - 60)),
             top: tooltip.y - 4,

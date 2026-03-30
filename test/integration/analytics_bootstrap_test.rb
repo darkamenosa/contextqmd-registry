@@ -25,6 +25,8 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
       assert_includes response.body, "\"siteToken\":null"
       assert_includes response.body, "\"initialPageviewTracked\":true"
       assert_includes response.body, "\"initialPageKey\":\"/\""
+      assert_includes response.body, %(<script src="/analytics/script.js" defer></script>)
+      refute_includes response.body, "vite/assets/analytics"
       refute_includes response.body, "meta name=\"ahoy-visit\""
       refute_includes response.body, "meta name=\"ahoy-visitor\""
     end

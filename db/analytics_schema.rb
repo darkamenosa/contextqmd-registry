@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_30_161453) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_30_192857) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -103,9 +103,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_30_161453) do
   end
 
   create_table "analytics_funnels", force: :cascade do |t|
+    t.jsonb "abandonment_rules", default: [], null: false
     t.bigint "analytics_site_id"
     t.datetime "created_at", null: false
     t.integer "created_by_id"
+    t.jsonb "exclusions", default: [], null: false
     t.string "name", null: false
     t.jsonb "steps", default: [], null: false
     t.datetime "updated_at", null: false
@@ -326,6 +328,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_30_161453) do
     t.index ["host"], name: "index_analytics_site_boundaries_on_host"
   end
 
+  create_table "analytics_site_tracking_rules", force: :cascade do |t|
+    t.bigint "analytics_site_id", null: false
+    t.datetime "created_at", null: false
+    t.jsonb "exclude_paths", default: [], null: false
+    t.jsonb "include_paths", default: [], null: false
+    t.datetime "updated_at", null: false
+    t.index ["analytics_site_id"], name: "index_analytics_site_tracking_rules_on_analytics_site_id", unique: true
+  end
+
   create_table "analytics_sites", force: :cascade do |t|
     t.string "canonical_hostname"
     t.datetime "created_at", null: false
@@ -366,4 +377,5 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_30_161453) do
   add_foreign_key "analytics_profiles", "analytics_sites"
   add_foreign_key "analytics_settings", "analytics_sites"
   add_foreign_key "analytics_site_boundaries", "analytics_sites"
+  add_foreign_key "analytics_site_tracking_rules", "analytics_sites"
 end

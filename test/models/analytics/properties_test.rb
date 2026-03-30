@@ -15,9 +15,8 @@ class Analytics::PropertiesTest < ActiveSupport::TestCase
     assert_equal "plan", Analytics::Properties.filter_name("prop:plan")
   end
 
-  test "configured keys prefer typed site-owned properties over legacy settings" do
+  test "configured keys come from typed site-owned properties" do
     site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
-    Analytics::Setting.set_json("allowed_event_props", [ "legacy" ], site: site)
     Analytics::AllowedEventProperty.sync_keys!(%w[plan source], site: site)
 
     ::Analytics::Current.site = site

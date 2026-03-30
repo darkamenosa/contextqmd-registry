@@ -139,9 +139,9 @@ if Rails.env.development?
       create_profiles!(now)
 
       puts "Seeded analytics demo data:"
-      puts "  Goals: #{Goal.order(:display_name).pluck(:display_name).join(', ')}"
+      puts "  Goals: #{Analytics::Goal.order(:display_name).pluck(:display_name).join(', ')}"
       puts "  Property keys: #{Analytics::Properties.available_keys.join(', ')}"
-      puts "  Funnels: #{Funnel.order(:name).pluck(:name).join(', ')}"
+      puts "  Funnels: #{Analytics::Funnel.order(:name).pluck(:name).join(', ')}"
       puts "  Seed source labels: #{seed_source_labels.join(', ')}"
       puts "  Seed browsers: #{DEVICES.map { |device| device[:browser] }.uniq.join(', ')}"
       puts "  Seed operating systems: #{DEVICES.map { |device| device[:os] }.uniq.join(', ')}"
@@ -228,15 +228,15 @@ if Rails.env.development?
     end
 
     def ensure_behavior_config!
-      Goal.sync_from_definitions!(DEMO_GOAL_DEFINITIONS)
-      AnalyticsSetting.set_bool("goals_managed", true)
-      AnalyticsSetting.set_json(
+      Analytics::Goal.sync_from_definitions!(DEMO_GOAL_DEFINITIONS)
+      Analytics::Setting.set_bool("goals_managed", true)
+      Analytics::Setting.set_json(
         "allowed_event_props",
         (Analytics::Properties.available_keys + DEMO_ALLOWED_EVENT_PROPS).uniq.sort
       )
 
       DEMO_FUNNELS.each do |payload|
-        funnel = Funnel.find_or_initialize_by(name: payload.fetch(:name))
+        funnel = Analytics::Funnel.find_or_initialize_by(name: payload.fetch(:name))
         funnel.steps = payload.fetch(:steps)
         funnel.save!
       end

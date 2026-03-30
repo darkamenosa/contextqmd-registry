@@ -402,12 +402,12 @@ export function PanelListSkeleton({
         {Array.from({ length: rows }).map((_, i) => (
           <div key={i} className="flex h-9 items-center justify-between gap-4">
             <Skeleton
-              className="h-5 rounded-sm"
+              className="h-5 rounded-xs"
               style={{
                 width: `${SKELETON_BAR_WIDTHS[i % SKELETON_BAR_WIDTHS.length]}%`,
               }}
             />
-            <Skeleton className="h-4 w-8 shrink-0 rounded-sm" />
+            <Skeleton className="h-4 w-8 shrink-0 rounded-xs" />
           </div>
         ))}
       </div>

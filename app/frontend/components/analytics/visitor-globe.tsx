@@ -544,7 +544,7 @@ export const VisitorGlobe = forwardRef(function VisitorGlobe(
       </Canvas>
       {tooltip && (
         <div
-          className="pointer-events-none absolute z-20 rounded-sm bg-popover/90 px-2 py-1 text-xs text-foreground"
+          className="pointer-events-none absolute z-20 rounded-xs bg-popover/90 px-2 py-1 text-xs text-foreground"
           style={{ left: tooltip.x, top: tooltip.y }}
         >
           {tooltip.label}

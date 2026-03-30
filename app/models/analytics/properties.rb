@@ -11,10 +11,7 @@ module Analytics::Properties
     end
 
     def configured_keys(site = ::Analytics::Current.site_or_default)
-      typed_keys = configured_typed_keys(site)
-      return typed_keys if typed_keys.any?
-
-      legacy_configured_keys(site)
+      configured_typed_keys(site)
     end
 
     def available_keys(_events = nil, site: ::Analytics::Current.site_or_default)
@@ -95,17 +92,6 @@ module Analytics::Properties
 
         Analytics::AllowedEventProperty.configured_keys(site)
       rescue ActiveRecord::NoDatabaseError, ActiveRecord::StatementInvalid
-        []
-      end
-
-      def legacy_configured_keys(site)
-        return [] if site.blank?
-
-        record = Analytics::Setting.find_by(key: "allowed_event_props", analytics_site_id: site.id)
-        return [] if record.nil? || record.value.blank?
-
-        Analytics::Lists.normalize_strings(JSON.parse(record.value))
-      rescue JSON::ParserError
         []
       end
 

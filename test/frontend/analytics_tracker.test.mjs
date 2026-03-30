@@ -295,7 +295,6 @@ test("analytics tracker includes the signed site token on client events", async 
     await Promise.resolve()
 
     const body = JSON.parse(requests[0].options.body)
-    assert.equal(body.events[0].website_id, "site_docs")
     assert.equal(body.events[0].site_token, "signed-site-token")
   } finally {
     cleanupBrowserStubs()
@@ -328,7 +327,6 @@ test("analytics tracker exposes a public custom event api", async () => {
     assert.equal(requests.length, 1)
     const body = JSON.parse(requests[0].options.body)
     assert.equal(body.events[0].name, "signup")
-    assert.equal(body.events[0].website_id, "site_docs")
     assert.equal(body.events[0].site_token, "signed-site-token")
     assert.equal(body.events[0].properties.plan, "pro")
   } finally {

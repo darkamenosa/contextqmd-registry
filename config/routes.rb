@@ -139,8 +139,9 @@ Rails.application.routes.draw do
     get "(*path)", to: redirect { |params, req| "#{req.protocol}localhost:#{req.port}/#{params[:path]}" }
   end
 
-  get "js/script.js", to: "analytics/script#show", defaults: { format: :js }, as: :analytics_tracker_script
-  get "js/bootstrap", to: "analytics/script#bootstrap", defaults: { format: :json }, as: :analytics_tracker_bootstrap
+  get "analytics/script.js", to: "analytics/script#show", defaults: { format: :js }, as: :analytics_tracker_script
+  post "analytics/bootstrap", to: "analytics/script#bootstrap", defaults: { format: :json }, as: :analytics_tracker_bootstrap
+  match "analytics/bootstrap", to: "analytics/cors#preflight", via: :options
   post "analytics/events", to: "analytics/events#create", as: :analytics_events
   match "analytics/events", to: "analytics/cors#preflight", via: :options
 

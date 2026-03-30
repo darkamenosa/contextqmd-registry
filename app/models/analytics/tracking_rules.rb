@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
 class Analytics::TrackingRules
-  KEY = "tracking_rules"
-
   RuleSet = Data.define(:include_paths, :exclude_paths)
 
   class << self
@@ -12,8 +10,7 @@ class Analytics::TrackingRules
     end
 
     def load(site: ::Analytics::Current.site_or_default)
-      raw = ::Analytics::Setting.get_json(KEY, fallback: {}, site:)
-      normalize(raw)
+      normalize(record_for(site))
     end
 
     def effective(site: ::Analytics::Current.site_or_default)
@@ -27,11 +24,12 @@ class Analytics::TrackingRules
     end
 
     def save!(include_paths:, exclude_paths:, site: ::Analytics::Current.site_or_default)
-      payload = {
-        include_paths: normalize_paths(include_paths),
-        exclude_paths: normalize_paths(exclude_paths)
-      }
-      ::Analytics::Setting.set_json(KEY, payload, site:)
+      raise ArgumentError, "site is required" if site.blank?
+
+      record = ::Analytics::SiteTrackingRule.find_or_initialize_by(analytics_site: site)
+      record.include_paths = include_paths
+      record.exclude_paths = exclude_paths
+      record.save!
     end
 
     def trackable_path?(path, site: ::Analytics::Current.site_or_default, include_internal_defaults: true)
@@ -56,11 +54,25 @@ class Analytics::TrackingRules
 
     private
       def normalize(raw)
-        value = raw.is_a?(Hash) ? raw.with_indifferent_access : {}
+        value =
+          case raw
+          when ::Analytics::SiteTrackingRule
+            { include_paths: raw.include_paths, exclude_paths: raw.exclude_paths }.with_indifferent_access
+          when Hash
+            raw.with_indifferent_access
+          else
+            {}
+          end
         RuleSet.new(
           include_paths: normalize_paths(value[:include_paths]),
           exclude_paths: normalize_paths(value[:exclude_paths])
         )
+      end
+
+      def record_for(site)
+        return nil if site.blank?
+
+        ::Analytics::SiteTrackingRule.find_by(analytics_site: site)
       end
 
       def normalize_paths(values)

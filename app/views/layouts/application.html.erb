@@ -77,7 +77,7 @@
         ).to_json
       ) %>;
     </script>
-    <%= vite_typescript_tag "analytics.ts" %>
+    <script src="<%= analytics_tracker_script_path %>" defer></script>
     <%= inertia_ssr_head %>
 
   </head>

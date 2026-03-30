@@ -228,6 +228,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
 
   test "public event ingest respects site exclude path rules" do
     site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    token = Analytics::TrackerSiteToken.generate(site: site, mode: "external", expires_in: 180.days)
     Analytics::TrackingRules.save!(
       include_paths: [],
       exclude_paths: [ "/private/**" ],
@@ -240,7 +241,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
           events: [
             {
               name: "pageview",
-              website_id: site.public_id,
+              site_token: token,
               properties: {
                 page: "/private/plan",
                 url: "https://docs.example.test/private/plan",
@@ -261,6 +262,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
 
   test "public event ingest broadcasts live updates for the resolved analytics site" do
     site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    token = Analytics::TrackerSiteToken.generate(site: site, mode: "external", expires_in: 180.days)
     captured_sites = []
     analytics_live_state_singleton = class << Analytics::LiveState; self; end
 
@@ -275,7 +277,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
           events: [
             {
               name: "pageview",
-              website_id: site.public_id,
+              site_token: token,
               properties: {
                 page: "/pricing",
                 url: "https://docs.example.test/pricing",

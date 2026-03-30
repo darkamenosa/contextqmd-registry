@@ -14,10 +14,11 @@ class Analytics::TrackerSnippetTest < ActiveSupport::TestCase
 
     payload = Analytics::TrackerSnippet.build(site: site, request: request)
 
-    assert_equal "https://analytics.example.test/js/script.js", payload.fetch(:script_url)
+    assert_equal "https://analytics.example.test/analytics/script.js", payload.fetch(:script_url)
     assert_equal site.public_id, payload.fetch(:website_id)
     assert_equal "docs.example.test", payload.fetch(:domain_hint)
     assert_includes payload.fetch(:snippet_html), %(data-website-id="#{site.public_id}")
-    assert_includes payload.fetch(:snippet_html), %(src="https://analytics.example.test/js/script.js")
+    assert_includes payload.fetch(:snippet_html), %(src="https://analytics.example.test/analytics/script.js")
+    refute_includes payload.fetch(:snippet_html), "data-domain="
   end
 end

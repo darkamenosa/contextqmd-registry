@@ -164,9 +164,10 @@ class AnalyticsProfile::Projection
         top_pages = top_pages_for_visits(visit_ids)
 
         summary = AnalyticsProfileSummary.find_or_initialize_by(analytics_profile_id: profile_id)
+        session_last_seen_times = sessions.map { |session| session.last_event_at || session.started_at }.compact
         summary.analytics_site_id = profile.analytics_site_id
         summary.first_seen_at = [ profile.first_seen_at, sessions.map(&:started_at).compact.min ].compact.min || profile.first_seen_at || Time.current
-        summary.last_seen_at = [ profile.last_seen_at, sessions.map(&:started_at).compact.max ].compact.max || profile.last_seen_at || Time.current
+        summary.last_seen_at = [ profile.last_seen_at, session_last_seen_times.max ].compact.max || profile.last_seen_at || Time.current
         summary.last_event_at = [ profile.last_event_at, sessions.map(&:last_event_at).compact.max ].compact.max
         summary.latest_visit_id = latest_session.visit_id
         summary.total_visits = Ahoy::Visit.for_analytics_site(profile.analytics_site).where(analytics_profile_id: profile_id).count

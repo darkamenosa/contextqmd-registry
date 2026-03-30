@@ -31,49 +31,16 @@ async function loadModule(entryPoint, outfileName) {
   }
 }
 
-test("profile session engagement formatter prefers engagement payloads", async () => {
+test("profile session formatters keep duration and engaged time explicit", async () => {
   const formatters = await loadModule(
     "app/frontend/pages/admin/analytics/ui/profile/formatters.ts",
     "profile-formatters.cjs"
   )
 
-  assert.equal(
-    formatters.formatProfileSessionEngagement({
-      engagedMsTotal: 285,
-      durationSeconds: 0,
-      pageviewsCount: 1,
-      eventsCount: 2,
-    }),
-    "<1s"
-  )
+  assert.equal(formatters.formatProfileSessionDuration(65), "1m 5s")
+  assert.equal(formatters.formatProfileSessionDuration(0), "Single hit")
 
-  assert.equal(
-    formatters.formatProfileSessionEngagement({
-      engagedMsTotal: 4200,
-      durationSeconds: 0,
-      pageviewsCount: 1,
-      eventsCount: 2,
-    }),
-    "4s"
-  )
-
-  assert.equal(
-    formatters.formatProfileSessionEngagement({
-      engagedMsTotal: 0,
-      durationSeconds: 0,
-      pageviewsCount: 1,
-      eventsCount: 1,
-    }),
-    "Single hit"
-  )
-
-  assert.equal(
-    formatters.formatProfileSessionEngagement({
-      engagedMsTotal: 0,
-      durationSeconds: 5,
-      pageviewsCount: 2,
-      eventsCount: 2,
-    }),
-    "5s"
-  )
+  assert.equal(formatters.formatProfileEngagedTime(285), "<1s")
+  assert.equal(formatters.formatProfileEngagedTime(4200), "4s")
+  assert.equal(formatters.formatProfileEngagedTime(0), null)
 })

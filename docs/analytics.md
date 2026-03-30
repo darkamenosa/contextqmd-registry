@@ -28,7 +28,7 @@ One practical strategy note:
 host app
   -> Analytics::HostIntegration
   -> server-side pageview bootstrap
-  -> Ahoy endpoints
+  -> /analytics/events
   -> Analytics::AhoyStore
   -> analytics DB
   -> Analytics::* dataset queries
@@ -169,7 +169,7 @@ class AnalyticsRecord < ActiveRecord::Base
 end
 ```
 
-**Tables today**: `ahoy_visits`, `ahoy_events`, `analytics_funnels`, `analytics_settings`, `analytics_profiles`, `analytics_profile_keys`, `analytics_profile_sessions`, `analytics_profile_summaries`
+**Tables today**: `ahoy_visits`, `ahoy_events`, `analytics_funnels`, `analytics_goals`, `analytics_allowed_event_properties`, `analytics_site_tracking_rules`, `analytics_settings`, `analytics_profiles`, `analytics_profile_keys`, `analytics_profile_sessions`, `analytics_profile_summaries`
 
 **Tables planned next**:
 
@@ -223,7 +223,9 @@ Recommended step types:
 
 ### analytics_settings
 
-Key-value store for runtime analytics configuration (e.g., `gsc_configured`).
+Legacy key-value store for lightweight runtime analytics configuration. New
+site-owned analytics config should prefer typed records over adding more keys
+here.
 
 ### analytics_profiles
 
@@ -558,21 +560,21 @@ window.analyticsConfig = {
 ```
 
 For external installs, admin settings should generate a public snippet that points
-to `/js/script.js`. The public contract should stay small:
+to `/analytics/script.js`. The public contract should stay small:
 
 ```html
 <script
   defer
-  src="https://analytics.example.com/js/script.js"
+  src="https://analytics.example.com/analytics/script.js"
   data-website-id="site_xxx"
-  data-domain="example.com"
 ></script>
 ```
 
-That loader should normalize `data-website-id`, `data-domain`, `data-api`,
-`data-include`, and `data-exclude` into the same `window.analyticsConfig` shape
-before it imports the real Vite tracker bundle. Any signed site token should be an
-internal runtime/bootstrap detail, not the public HTML contract.
+That loader should normalize `data-website-id` into the same
+`window.analyticsConfig` shape before it imports the real Vite tracker bundle.
+Tracking rules should come from backend-owned bootstrap, not HTML attributes.
+Any signed site token should be an internal runtime/bootstrap detail, not the
+public HTML contract.
 
 ### Excluded paths
 
@@ -589,7 +591,7 @@ These should not become separate frontend user config. The best model is:
 
 - analytics owns system/internal excludes by default
 - user-defined include/exclude rules live once in analytics settings, stored in
-  `analytics_settings` as site-scoped `tracking_rules`
+  the typed `analytics_site_tracking_rules` record for each site
 - bootstrap sends the effective rules to the tracker
 - backend still enforces them for correctness
 
@@ -597,10 +599,15 @@ These should not become separate frontend user config. The best model is:
 
 Events use `fetch` with `keepalive: true`, a JSON body, and `X-CSRF-Token` header when available. The tracker is intentionally fetch-first for more predictable Safari/WebKit behavior and simpler end-to-end testing.
 
-External snippet installs use `OPTIONS /analytics/events` preflight plus permissive
-CORS headers on `POST /analytics/events`. Site ownership should still resolve
-server-side through `website_id` lookup, optional internal site attestation, and
-boundary resolution.
+External snippet installs use:
+
+- `POST /analytics/bootstrap` to validate the embed and mint runtime config
+- `OPTIONS /analytics/bootstrap` and `OPTIONS /analytics/events` for CORS
+- `POST /analytics/events` for event ingestion
+
+Site ownership should still resolve server-side through `website_id` lookup for
+bootstrap, internal site attestation for events, and strict boundary
+resolution.
 
 ## Server-Side Initial Pageviews
 
@@ -1003,11 +1010,12 @@ showing a horizontal step-by-step conversion flow instead of a generic list.
 
 ## Settings
 
-`Admin::Analytics::SettingsController` manages runtime config stored in `analytics_settings`:
+`Admin::Analytics::SettingsController` manages the remaining lightweight runtime
+config:
 
 | Key | Type | Purpose |
 |---|---|---|
-| `tracking_rules` | json | Site-scoped include/exclude tracking rules merged with system defaults |
+| `analytics_site_tracking_rules` | typed record | Site-scoped include/exclude tracking rules merged with system defaults |
 
 Longer term, settings should continue moving away from generic key/value state and toward typed site-scoped resources for:
 

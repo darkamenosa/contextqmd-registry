@@ -52,7 +52,7 @@ const DESKTOP_ACTIVITY_PANEL_RESERVED = 120
 const SEARCH_RESULTS_PANEL_CLASSNAME =
   "absolute z-20 mt-2 overflow-hidden rounded-lg border border-border/70 bg-card/95 text-sm shadow-lg backdrop-blur-md"
 const FLOATING_CONTROL_CLASSNAME =
-  "border border-border/70 bg-card/80 text-foreground shadow-sm backdrop-blur-xs"
+  "border border-border/70 bg-card/80 text-foreground shadow-xs backdrop-blur-xs"
 
 export default function LiveAnalytics({
   initialStats,
@@ -859,7 +859,7 @@ export default function LiveAnalytics({
               className="pointer-events-none absolute z-30 flex items-end gap-3"
               style={{ bottom: DESKTOP_BOTTOM_PADDING, right: DESKTOP_PADDING }}
             >
-              <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-border/70 bg-card/80 px-3 py-1.5 text-xs/4 text-muted-foreground shadow-sm backdrop-blur-xs">
+              <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-border/70 bg-card/80 px-3 py-1.5 text-xs/4 text-muted-foreground shadow-xs backdrop-blur-xs">
                 <div className="flex items-center gap-1.5">
                   <div className="size-2.5 rounded-full bg-blue-600 shadow-[0_0_6px_oklch(0.546_0.245_262/0.6)] ring-1 ring-blue-400/60 dark:bg-blue-500" />
                   <span className="text-xs/4 text-muted-foreground">

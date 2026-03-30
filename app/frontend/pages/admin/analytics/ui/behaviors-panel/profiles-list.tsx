@@ -18,6 +18,11 @@ export default function ProfilesList({
   profiles: ProfileListItem[]
   onSelect: (profile: ProfileListItem) => void
 }) {
+  const recentActivityScaleMax = Math.max(
+    0,
+    ...profiles.flatMap((profile) => profile.recentActivity || [])
+  )
+
   return (
     <div className="overflow-hidden rounded-md border border-border">
       <div className="hidden gap-3 border-b border-border px-4 py-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase sm:grid sm:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)_10rem]">
@@ -27,9 +32,44 @@ export default function ProfilesList({
       </div>
       <div className="divide-y divide-border">
         {profiles.map((profile) => (
-          <ProfileRow key={profile.id} profile={profile} onSelect={onSelect} />
+          <ProfileRow
+            key={profile.id}
+            profile={profile}
+            onSelect={onSelect}
+            recentActivityScaleMax={recentActivityScaleMax}
+          />
         ))}
       </div>
+    </div>
+  )
+}
+
+function RecentActivityStrip({
+  activity,
+  scaleMax,
+}: {
+  activity?: number[]
+  scaleMax: number
+}) {
+  const counts = activity?.length
+    ? activity
+    : Array.from({ length: 7 }, () => 0)
+
+  return (
+    <div className="flex items-center justify-end gap-1" aria-hidden="true">
+      {counts.map((count, index) => {
+        const intensity =
+          count > 0 && scaleMax > 0 ? 0.25 + 0.75 * (count / scaleMax) : 0.08
+
+        return (
+          <span
+            key={index}
+            className="size-2 rounded-full bg-foreground"
+            style={{ opacity: intensity }}
+            title={`${count} visit${count === 1 ? "" : "s"} in this recent slot`}
+          />
+        )
+      })}
     </div>
   )
 }
@@ -37,9 +77,11 @@ export default function ProfilesList({
 function ProfileRow({
   profile,
   onSelect,
+  recentActivityScaleMax,
 }: {
   profile: ProfileListItem
   onSelect: (profile: ProfileListItem) => void
+  recentActivityScaleMax: number
 }) {
   const hasCompactLocation = Boolean(
     profile.city || profile.region || profile.country || profile.countryCode
@@ -127,11 +169,17 @@ function ProfileRow({
       <div className="hidden min-w-0 text-sm text-foreground sm:block">
         <ProfileSourceInline source={profile.source} />
       </div>
-      <div
-        className="hidden text-right text-sm text-muted-foreground sm:block"
-        suppressHydrationWarning
-      >
-        {profile.lastSeenAt ? formatDateTime(profile.lastSeenAt) : "—"}
+      <div className="hidden items-end sm:flex sm:flex-col sm:gap-1">
+        <div
+          className="text-right text-sm text-muted-foreground"
+          suppressHydrationWarning
+        >
+          {profile.lastSeenAt ? formatDateTime(profile.lastSeenAt) : "—"}
+        </div>
+        <RecentActivityStrip
+          activity={profile.recentActivity}
+          scaleMax={recentActivityScaleMax}
+        />
       </div>
     </button>
   )

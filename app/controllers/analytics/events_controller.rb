@@ -58,32 +58,21 @@ module Analytics
 
     private
       def trackable_event?(event)
+        resolution = site_resolution_for_event(event)
+        return false if resolution&.invalid_claim?
+
         path = tracked_path_for(event)
         return true if path.blank?
 
         ::Analytics::TrackingRules.trackable_path?(
           path,
-          site: site_for_event(event),
+          site: resolution&.site || ::Analytics::Current.site_or_default,
           include_internal_defaults: true
         )
       end
 
       def site_for_event(event)
-        website_id = event["website_id"].to_s.presence
-        return ::Analytics::SiteLocator.from_public_id(website_id) if website_id.present?
-
-        site_token = event["site_token"].to_s.presence
-        if site_token.present?
-          resolution = ::Analytics::TrackerSiteToken.verify(
-            site_token,
-            host: tracked_host_for(event) || request.host,
-            path: tracked_path_for(event) || "/",
-            environment: Rails.env
-          )
-          return resolution&.site if resolution.present?
-        end
-
-        ::Analytics::Current.site_or_default
+        site_resolution_for_event(event)&.site || ::Analytics::Current.site_or_default
       end
 
       def tracked_path_for(event)
@@ -106,6 +95,16 @@ module Analytics
         URI.parse(tracked_url).host
       rescue URI::InvalidURIError
         nil
+      end
+
+      def site_resolution_for_event(event)
+        ::Analytics::TrackedSiteScope.resolve(
+          host: tracked_host_for(event) || request.host,
+          url: event.dig("properties", "url"),
+          path: tracked_path_for(event),
+          site_token: event["site_token"].to_s.presence,
+          environment: Rails.env
+        )
       end
   end
 end

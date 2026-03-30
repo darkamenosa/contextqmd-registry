@@ -72,19 +72,15 @@ Recommended shape:
 ```html
 <script
   defer
-  src="https://datafa.st/js/script.js"
+  src="https://datafa.st/analytics/script.js"
   data-website-id="site_xxx"
-  data-domain="example.com"
-  data-api="https://datafa.st/a/events"
 ></script>
 ```
 
 Properties:
 
 - `data-website-id` is the public lookup key
-- `data-domain` is advisory only
-- `data-api` is explicit and environment-safe
-- `/js/script.js` is a tiny public loader that normalizes `data-*` attributes into `window.analyticsConfig` and then imports the real tracker bundle
+- `/analytics/script.js` is a tiny public loader that normalizes the public identifier into `window.analyticsConfig` and then imports the real tracker bundle
 
 Do not treat a raw `data-website-id` as authoritative proof of site ownership.
 It is an identifier, not the trust boundary.
@@ -156,7 +152,7 @@ User config rule:
 - those defaults should come from one analytics-owned source in code, then be
   merged into the effective tracker filters during bootstrap
 - user-defined include/exclude rules should be configured once in analytics
-  settings and stored in `analytics_settings` as site-scoped `tracking_rules`
+  settings and stored in a typed `analytics_site_tracking_rules` record
 - bootstrap should deliver the effective merged rules to the tracker
 - users should never manage separate frontend and backend exclude lists
 
@@ -203,29 +199,30 @@ Recommended payload before signing:
 
 ## Ingestion Validation Rules
 
-On every tracked request:
+On bootstrap:
 
 1. normalize the incoming URL, host, and path
 2. resolve boundary ownership through `Analytics::TrackingSiteResolver`
-3. if an internal attestation token is present, verify it
-4. if a public `website_id` is present, resolve it server-side
-5. compare explicit site identity vs resolved boundary site
+3. resolve the public `website_id` server-side
+4. compare explicit site identity vs resolved boundary site
+5. mint a short-lived internal site token only when the claim is valid
+
+On event ingestion:
+
+1. normalize the incoming URL, host, and path
+2. resolve boundary ownership through `Analytics::TrackingSiteResolver`
+3. verify the internal attestation token
+4. compare token site vs resolved boundary site
 
 Recommended behavior:
 
-- no token, single active site:
-  - accept and use the singleton site
-- no token, multi-site, boundary resolves uniquely:
-  - accept and use resolved boundary site
-- no token, multi-site, boundary unresolved:
-  - drop or route to unresolved bucket
+- bootstrap `website_id`, no boundary conflict:
+  - accept resolved site and mint token
+- bootstrap `website_id`, boundary resolves to a different site:
+  - hard reject and log
 - valid attestation token, no boundary conflict:
   - accept token site
-- resolved `website_id`, no boundary conflict:
-  - accept resolved site
 - valid attestation token, boundary resolves to a different site:
-  - hard reject and log
-- resolved `website_id`, boundary resolves to a different site:
   - hard reject and log
 - invalid token:
   - reject and log
@@ -241,11 +238,16 @@ Recommended comparison rules:
 
 External installs need two public capabilities:
 
-- `GET /js/script.js`
+- `GET /analytics/script.js`
   - no auth
   - no CSRF
   - safe to embed cross-origin
   - loads the real tracker bundle from the analytics service origin
+- `POST /analytics/bootstrap`
+  - validates the external embed against host/path ownership
+  - returns effective runtime config plus a short-lived site token
+- `OPTIONS /analytics/bootstrap`
+  - returns permissive tracker CORS headers
 - `OPTIONS /analytics/events`
   - returns permissive tracker CORS headers
   - allows cross-origin `application/json` event posts from the snippet
@@ -262,14 +264,13 @@ Internal boundary rule:
 
 The following must not be trusted as site ownership claims on their own:
 
-- raw `data-domain`
 - raw `data-website-id`
 - browser-provided site ids
 
 The following may be trusted:
 
 - internal signed site attestation token
-- server-side lookup of `website_id`, but only after normal boundary validation
+- server-side lookup of `website_id`, but only during bootstrap and only after normal boundary validation
 
 Server-rendered first-party bootstrap is trusted as a transport for delivering the
 internal token.

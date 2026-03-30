@@ -4,6 +4,7 @@ require "test_helper"
 
 class Analytics::TrackingRulesTest < ActiveSupport::TestCase
   setup do
+    Analytics::SiteTrackingRule.delete_all if defined?(Analytics::SiteTrackingRule)
     Analytics::Setting.delete_all
     Analytics::Site.delete_all
   end

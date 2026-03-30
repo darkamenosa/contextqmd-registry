@@ -71,10 +71,11 @@ class Analytics::ProfilesDatasetQuery::Postgres < Analytics::DatasetQuery
 
     def scoped_profile_aggregates_relation
       scoped_profile_visits
+        .left_outer_joins(:events)
         .select(
           "analytics_profile_id",
-          "MAX(started_at) AS scoped_last_seen_at",
-          "COUNT(*) AS scoped_visits"
+          "MAX(COALESCE(ahoy_events.time, ahoy_visits.started_at)) AS scoped_last_seen_at",
+          "COUNT(DISTINCT ahoy_visits.id) AS scoped_visits"
         )
         .group(:analytics_profile_id)
     end

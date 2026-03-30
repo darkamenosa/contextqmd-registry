@@ -109,6 +109,77 @@ class Admin::AnalyticsProfilesTest < ActionDispatch::IntegrationTest
     assert_equal "/", row.fetch("currentPage")
     assert_equal 1, row.fetch("totalVisits")
     assert_equal 1, row.fetch("scopedVisits")
+    recent_activity = row.fetch("recentActivity")
+
+    assert_equal 7, recent_activity.length
+    assert_equal 1, recent_activity.sum
+    assert_equal 1, recent_activity.last(2).sum
+  ensure
+    Current.reset
+  end
+
+  test "profiles index uses latest activity time for last seen within an existing visit" do
+    staff_identity, = create_tenant(
+      email: "staff-profiles-last-seen-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Profiles Last Seen"
+    )
+    staff_identity.update!(staff: true)
+
+    profile = AnalyticsProfile.create!(
+      analytics_site: default_analytics_site,
+      status: AnalyticsProfile::STATUS_IDENTIFIED,
+      traits: { display_name: "Tuyen" },
+      first_seen_at: 1.hour.ago,
+      last_seen_at: 30.minutes.ago
+    )
+
+    visit = Ahoy::Visit.create!(
+      analytics_site: default_analytics_site,
+      visit_token: SecureRandom.hex(16),
+      visitor_token: SecureRandom.hex(16),
+      analytics_profile: profile,
+      browser_id: SecureRandom.uuid,
+      started_at: 20.minutes.ago.change(usec: 0),
+      country: "Vietnam",
+      city: "Ho Chi Minh City",
+      device_type: "Desktop",
+      os: "Mac OS",
+      browser: "Chrome",
+      source_label: "Direct / None",
+      landing_page: "https://www.example.com/about"
+    )
+
+    Ahoy::Event.create!(
+      analytics_site: default_analytics_site,
+      visit: visit,
+      name: "pageview",
+      properties: { page: "/about" },
+      time: 19.minutes.ago.change(usec: 0)
+    )
+
+    latest_activity_at = 5.seconds.ago.change(usec: 0)
+    Ahoy::Event.create!(
+      analytics_site: default_analytics_site,
+      visit: visit,
+      name: "Signup",
+      properties: { page: "/about" },
+      time: latest_activity_at
+    )
+
+    AnalyticsProfile::Projection.rebuild(profile)
+    sign_in(staff_identity)
+
+    get profiles_path_for(default_analytics_site),
+        params: { period: "day" },
+        headers: { "ACCEPT" => "application/json" }
+
+    assert_response :success
+
+    payload = JSON.parse(response.body)
+    row = payload.fetch("results").first
+
+    assert_equal "Tuyen", row.fetch("name")
+    assert_equal latest_activity_at.to_i, Time.iso8601(row.fetch("lastSeenAt")).to_i
   ensure
     Current.reset
   end

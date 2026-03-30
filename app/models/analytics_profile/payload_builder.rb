@@ -31,7 +31,7 @@ module AnalyticsProfile::PayloadBuilder
       )
     end
 
-    def build_profile_row(profile, latest_visit:, last_seen_at:, total_visits:, scoped_visits:, summary: nil)
+    def build_profile_row(profile, latest_visit:, last_seen_at:, total_visits:, scoped_visits:, summary: nil, recent_activity: nil)
       identity_snapshot = resolved_identity_snapshot(profile, latest_visit)
       latest_context = summary&.latest_context.to_h
       current_page = summary&.latest_current_page.presence || latest_context["current_page"].presence || current_page_for_visit(latest_visit)
@@ -63,6 +63,7 @@ module AnalyticsProfile::PayloadBuilder
         source: summary&.latest_source.presence || latest_context["source"].presence || latest_visit&.source_label.to_s.presence || latest_visit&.referring_domain.to_s.presence || "Direct / None",
         current_page: current_page,
         last_seen_at: last_seen_at&.iso8601,
+        recent_activity: recent_activity || [],
         total_visits: total_visits,
         scoped_visits: scoped_visits,
         total_sessions: summary&.total_sessions || total_visits,

@@ -31,6 +31,11 @@ class Analytics::Site < AnalyticsRecord
     foreign_key: :analytics_site_id,
     dependent: :delete_all,
     inverse_of: :analytics_site
+  has_one :tracking_rule,
+    class_name: "Analytics::SiteTrackingRule",
+    foreign_key: :analytics_site_id,
+    dependent: :delete,
+    inverse_of: :analytics_site
 
   before_validation :assign_public_id, on: :create
   before_validation :normalize_fields

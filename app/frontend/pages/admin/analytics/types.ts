@@ -377,6 +377,7 @@ export type ProfileListItem = {
   source?: string | null
   currentPage?: string | null
   lastSeenAt?: string | null
+  recentActivity?: number[]
   totalVisits: number
   scopedVisits: number
   totalSessions?: number

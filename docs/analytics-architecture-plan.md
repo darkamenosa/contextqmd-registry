@@ -1290,23 +1290,17 @@ Design rules:
 
 4. Site-specific tracking rules live in the analytics database
    Internal/system excludes stay in code, but user-configurable include/exclude
-   rules should live once in `analytics_settings` and flow through bootstrap +
-   backend enforcement.
+   rules should live once in a typed `analytics_site_tracking_rules` record and
+   flow through bootstrap + backend enforcement.
    The code-owned defaults should come from one analytics-owned source and then
    be derived into tracker, server-side, and reporting lists rather than being
    configured independently in multiple places.
 
-5. Remove legacy fallback booleans
-   `gsc_configured?` in
-   `app/controllers/concerns/admin/analytics/google_search_console_context.rb`
-   still falls back to `x.analytics.gsc_configured` and
-   `ENV["ANALYTICS_GSC_CONFIGURED"]`.
+5. Keep provider readiness derived from real state
+   Google Search Console readiness should continue to come from provider
+   credentials plus connection rows, not ad hoc booleans.
 
-   Long term:
-   - provider readiness should come from provider credentials + connection rows
-   - not from ad hoc booleans
-
-4. Keep provider config symmetrical
+6. Keep provider config symmetrical
    Future Bing config should mirror Google shape:
    - `config.bing_webmaster.enabled`
    - `config.bing_webmaster.auth_mode`
@@ -1315,7 +1309,7 @@ Design rules:
    - `config.bing_webmaster.api_key`
    - `config.bing_webmaster.callback_path`
 
-5. Expose config diagnostics in settings
+7. Expose config diagnostics in settings
    The settings page should eventually show a small diagnostics block for each
    provider:
    - credentials configured or missing
@@ -1332,9 +1326,8 @@ For external snippets:
 ```html
 <script
   defer
-  src="https://analytics.example.com/js/script.js"
+  src="https://analytics.example.com/analytics/script.js"
   data-website-id="site_xxx"
-  data-domain="example.com"
 ></script>
 ```
 
@@ -1343,6 +1336,8 @@ Rules:
 - `data-website-id` is the public identifier, not the trust boundary
 - any signed site token should remain an internal runtime/bootstrap detail
 - boundary resolution stays server-owned
+- external embeds bootstrap through `POST /analytics/bootstrap`
+- events post only to `POST /analytics/events`
 
 For custom goals/events:
 

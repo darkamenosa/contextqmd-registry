@@ -120,31 +120,23 @@ export function formatProfileDuration(seconds: number): string {
   return `${secs}s`
 }
 
-export function formatProfileSessionEngagement({
-  engagedMsTotal,
-  durationSeconds,
-  pageviewsCount,
-  eventsCount,
-}: {
+export function formatProfileSessionDuration(seconds?: number | null): string {
+  const duration = Math.max(seconds ?? 0, 0)
+  if (duration > 0) return formatProfileDuration(duration)
+
+  return "Single hit"
+}
+
+export function formatProfileEngagedTime(
   engagedMsTotal?: number | null
-  durationSeconds?: number | null
-  pageviewsCount?: number | null
-  eventsCount?: number | null
-}): string {
+): string | null {
   const engagedMs = Math.max(engagedMsTotal ?? 0, 0)
   if (engagedMs > 0 && engagedMs < 1000) return "<1s"
   if (engagedMs >= 1000) {
     return formatProfileDuration(Math.floor(engagedMs / 1000))
   }
 
-  const duration = Math.max(durationSeconds ?? 0, 0)
-  if (duration > 0) return formatProfileDuration(duration)
-
-  if ((pageviewsCount ?? 0) <= 1 && (eventsCount ?? 0) <= 1) {
-    return "Single hit"
-  }
-
-  return "No measured engagement"
+  return null
 }
 
 const compactNumberFormatter = new Intl.NumberFormat("en-US", {
