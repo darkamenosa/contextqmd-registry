@@ -20,7 +20,9 @@ const applyPersistentLayout = (pageComponent: ResolvedComponent) => {
   return pageComponent
 }
 
-export const resolvePage = (name: string) => {
+export const resolvePage = (
+  name: string
+): ResolvedComponent | Promise<ResolvedComponent> => {
   const pagePath = `../pages/${name}.tsx`
 
   if (name.startsWith("admin/")) {
