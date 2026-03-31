@@ -169,10 +169,14 @@ export default function SourcesPanel({
     () => !!(activeSource && /google/i.test(String(activeSource))),
     [activeSource]
   )
+  const takeOverWithSearchTerms = useMemo(
+    () => !!activeSource && isGoogleActive,
+    [activeSource, isGoogleActive]
+  )
   // Allow takeover even for Direct / None (matches Plausible behavior for referrers card)
   const takeOverWithReferrers = useMemo(
-    () => mode === "all" && !!activeSource && !isGoogleActive,
-    [mode, activeSource, isGoogleActive]
+    () => !!activeSource && !isGoogleActive,
+    [activeSource, isGoogleActive]
   )
   const [refData, setRefData] = useState<ListPayload | null>(null)
   const [refLoading, setRefLoading] = useState(false)
@@ -186,7 +190,7 @@ export default function SourcesPanel({
   const selectedSearchTermsPage = query.filters.page?.trim() || null
 
   useEffect(() => {
-    if (mode !== "all" || !activeSource) {
+    if (!activeSource || takeOverWithSearchTerms) {
       startTransition(() => setRefData(null))
       startTransition(() => setRefLoading(false))
       return
@@ -208,11 +212,11 @@ export default function SourcesPanel({
         setRefLoading(false)
       })
     return () => controller.abort()
-  }, [activeSource, baseQuery, mode])
+  }, [activeSource, baseQuery, takeOverWithSearchTerms])
 
   // Fetch search terms when Google is active
   useEffect(() => {
-    if (mode !== "all" || !isGoogleActive) {
+    if (!takeOverWithSearchTerms) {
       startTransition(() => setTermsData(null))
       startTransition(() => setTermsError(null))
       startTransition(() => setTermsErrorCode(null))
@@ -246,7 +250,7 @@ export default function SourcesPanel({
         setTermsLoading(false)
       })
     return () => controller.abort()
-  }, [baseQuery, isGoogleActive, mode])
+  }, [baseQuery, takeOverWithSearchTerms])
 
   const highlightMetric = useMemo(
     () => (data.metrics.includes("visitors") ? "visitors" : data.metrics[0]),
@@ -289,10 +293,10 @@ export default function SourcesPanel({
   // "Top Acquisition Channels". For other tabs, both are identical.
   const cardTitle = useMemo(() => {
     if (mode === "channels") return "Top Channels"
-    if (mode === "all" && isGoogleActive) return "Search Terms"
+    if (takeOverWithSearchTerms) return "Search Terms"
     if (takeOverWithReferrers) return "Top Referrers"
     return TITLE_FOR_MODE[mode] ?? "Top Sources"
-  }, [mode, isGoogleActive, takeOverWithReferrers])
+  }, [mode, takeOverWithReferrers, takeOverWithSearchTerms])
 
   const dialogTitle = useMemo(() => {
     if (mode === "channels") return "Top Acquisition Channels"
@@ -368,7 +372,7 @@ export default function SourcesPanel({
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-base font-medium">{cardTitle}</h2>
         {/* Hide tabs when referrer or search-terms take over, to match Plausible */}
-        {takeOverWithReferrers || (mode === "all" && isGoogleActive) ? null : (
+        {takeOverWithReferrers || takeOverWithSearchTerms ? null : (
           <PanelTabs>
             <PanelTab
               active={mode === "channels"}
@@ -433,7 +437,7 @@ export default function SourcesPanel({
             </div>
           </>
         )
-      ) : mode === "all" && isGoogleActive ? (
+      ) : takeOverWithSearchTerms ? (
         termsLoading ? (
           <PanelListSkeleton firstColumnLabel="Search term" />
         ) : termsData && termsData.results.length > 0 ? (
@@ -571,7 +575,7 @@ export default function SourcesPanel({
           {!isUtmMode || utmHasUsableData ? (
             <div className="mt-auto flex justify-center pt-3">
               <div className="flex items-center gap-2">
-                {mode === "all" && activeSource ? (
+                {activeSource ? (
                   <Button
                     variant="outline"
                     size="sm"
@@ -586,7 +590,7 @@ export default function SourcesPanel({
                   data-testid="sources-details-btn"
                   onClick={() => {
                     // If a specific source is active, open Referrer Details instead of Sources
-                    if (mode === "all" && activeSource && !isGoogleActive) {
+                    if (activeSource && !isGoogleActive) {
                       try {
                         if (activeSource) {
                           openReportsDialogRoute((search) =>
@@ -676,7 +680,7 @@ export default function SourcesPanel({
       />
 
       {/* Referrer Details modal */}
-      {mode === "all" && activeSource ? (
+      {activeSource && !isGoogleActive ? (
         <RemoteDetailsDialog
           open={refDetailsOpen}
           onOpenChange={(open) => {
