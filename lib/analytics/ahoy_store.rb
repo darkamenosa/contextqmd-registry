@@ -72,6 +72,7 @@ class Analytics::AhoyStore < Ahoy::DatabaseStore
     end
 
     sync_event_site_scope!(event, resolved_visit)
+    resolved_visit.project_later
     resolve_analytics_profile(resolved_visit, occurred_at: event.time) if resolved_visit.should_resolve_profile_for_event?(strong_keys: strong_keys_for(resolved_visit))
     Analytics::LiveState.broadcast_later(
       site: Analytics::SiteLocator.from_record(resolved_visit) || Analytics::SiteLocator.from_record(event)
@@ -152,8 +153,7 @@ class Analytics::AhoyStore < Ahoy::DatabaseStore
       visit.resolve_profile_later(
         browser_id: browser_id_for(visit),
         strong_keys: strong_keys_for(visit),
-        occurred_at: occurred_at,
-        identity_snapshot: visit.analytics_identity_snapshot(current_identity: Current.identity)
+        occurred_at: occurred_at
       )
     rescue StandardError
       nil

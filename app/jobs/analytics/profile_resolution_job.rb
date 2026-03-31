@@ -6,12 +6,11 @@ module Analytics
 
     discard_on ActiveJob::DeserializationError
 
-    def perform(visit, browser_id:, strong_keys:, occurred_at: nil, identity_snapshot: {})
+    def perform(visit, browser_id:, strong_keys:, occurred_at: nil)
       visit.resolve_profile_now(
         browser_id: browser_id,
         strong_keys: strong_keys,
-        occurred_at: occurred_at,
-        identity_snapshot: identity_snapshot
+        occurred_at: occurred_at
       )
     end
   end

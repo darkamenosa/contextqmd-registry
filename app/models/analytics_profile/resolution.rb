@@ -11,7 +11,7 @@ class AnalyticsProfile::Resolution
       false
     end
 
-    def resolve(visit:, browser_id:, strong_keys:, occurred_at: nil, identity_snapshot: nil)
+    def resolve(visit:, browser_id:, strong_keys:, occurred_at: nil)
       return nil unless available?
       return nil if visit.blank?
 
@@ -30,7 +30,7 @@ class AnalyticsProfile::Resolution
         profile.attach_strong_keys!(
           normalized_keys,
           observed_at: activity_time,
-          identity_snapshot: identity_snapshot
+          identity_snapshot: visit.analytics_identity_snapshot
         )
         profile.record_visit!(visit, browser_id:, observed_at: activity_time)
         profile

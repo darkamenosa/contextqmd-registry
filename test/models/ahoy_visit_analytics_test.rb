@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "ostruct"
 
 class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
   include ActiveJob::TestHelper
@@ -38,8 +39,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
         visit.resolve_profile_later(
           browser_id: visit.browser_id,
           strong_keys: {},
-          occurred_at: Time.current,
-          identity_snapshot: {}
+          occurred_at: Time.current
         )
       end
     end
@@ -57,14 +57,12 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
       visit.resolve_profile_later(
         browser_id: visit.browser_id,
         strong_keys: {},
-        occurred_at: Time.current,
-        identity_snapshot: {}
+        occurred_at: Time.current
       )
       visit.resolve_profile_later(
         browser_id: visit.browser_id,
         strong_keys: { identity_id: 123 },
-        occurred_at: Time.current,
-        identity_snapshot: {}
+        occurred_at: Time.current
       )
     end
   end
@@ -88,6 +86,38 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
 
     assert_enqueued_jobs 1, only: Analytics::VisitProjectionJob do
       2.times { visit.project_later(previous_profile_id: nil) }
+    end
+  end
+
+  test "track_event enqueues visit projection when a profiled visit receives later events" do
+    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    profile = AnalyticsProfile.create!(
+      analytics_site: site,
+      status: AnalyticsProfile::STATUS_ANONYMOUS,
+      first_seen_at: 10.minutes.ago,
+      last_seen_at: 1.minute.ago
+    )
+    visit = Ahoy::Visit.create!(
+      analytics_site: site,
+      analytics_profile: profile,
+      visit_token: SecureRandom.hex(16),
+      visitor_token: SecureRandom.hex(16),
+      browser_id: SecureRandom.uuid,
+      started_at: 5.minutes.ago.change(usec: 0)
+    )
+
+    store = Analytics::AhoyStore.new(
+      ahoy: OpenStruct.new(visit_token: visit.visit_token, existing_visit_token: true)
+    )
+
+    assert_enqueued_jobs 1, only: Analytics::VisitProjectionJob do
+      assert_no_enqueued_jobs only: Analytics::ProfileResolutionJob do
+        store.track_event(
+          name: "pageview",
+          properties: { page: "/pricing" },
+          time: 4.minutes.ago.change(usec: 0)
+        )
+      end
     end
   end
 

@@ -36,25 +36,23 @@ class Ahoy::Visit < AnalyticsRecord
     AnalyticsProfile::Projection.project_visit(self, previous_profile_id: previous_profile_id)
   end
 
-  def resolve_profile_later(browser_id:, strong_keys:, occurred_at: nil, identity_snapshot: {})
+  def resolve_profile_later(browser_id:, strong_keys:, occurred_at: nil)
     if should_enqueue_profile_resolution?(browser_id:, strong_keys:)
       Analytics::ProfileResolutionJob.perform_later(
         self,
         browser_id: browser_id,
         strong_keys: strong_keys,
-        occurred_at: occurred_at,
-        identity_snapshot: identity_snapshot
+        occurred_at: occurred_at
       )
     end
   end
 
-  def resolve_profile_now(browser_id:, strong_keys:, occurred_at: nil, identity_snapshot: nil)
+  def resolve_profile_now(browser_id:, strong_keys:, occurred_at: nil)
     AnalyticsProfile::Resolution.resolve(
       visit: self,
       browser_id: browser_id,
       strong_keys: strong_keys,
-      occurred_at: occurred_at,
-      identity_snapshot: identity_snapshot
+      occurred_at: occurred_at
     )
   end
 

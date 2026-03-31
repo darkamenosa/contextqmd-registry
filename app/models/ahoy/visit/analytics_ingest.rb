@@ -25,12 +25,10 @@ module Ahoy::Visit::AnalyticsIngest
     end
   end
 
-  def analytics_identity_snapshot(current_identity: nil)
+  def analytics_identity_snapshot
     identity =
       if respond_to?(:user) && user.present?
         user
-      elsif current_identity.present? && current_identity.id == user_id
-        current_identity
       end
 
     if identity.present?

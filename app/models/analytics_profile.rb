@@ -41,13 +41,12 @@ class AnalyticsProfile < AnalyticsRecord
     AnalyticsProfile::Resolution.available?
   end
 
-  def self.resolve_for_visit!(visit:, browser_id:, strong_keys:, occurred_at: nil, identity_snapshot: nil)
+  def self.resolve_for_visit!(visit:, browser_id:, strong_keys:, occurred_at: nil)
     AnalyticsProfile::Resolution.resolve(
       visit: visit,
       browser_id: browser_id,
       strong_keys: strong_keys,
-      occurred_at: occurred_at,
-      identity_snapshot: identity_snapshot
+      occurred_at: occurred_at
     )
   end
 
