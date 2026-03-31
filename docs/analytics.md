@@ -837,24 +837,6 @@ resolution.
 - layout emits `initialPageviewTracked: true` when the server fallback already counted the current HTML load
 - client tracker uses that bootstrap and sends the first pageview itself after load/visibility
 
-### Temporary homepage exception
-
-As a temporary performance optimization, the anonymous full HTML homepage (`GET /`)
-is treated as a stateless public document instead of using the normal server-side
-bootstrap path.
-
-- the homepage still emits tracker bootstrap config and loads `/a/t.js`
-- the homepage does **not** write the initial pageview on the server
-- the homepage does **not** establish browser continuity cookies during the
-  document response
-- the homepage does **not** emit CSRF meta tags for the anonymous full document
-  response
-- the first homepage pageview is owned by the client tracker after load
-
-This exception exists only to make the homepage safely cacheable at the CDN
-layer. It should be treated as an interim step toward a broader `public
-document` model for stateless cacheable public pages.
-
 ## Server-Side: Ahoy Store
 
 `Analytics.setup` now owns the public host setup surface. Ahoy is an internal implementation detail installed from `config/initializers/analytics.rb`, with the tracking/runtime wiring living in `lib/analytics/*`:

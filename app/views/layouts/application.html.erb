@@ -9,9 +9,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="application-name" content="ContextQMD">
     <meta name="mobile-web-app-capable" content="yes">
-    <% unless public_document_request? %>
-      <%= csrf_meta_tags %>
-    <% end %>
+    <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
 
     <%= yield :head %>
