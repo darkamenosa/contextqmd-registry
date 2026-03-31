@@ -90,6 +90,15 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "analytics owns the public events endpoint without exposing ahoy engine routes" do
+    route_paths = Rails.application.routes.routes.map { |route| route.path.spec.to_s }
+
+    assert_includes route_paths, "/analytics/events(.:format)"
+    refute_includes route_paths, "/ahoy"
+    refute_includes route_paths, "/events(.:format)"
+    refute_includes route_paths, "/visits(.:format)"
+  end
+
   test "prefetch requests do not bootstrap or track analytics" do
     with_server_visits(true) do
       assert_no_difference -> { Ahoy::Visit.count } do

@@ -15,6 +15,17 @@ If you are new to this codebase, the simplest mental model is:
 - commerce providers are site-scoped external integrations
 - revenue and attribution should be modeled as first-class facts, not hidden inside profile state
 
+Implementation style:
+
+- follow a vanilla Rails / Fizzy-style modular monolith
+- keep controllers thin
+- keep jobs shallow
+- prefer rich model and domain APIs over a generic `services/` layer
+- use `_later` / `_now` naming for async boundaries
+- keep `lib/analytics/*` for framework glue only
+- keep `Ahoy::Visit` and `Ahoy::Event` as the raw fact models
+- treat profile/session/summary tables as rebuildable read models
+
 One practical strategy note:
 
 - build the architecture broadly
@@ -37,6 +48,14 @@ host app
   -> Admin::Analytics::* controllers
   -> /admin/analytics UI
 ```
+
+Write-path rule:
+
+- request ingestion persists raw facts and returns quickly
+- if an event needs to create a visit lazily, the visit is created once with
+  event-derived page/device/site attributes rather than repaired afterward
+- identity resolution and projection happen asynchronously
+- read models must be idempotent and safe to rebuild
 
 ### Database Shape
 
@@ -247,6 +266,13 @@ Then follow these rules:
 - keep business outcome facts separate from profile read models
 - normalize reporting facts above provider-specific ingestion where practical
 
+Concurrency rule:
+
+- raw facts are authoritative
+- derived tables should be written with unique constraints plus database-native
+  upsert semantics where concurrent jobs may touch the same logical row
+- avoid read-then-write projection flows that can race under duplicate jobs
+
 ### Key Files To Read First
 
 - [app/models/analytics/site.rb](../app/models/analytics/site.rb)
@@ -273,6 +299,8 @@ Public ownership rule:
 - `Analytics` owns the public browser and HTTP contract
 - `Ahoy` stays the internal tracking engine and persistence layer
 - public endpoints should use `/analytics/*`, not `/ahoy/*`
+- `Ahoy.api` should stay disabled so the gem does not expose duplicate `/ahoy/*`
+  transport routes
 - `ahoy_visits` and `ahoy_events` remain internal storage tables for now
 
 ```text
@@ -816,19 +844,47 @@ resolution.
 
 ### Visit enrichment (track_visit)
 
-1. Sets `hostname` from request
-2. Fixes `landing_page` when Ahoy records the API endpoint path instead of the actual page
+1. Normalizes request-owned visit attributes once at creation time
+2. Sets `hostname`, `browser_id`, browser/device/os fields, location, and source dimensions
 3. Cleans self-referrals (same-site referring_domain → null)
-4. Enriches geo data via MaxMind GeoIP when available
-5. Falls back to Cloudflare `CF-IPCountry` header for country
-6. Persists `browser_id` from the first-party analytics cookie
-7. Resolves `analytics_profile_id` when the profile tables are available
+4. Resolves analytics site ownership before the visit is persisted
+5. Enqueues profile resolution asynchronously when the profile tables are available
 
 ### Event enrichment (track_event)
 
-1. Extracts `screen_size` from viewport string and classifies into `Mobile/Tablet/Laptop/Desktop`
-2. Corrects `landing_page` on the visit when the first event provides a real URL
-3. Re-runs profile resolution so late identity signals can upgrade an anonymous profile
+1. Reuses the current visit when one already exists for the request/browser context
+2. Lazily creates a new visit from event-derived `url`, `referrer`, `screen_size`, and site claims when needed
+3. Appends the raw event without post-save visit repair
+4. Re-runs profile resolution only when identity ownership can still change
+
+## Rebuild And Replay
+
+Raw visits and events are the source of truth. Sessions, summaries, and profile
+directory state are disposable read models.
+
+Use these operational entrypoints when derived analytics state needs recovery:
+
+- `bin/rake analytics:visits:replay`
+  - reprojects visit-level session state from raw facts
+  - use `VISIT_ID=...` to target one visit
+  - use `SITE_ID=...` to scope to one analytics site
+- `bin/rake analytics:profiles:rebuild`
+  - rebuilds profile sessions + summaries from the profile's raw visit set
+  - use `PROFILE_ID=...` to target one profile
+  - use `SITE_ID=...` to scope to one analytics site
+- `bin/rake analytics:profiles:refresh_summaries`
+  - refreshes summaries only when sessions are already correct
+  - use `PROFILE_ID=...` or `SITE_ID=...` to narrow scope
+
+Rules:
+
+- use visit replay when one visit/session row is stale or missing
+- use profile rebuild when identity merges, resolver changes, or session state
+  for a profile may be wrong
+- use summary refresh when only the aggregated profile card/search state is out
+  of date
+- keep historical cleanup explicit through tasks or one-off scripts, not
+  request-time repair
 
 ### Profile resolution
 
@@ -1231,7 +1287,7 @@ For the current app, the product/UI priority should stay narrower:
 ## Adding a new analytics dimension
 
 1. Add the column to `ahoy_visits` via a migration in `db/analytics_migrate/`
-2. If the data comes from tracking, add it to `Ahoy::Store#track_visit` or `track_event` in `lib/analytics/ahoy_store.rb`
+2. If the data comes from tracking, decide whether it belongs on the canonical visit payload created in `track_visit`, on raw event properties, or on async projections before changing `lib/analytics/ahoy_store.rb`
 3. Extend `Analytics::Query` / `Analytics::RequestQueryParser` if the dimension needs new filter semantics
 4. Add or extend an analytics object under `app/models/analytics/` for grouping/filtering logic
 5. Add a controller under `Admin::Analytics::` inheriting from `BaseController`

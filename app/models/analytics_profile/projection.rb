@@ -92,33 +92,47 @@ class AnalyticsProfile::Projection
         exit_page = page_paths.last || normalized_path(visit.landing_page)
 
         with_session_retry do
-          session = AnalyticsProfileSession.find_or_initialize_by(visit_id: visit.id)
           resolved_country = Analytics::Country.resolve(
             country: visit.country,
             country_code: visit.respond_to?(:country_code) ? visit.country_code : nil
           )
-          session.analytics_profile_id = visit.analytics_profile_id
-          session.analytics_site_id = visit.analytics_site_id
-          session.started_at = visit.started_at || last_event_at || Time.current
-          session.last_event_at = last_event_at
-          session.country = resolved_country.name
-          session.country_code = resolved_country.code if session.respond_to?(:country_code=)
-          session.region = visit.region.to_s.presence
-          session.city = visit.city.to_s.presence
-          session.device_type = visit.device_type.to_s.presence || "Desktop"
-          session.os = visit.os.to_s.presence
-          session.browser = visit.browser.to_s.presence
-          session.source = source
-          session.entry_page = entry_page
-          session.exit_page = exit_page
-          session.current_page = exit_page
-          session.duration_seconds = duration_seconds(session.started_at, last_event_at)
-          session.engaged_ms_total = engaged_ms_total if session.respond_to?(:engaged_ms_total=)
-          session.pageviews_count = pageviews
-          session.events_count = events.size
-          session.page_paths = page_paths
-          session.event_names = event_names
-          session.save!
+          started_at = visit.started_at || last_event_at || Time.current
+          now = Time.current
+          attributes = {
+            visit_id: visit.id,
+            analytics_profile_id: visit.analytics_profile_id,
+            analytics_site_id: visit.analytics_site_id,
+            started_at:,
+            last_event_at:,
+            country: resolved_country.name,
+            region: visit.region.to_s.presence,
+            city: visit.city.to_s.presence,
+            device_type: visit.device_type.to_s.presence || "Desktop",
+            os: visit.os.to_s.presence,
+            browser: visit.browser.to_s.presence,
+            source:,
+            entry_page:,
+            exit_page:,
+            current_page: exit_page,
+            duration_seconds: duration_seconds(started_at, last_event_at),
+            pageviews_count: pageviews,
+            events_count: events.size,
+            page_paths:,
+            event_names:,
+            created_at: now,
+            updated_at: now
+          }
+          attributes[:country_code] = resolved_country.code if AnalyticsProfileSession.column_names.include?("country_code")
+          if AnalyticsProfileSession.column_names.include?("engaged_ms_total")
+            attributes[:engaged_ms_total] = engaged_ms_total
+          end
+
+          AnalyticsProfileSession.upsert(
+            attributes,
+            unique_by: :index_analytics_profile_sessions_on_visit_id,
+            update_only: attributes.keys - [ :visit_id, :created_at ],
+            record_timestamps: false
+          )
         end
       end
 
@@ -163,46 +177,58 @@ class AnalyticsProfile::Projection
         visit_ids = sessions.map(&:visit_id)
         top_pages = top_pages_for_visits(visit_ids)
 
-        summary = AnalyticsProfileSummary.find_or_initialize_by(analytics_profile_id: profile_id)
         session_last_seen_times = sessions.map { |session| session.last_event_at || session.started_at }.compact
-        summary.analytics_site_id = profile.analytics_site_id
-        summary.first_seen_at = [ profile.first_seen_at, sessions.map(&:started_at).compact.min ].compact.min || profile.first_seen_at || Time.current
-        summary.last_seen_at = [ profile.last_seen_at, session_last_seen_times.max ].compact.max || profile.last_seen_at || Time.current
-        summary.last_event_at = [ profile.last_event_at, sessions.map(&:last_event_at).compact.max ].compact.max
-        summary.latest_visit_id = latest_session.visit_id
-        summary.total_visits = Ahoy::Visit.for_analytics_site(profile.analytics_site).where(analytics_profile_id: profile_id).count
-        summary.total_sessions = sessions.length
-        summary.total_pageviews = sessions.sum(&:pageviews_count)
-        summary.total_events = sessions.sum(&:events_count)
-        summary.latest_context = build_latest_context(latest_session)
-        summary.display_name = resolved_display_name(profile, latest_session)
-        summary.email = trait_value(profile, "email")
-        summary.latest_country_name = latest_country_name(latest_session)
-        summary.latest_country_code = latest_session.respond_to?(:country_code) ? latest_session.country_code : nil
-        summary.latest_region = latest_session.region
-        summary.latest_city = latest_session.city
-        summary.latest_source = latest_session.source
-        summary.latest_browser = latest_session.browser
-        summary.latest_os = latest_session.os
-        summary.latest_device_type = latest_session.device_type
-        summary.latest_current_page = latest_session.current_page
-        summary.devices_used = ranked_values(sessions, &:device_type)
-        summary.browsers_used = ranked_values(sessions, &:browser)
-        summary.oses_used = ranked_values(sessions, &:os)
-        summary.sources_used = ranked_values(sessions, &:source)
-        summary.locations_used = ranked_locations(sessions)
-        summary.top_pages = top_pages
-        summary.search_text = build_search_text(summary)
-        summary.save!
+        now = Time.current
+        attributes = {
+          analytics_profile_id: profile_id,
+          analytics_site_id: profile.analytics_site_id,
+          first_seen_at: [ profile.first_seen_at, sessions.map(&:started_at).compact.min ].compact.min || profile.first_seen_at || now,
+          last_seen_at: [ profile.last_seen_at, session_last_seen_times.max ].compact.max || profile.last_seen_at || now,
+          last_event_at: [ profile.last_event_at, sessions.map(&:last_event_at).compact.max ].compact.max,
+          latest_visit_id: latest_session.visit_id,
+          total_visits: Ahoy::Visit.for_analytics_site(profile.analytics_site).where(analytics_profile_id: profile_id).count,
+          total_sessions: sessions.length,
+          total_pageviews: sessions.sum(&:pageviews_count),
+          total_events: sessions.sum(&:events_count),
+          latest_context: build_latest_context(latest_session),
+          display_name: resolved_display_name(profile, latest_session),
+          email: trait_value(profile, "email"),
+          latest_country_name: latest_country_name(latest_session),
+          latest_country_code: latest_session.respond_to?(:country_code) ? latest_session.country_code : nil,
+          latest_region: latest_session.region,
+          latest_city: latest_session.city,
+          latest_source: latest_session.source,
+          latest_browser: latest_session.browser,
+          latest_os: latest_session.os,
+          latest_device_type: latest_session.device_type,
+          latest_current_page: latest_session.current_page,
+          devices_used: ranked_values(sessions, &:device_type),
+          browsers_used: ranked_values(sessions, &:browser),
+          oses_used: ranked_values(sessions, &:os),
+          sources_used: ranked_values(sessions, &:source),
+          locations_used: ranked_locations(sessions),
+          top_pages:,
+          created_at: now,
+          updated_at: now
+        }
+        summary = AnalyticsProfileSummary.new(attributes.except(:created_at, :updated_at))
+        attributes[:search_text] = build_search_text(summary)
+
+        AnalyticsProfileSummary.upsert(
+          attributes,
+          unique_by: :index_analytics_profile_summaries_on_analytics_profile_id,
+          update_only: attributes.keys - [ :analytics_profile_id, :created_at ],
+          record_timestamps: false
+        )
 
         profile.update_columns(
           stats: profile.stats.to_h.merge(
-            "total_visits" => summary.total_visits,
-            "total_sessions" => summary.total_sessions,
-            "total_pageviews" => summary.total_pageviews,
-            "total_events" => summary.total_events
+            "total_visits" => attributes[:total_visits],
+            "total_sessions" => attributes[:total_sessions],
+            "total_pageviews" => attributes[:total_pageviews],
+            "total_events" => attributes[:total_events]
           ),
-          updated_at: Time.current
+          updated_at: now
         )
       end
 

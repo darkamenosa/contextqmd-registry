@@ -13,7 +13,9 @@ module Analytics
 
       analytics_config = Analytics.config
 
-      Ahoy.api = true
+      # Keep Ahoy as the tracking/storage runtime, but let this app own the
+      # public HTTP API surface under /analytics rather than mounting /ahoy.
+      Ahoy.api = false
       Ahoy.cookies = analytics_config.use_cookies ? true : :none
       Ahoy.mask_ips = true
       Ahoy.track_bots = false

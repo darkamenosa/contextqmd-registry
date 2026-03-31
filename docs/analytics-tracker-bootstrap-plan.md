@@ -124,6 +124,8 @@ Suggested shape:
 - `transport.eventsEndpoint`
   - required
   - must be explicit so the same tracker can work first-party and cross-origin
+  - should always point at `/analytics/events`; the app should not expose
+    Ahoy's default `/ahoy/events` API publicly
 - `site.websiteId`
   - public identifier for the tracked site
   - safe to expose in copy-paste snippets

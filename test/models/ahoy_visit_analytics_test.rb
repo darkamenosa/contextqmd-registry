@@ -3,6 +3,7 @@
 require "test_helper"
 
 class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
+  include ActiveJob::TestHelper
   include ActiveSupport::Testing::TimeHelpers
 
   setup do
@@ -20,6 +21,74 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
     Analytics::Funnel.delete_all
     Analytics::SiteBoundary.delete_all
     Analytics::Site.delete_all
+    clear_enqueued_jobs
+    clear_performed_jobs
+  end
+
+  test "resolve_profile_later coalesces duplicate jobs for the same visit and identity inputs" do
+    visit = Ahoy::Visit.create!(
+      visit_token: SecureRandom.hex(16),
+      visitor_token: SecureRandom.hex(16),
+      browser_id: SecureRandom.uuid,
+      started_at: Time.zone.now.change(usec: 0)
+    )
+
+    assert_enqueued_jobs 1, only: Analytics::ProfileResolutionJob do
+      2.times do
+        visit.resolve_profile_later(
+          browser_id: visit.browser_id,
+          strong_keys: {},
+          occurred_at: Time.current,
+          identity_snapshot: {}
+        )
+      end
+    end
+  end
+
+  test "resolve_profile_later enqueues again when identity inputs change" do
+    visit = Ahoy::Visit.create!(
+      visit_token: SecureRandom.hex(16),
+      visitor_token: SecureRandom.hex(16),
+      browser_id: SecureRandom.uuid,
+      started_at: Time.zone.now.change(usec: 0)
+    )
+
+    assert_enqueued_jobs 2, only: Analytics::ProfileResolutionJob do
+      visit.resolve_profile_later(
+        browser_id: visit.browser_id,
+        strong_keys: {},
+        occurred_at: Time.current,
+        identity_snapshot: {}
+      )
+      visit.resolve_profile_later(
+        browser_id: visit.browser_id,
+        strong_keys: { identity_id: 123 },
+        occurred_at: Time.current,
+        identity_snapshot: {}
+      )
+    end
+  end
+
+  test "project_later coalesces duplicate jobs for the same visit projection inputs" do
+    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    profile = AnalyticsProfile.create!(
+      analytics_site: site,
+      status: AnalyticsProfile::STATUS_ANONYMOUS,
+      first_seen_at: 10.minutes.ago,
+      last_seen_at: 1.minute.ago
+    )
+    visit = Ahoy::Visit.create!(
+      analytics_site: site,
+      analytics_profile: profile,
+      visit_token: SecureRandom.hex(16),
+      visitor_token: SecureRandom.hex(16),
+      browser_id: SecureRandom.uuid,
+      started_at: 5.minutes.ago.change(usec: 0)
+    )
+
+    assert_enqueued_jobs 1, only: Analytics::VisitProjectionJob do
+      2.times { visit.project_later(previous_profile_id: nil) }
+    end
   end
 
   test "classifies facebook cpc traffic as paid social" do

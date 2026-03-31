@@ -23,6 +23,46 @@ It is intentionally a forward-looking design document. For the current implement
    - where they came from
    - what source, campaign, page, or keyword likely drove revenue
 
+## Implementation Direction
+
+The target implementation should follow the same modular-monolith style used in
+Rails and Fizzy:
+
+- keep analytics as a rich Rails domain rooted at `Analytics`
+- prefer rich models and namespaced domain classes over a generic `services/`
+  layer
+- keep controllers thin
+- keep jobs shallow and delegate to domain methods
+- use `_later` / `_now` naming for async boundaries
+- keep `lib/analytics/*` for framework glue and integration concerns only
+
+This means the public analytics domain should live primarily under:
+
+- `app/models/analytics/*`
+- `app/models/analytics_profile/*`
+- `app/models/ahoy/*`
+- `app/jobs/analytics/*`
+
+The corresponding design rules are:
+
+- `Ahoy::Visit` and `Ahoy::Event` remain the raw fact models and the internal
+  integration boundary to Ahoy
+- analytics-owned domain models remain under `Analytics::*`
+- profile/session/summary tables are rebuildable read models, not the source of
+  truth
+- ingestion should be append-only and minimal
+- when an event lazily creates a visit, the visit should be seeded from the
+  event's own page/referrer/device/site context up front rather than patched
+  afterward
+- identity resolution and projection should be asynchronous and idempotent
+- projection writes should prefer unique constraints plus `upsert` /
+  `upsert_all` semantics over read-then-write flows such as
+  `find_or_initialize_by(...).save!` under concurrent jobs
+
+We are still in development and breaking changes are allowed, so the preferred
+implementation is the cleanest shape that matches these rules rather than the
+most backwards-compatible migration path.
+
 ## Current State
 
 Today the analytics system is effectively global:
@@ -106,6 +146,26 @@ Responsibilities:
 Avoid hidden bootstrapping in normal read paths like `resolve_for_host(..., autocreate: true)`.
 Avoid string interpolation for analytics routes in controllers.
 
+### Domain Boundaries
+
+Keep the boundaries explicit:
+
+- `Ahoy::*`
+  - raw visits and events
+  - internal tracking engine integration
+- `Analytics::*`
+  - site-scoped control plane
+  - tracking rules
+  - report queries
+  - external provider bindings
+- `AnalyticsProfile*`
+  - identity and derived read models
+
+Do not rename `Ahoy::Visit` or `Ahoy::Event` into `Analytics::*` models just to
+force all classes under one namespace. Keeping the Ahoy models under `Ahoy::*`
+preserves a clean integration boundary and stays aligned with Ahoy’s documented
+model shape.
+
 ### Control Plane
 
 Keep these in Postgres in the analytics database:
@@ -139,6 +199,18 @@ Today they can stay in Postgres.
 Later they can move to ClickHouse behind `*::Postgres` and `*::Clickhouse` adapters.
 
 Important: this is not a full-database swap. Postgres remains the control plane even if ClickHouse becomes the fact store.
+
+Recommended write-path rule:
+
+- facts are appended synchronously
+- projections are derived asynchronously
+- live/dashboard tables are disposable read models
+- replay and rebuild must be safe
+
+Operational rule:
+
+- replay and rebuild should happen through explicit task or job entrypoints,
+  never through hidden request-time repair behavior
 
 ## Recommended Data Model
 

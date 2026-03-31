@@ -18,6 +18,8 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     Ahoy::Visit.delete_all
     Analytics::SiteBoundary.delete_all
     Analytics::Site.delete_all
+    clear_enqueued_jobs
+    clear_performed_jobs
   end
 
   test "cookieless event ingestion reuses the recent server-side visit without client tokens" do
@@ -58,6 +60,78 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_equal visit.id, Ahoy::Event.order(:id).last.visit_id
     assert_equal visit.id, Ahoy::Visit.order(:id).last.id
+  end
+
+  test "cookieless repeat events do not enqueue profile resolution again for an already resolved anonymous visit" do
+    perform_analytics_jobs do
+      get root_path, headers: BROWSER_HEADERS
+    end
+
+    clear_enqueued_jobs
+
+    assert_enqueued_jobs 0, only: Analytics::ProfileResolutionJob do
+      post "/analytics/events",
+        params: {
+          events: [
+            {
+              name: "engagement",
+              properties: {
+                page: "/",
+                url: root_url,
+                title: "Home",
+                referrer: "",
+                screen_size: "1440x900"
+              },
+              time: Time.current.iso8601
+            }
+          ]
+        },
+        as: :json,
+        headers: BROWSER_HEADERS
+    end
+
+    assert_response :success
+  end
+
+  test "burst event ingest on a fresh anonymous visit coalesces profile resolution" do
+    assert_difference -> { Ahoy::Visit.count }, +1 do
+      assert_difference -> { Ahoy::Event.count }, +2 do
+        assert_enqueued_jobs 1, only: Analytics::ProfileResolutionJob do
+          post "/analytics/events",
+            params: {
+              events: [
+                {
+                  name: "pageview",
+                  properties: {
+                    page: "/about",
+                    url: about_url,
+                    title: "About",
+                    referrer: "",
+                    screen_size: "1440x900"
+                  },
+                  time: Time.current.iso8601
+                },
+                {
+                  name: "engagement",
+                  properties: {
+                    page: "/about",
+                    url: about_url,
+                    title: "About",
+                    referrer: "",
+                    screen_size: "1440x900",
+                    engaged_ms: 1200
+                  },
+                  time: (Time.current + 1.second).iso8601
+                }
+              ]
+            },
+            as: :json,
+            headers: BROWSER_HEADERS
+        end
+      end
+    end
+
+    assert_response :success
   end
 
   test "server-side tracked page sets the analytics browser cookie" do
