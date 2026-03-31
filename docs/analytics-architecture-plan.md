@@ -1398,7 +1398,7 @@ For external snippets:
 ```html
 <script
   defer
-  src="https://analytics.example.com/analytics/script.js"
+  src="https://analytics.example.com/a/t.js"
   data-website-id="site_xxx"
 ></script>
 ```
@@ -1408,8 +1408,8 @@ Rules:
 - `data-website-id` is the public identifier, not the trust boundary
 - any signed site token should remain an internal runtime/bootstrap detail
 - boundary resolution stays server-owned
-- external embeds bootstrap through `POST /analytics/bootstrap`
-- events post only to `POST /analytics/events`
+- external embeds bootstrap through `POST /a/b`
+- events post only to `POST /a/e`
 
 For custom goals/events:
 

@@ -139,11 +139,11 @@ Rails.application.routes.draw do
     get "(*path)", to: redirect { |params, req| "#{req.protocol}localhost:#{req.port}/#{params[:path]}" }
   end
 
-  get "analytics/script.js", to: "analytics/script#show", defaults: { format: :js }, as: :analytics_tracker_script
-  post "analytics/bootstrap", to: "analytics/script#bootstrap", defaults: { format: :json }, as: :analytics_tracker_bootstrap
-  match "analytics/bootstrap", to: "analytics/cors#preflight", via: :options
-  post "analytics/events", to: "analytics/events#create", as: :analytics_events
-  match "analytics/events", to: "analytics/cors#preflight", via: :options
+  get "a/t.js", to: "analytics/script#show", defaults: { format: :js }, as: :analytics_tracker_script
+  post "a/b", to: "analytics/script#bootstrap", defaults: { format: :json }, as: :analytics_tracker_bootstrap
+  match "a/b", to: "analytics/cors#preflight", via: :options
+  post "a/e", to: "analytics/events#create", as: :analytics_collect
+  match "a/e", to: "analytics/cors#preflight", via: :options
 
   # Library browsing (public) + submission (authenticated)
   resources :libraries, only: [ :index, :new, :create ], param: :slug do

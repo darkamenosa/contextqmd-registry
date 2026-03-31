@@ -151,7 +151,7 @@ module Admin
         def tracker_internal_path?(path)
           normalized = path.to_s
           ::Analytics::InternalPaths.tracker_exclude_prefixes.any? do |prefix|
-            normalized.start_with?(prefix)
+            ::Analytics::InternalPaths.segment_prefix_match?(normalized, prefix)
           end
         end
 

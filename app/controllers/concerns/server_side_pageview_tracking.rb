@@ -18,6 +18,7 @@ module ServerSidePageviewTracking
       :analytics_initial_page_key
 
     before_action :prepare_server_side_pageview_tracking
+    after_action :track_initial_pageview
   end
 
   private
@@ -25,8 +26,27 @@ module ServerSidePageviewTracking
       return unless analytics_bootstrap_enabled?
 
       Analytics::BrowserIdentity.ensure!(request, cookies:)
-      @analytics_initial_pageview_tracked = false
-      @analytics_initial_page_key = nil
+      @analytics_initial_pageview_tracked = true
+      @analytics_initial_page_key = analytics_current_page_key
+    end
+
+    def track_initial_pageview
+      return unless analytics_bootstrap_enabled?
+      return if response.redirect?
+
+      ahoy.track(
+        "pageview",
+        {
+          page: request.path,
+          url: request.original_url,
+          title: try(:page_title).presence || response_title,
+          referrer: request.referer.to_s,
+          screen_size: nil
+        }.compact
+      )
+    rescue StandardError
+      raise if Rails.env.test? || Rails.env.development?
+      nil
     end
 
     def analytics_bootstrap_enabled?
@@ -40,7 +60,7 @@ module ServerSidePageviewTracking
       return false if request.xhr?
 
       path = request.path.to_s.downcase
-      return false if EXCLUDED_PREFIXES.any? { |prefix| path.start_with?(prefix) }
+      return false if EXCLUDED_PREFIXES.any? { |prefix| Analytics::InternalPaths.segment_prefix_match?(path, prefix) }
       return false if EXCLUDED_PATHS.include?(path)
       return false if path.include?("apple-touch-icon")
       return false if speculative_prefetch_request?
@@ -71,5 +91,17 @@ module ServerSidePageviewTracking
 
     def analytics_initial_page_key
       @analytics_initial_page_key
+    end
+
+    def analytics_current_page_key
+      [ request.path, request.query_string.presence ].compact.join("?")
+    end
+
+    def response_title
+      return unless response.media_type == "text/html"
+
+      response.body.to_s[/\<title\>(.*?)\<\/title\>/im, 1]&.strip
+    rescue StandardError
+      nil
     end
 end

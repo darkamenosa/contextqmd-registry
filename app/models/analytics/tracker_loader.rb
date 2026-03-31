@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Analytics::TrackerLoader
-  SCRIPT_PATH = "/analytics/script.js".freeze
+  SCRIPT_PATH = "/a/t.js".freeze
 
   class << self
     def script_path

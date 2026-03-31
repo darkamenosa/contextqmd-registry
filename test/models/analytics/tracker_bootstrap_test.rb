@@ -23,7 +23,7 @@ class Analytics::TrackerBootstrapTest < ActiveSupport::TestCase
     )
 
     assert_equal 1, payload.fetch(:version)
-    assert_equal "/analytics/events", payload.dig(:transport, :eventsEndpoint)
+    assert_equal "/a/e", payload.dig(:transport, :eventsEndpoint)
     assert_equal true, payload.dig(:tracking, :initialPageviewTracked)
     assert_equal "/", payload.dig(:tracking, :initialPageKey)
     assert_not_nil payload.dig(:site, :token)

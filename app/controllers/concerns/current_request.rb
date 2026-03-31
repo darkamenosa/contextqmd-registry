@@ -10,6 +10,7 @@ module CurrentRequest
   private
 
     def set_current_request
+      Current.request = request
       Current.http_method = request.method
       Current.request_id = request.uuid
       Current.user_agent = request.user_agent

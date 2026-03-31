@@ -17,14 +17,14 @@ class AnalyticsEmbedTest < ActionDispatch::IntegrationTest
   test "public tracker loader is the canonical analytics delivery path" do
     host! "localhost"
 
-    get "/analytics/script.js", headers: MODERN_BROWSER_HEADERS
+    get "/a/t.js", headers: MODERN_BROWSER_HEADERS
 
     assert_response :success
     assert_equal "text/javascript; charset=utf-8", response.media_type + "; charset=#{response.charset}"
     assert_includes response.body, "window.analyticsConfig"
     assert_includes response.body, "window.analytics ="
     assert_includes response.body, "__analyticsModuleRequested"
-    assert_includes response.body, "/analytics/bootstrap"
+    assert_includes response.body, "/a/b"
     assert_includes response.body, "http://localhost/vite"
   ensure
     host! "www.example.com"
@@ -33,13 +33,13 @@ class AnalyticsEmbedTest < ActionDispatch::IntegrationTest
   test "public tracker loader responds with 304 when the etag matches" do
     host! "localhost"
 
-    get "/analytics/script.js", headers: MODERN_BROWSER_HEADERS
+    get "/a/t.js", headers: MODERN_BROWSER_HEADERS
 
     assert_response :success
     etag = response.headers["ETag"]
     assert etag.present?
 
-    get "/analytics/script.js", headers: MODERN_BROWSER_HEADERS.merge("If-None-Match" => etag)
+    get "/a/t.js", headers: MODERN_BROWSER_HEADERS.merge("If-None-Match" => etag)
 
     assert_response :not_modified
     assert_empty response.body
@@ -52,7 +52,7 @@ class AnalyticsEmbedTest < ActionDispatch::IntegrationTest
 
     host! "localhost"
 
-    post "/analytics/bootstrap",
+    post "/a/b",
       params: { website_id: site.public_id },
       as: :json,
       headers: {
@@ -64,7 +64,7 @@ class AnalyticsEmbedTest < ActionDispatch::IntegrationTest
 
     payload = JSON.parse(response.body)
     assert_equal site.public_id, payload.dig("site", "websiteId")
-    assert_equal "http://localhost/analytics/events", payload.dig("transport", "eventsEndpoint")
+    assert_equal "http://localhost/a/e", payload.dig("transport", "eventsEndpoint")
     assert payload.dig("site", "token").present?
   ensure
     host! "www.example.com"
@@ -76,7 +76,7 @@ class AnalyticsEmbedTest < ActionDispatch::IntegrationTest
 
     host! "localhost"
 
-    post "/analytics/bootstrap",
+    post "/a/b",
       params: { website_id: site.public_id },
       as: :json,
       headers: {
@@ -96,7 +96,7 @@ class AnalyticsEmbedTest < ActionDispatch::IntegrationTest
 
     host! "localhost"
 
-    post "/analytics/bootstrap",
+    post "/a/b",
       params: { website_id: site.public_id },
       as: :json,
       headers: {
@@ -110,7 +110,7 @@ class AnalyticsEmbedTest < ActionDispatch::IntegrationTest
   end
 
   test "ahoy events preflight responds with tracker cors headers" do
-    options "/analytics/events", headers: { "Origin" => "https://docs.example.test" }
+    options "/a/e", headers: { "Origin" => "https://docs.example.test" }
 
     assert_response :no_content
     assert_equal "*", response.headers["Access-Control-Allow-Origin"]
@@ -119,7 +119,7 @@ class AnalyticsEmbedTest < ActionDispatch::IntegrationTest
   end
 
   test "bootstrap preflight responds with tracker cors headers" do
-    options "/analytics/bootstrap", headers: { "Origin" => "https://docs.example.test" }
+    options "/a/b", headers: { "Origin" => "https://docs.example.test" }
 
     assert_response :no_content
     assert_equal "*", response.headers["Access-Control-Allow-Origin"]
@@ -138,7 +138,7 @@ class AnalyticsEmbedTest < ActionDispatch::IntegrationTest
     host! "localhost"
 
     assert_difference -> { Ahoy::Event.count }, +1 do
-      post "/analytics/events",
+      post "/a/e",
         params: {
           events: [
             {
@@ -182,7 +182,7 @@ class AnalyticsEmbedTest < ActionDispatch::IntegrationTest
 
     assert_no_difference -> { Ahoy::Visit.count } do
       assert_no_difference -> { Ahoy::Event.count } do
-        post "/analytics/events",
+        post "/a/e",
           params: {
             events: [
               {

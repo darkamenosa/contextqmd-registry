@@ -3,6 +3,7 @@
 module Analytics::InternalPaths
   TRANSPORT_PREFIXES = [
     "/analytics",
+    "/a",
     "/ahoy"
   ].freeze
 
@@ -50,20 +51,34 @@ module Analytics::InternalPaths
       normalized = normalize_path(path)
       return false if normalized.blank?
 
-      REPORT_INTERNAL_PREFIXES.any? { |prefix| normalized.start_with?(prefix) }
+      REPORT_INTERNAL_PREFIXES.any? { |prefix| segment_prefix_match?(normalized, prefix) }
     end
 
     def report_internal_sql_similar_pattern
       @report_internal_sql_similar_pattern ||= begin
-        patterns = REPORT_INTERNAL_PREFIXES.map do |prefix|
+        patterns = REPORT_INTERNAL_PREFIXES.flat_map do |prefix|
           escaped = prefix.gsub("/", "\\/")
-          if escaped.end_with?("\\/")
+          if prefix.end_with?("/")
             "#{escaped}%"
           else
-            "#{escaped}%"
+            [ escaped, "#{escaped}\\/%" ]
           end
         end
         "(#{patterns.join('|')})"
+      end
+    end
+
+    def segment_prefix_match?(path, prefix)
+      return false if path.blank? || prefix.blank?
+
+      normalized_path = normalize_path(path)
+      normalized_prefix = normalize_path(prefix)
+      return false if normalized_path.blank? || normalized_prefix.blank?
+
+      if normalized_prefix.end_with?("/")
+        normalized_path.start_with?(normalized_prefix)
+      else
+        normalized_path == normalized_prefix || normalized_path.start_with?("#{normalized_prefix}/")
       end
     end
 

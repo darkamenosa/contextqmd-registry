@@ -160,7 +160,7 @@ test("analytics tracker posts pageviews only through the events endpoint", async
     await Promise.resolve()
 
     assert.equal(requests.length, 1)
-    assert.equal(requests[0].url, "/analytics/events")
+    assert.equal(requests[0].url, "/a/e")
     assert.equal(requests[0].options.keepalive, true)
 
     const body = JSON.parse(requests[0].options.body)
@@ -209,7 +209,7 @@ test("analytics tracker posts engagement events with fetch keepalive even when s
     await Promise.resolve()
 
     assert.equal(beaconCalls, 0)
-    const request = requests.find((entry) => entry.url === "/analytics/events")
+    const request = requests.find((entry) => entry.url === "/a/e")
     assert.ok(request)
     assert.equal(request.options.keepalive, true)
   } finally {
@@ -233,7 +233,7 @@ test("analytics tracker still posts the pageview when the server has not pre-tra
     await Promise.resolve()
 
     assert.equal(requests.length, 1)
-    assert.equal(requests[0].url, "/analytics/events")
+    assert.equal(requests[0].url, "/a/e")
   } finally {
     cleanupBrowserStubs()
   }

@@ -36,7 +36,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
 
     assert_no_difference -> { Ahoy::Visit.count } do
       assert_difference -> { Ahoy::Event.count }, +1 do
-        post "/analytics/events",
+        post "/a/e",
           params: {
             events: [
               {
@@ -70,7 +70,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     clear_enqueued_jobs
 
     assert_enqueued_jobs 0, only: Analytics::ProfileResolutionJob do
-      post "/analytics/events",
+      post "/a/e",
         params: {
           events: [
             {
@@ -97,7 +97,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     assert_difference -> { Ahoy::Visit.count }, +1 do
       assert_difference -> { Ahoy::Event.count }, +2 do
         assert_enqueued_jobs 1, only: Analytics::ProfileResolutionJob do
-          post "/analytics/events",
+          post "/a/e",
             params: {
               events: [
                 {
@@ -312,7 +312,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     )
 
     assert_no_difference -> { Ahoy::Event.count } do
-      post "/analytics/events",
+      post "/a/e",
         params: {
           events: [
             {
@@ -348,7 +348,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     end
 
     begin
-      post "/analytics/events",
+      post "/a/e",
         params: {
           events: [
             {
@@ -423,7 +423,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
 
     assert_no_difference -> { Ahoy::Visit.count } do
       assert_difference -> { Ahoy::Event.count }, +1 do
-        post "/analytics/events",
+        post "/a/e",
           params: {
             visit_token: SecureRandom.uuid,
             visitor_token: SecureRandom.uuid,
@@ -453,7 +453,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
   test "non-engagement event creates a visit and backfills landing page and screen size" do
     assert_difference -> { Ahoy::Visit.count }, +1 do
       assert_difference -> { Ahoy::Event.count }, +1 do
-        post "/analytics/events",
+        post "/a/e",
           params: {
             events: [
               {
@@ -484,7 +484,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
   end
 
   test "ahoy events controller seeds the analytics browser cookie" do
-    post "/analytics/events",
+    post "/a/e",
       params: {
         events: [
           {
@@ -520,7 +520,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     travel_to Time.utc(2026, 3, 26, 0, 0, 10) do
       assert_no_difference -> { Ahoy::Visit.count } do
         assert_difference -> { Ahoy::Event.count }, +1 do
-          post "/analytics/events",
+          post "/a/e",
             params: {
               events: [
                 {
@@ -559,7 +559,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     travel_to Time.utc(2026, 3, 25, 10, 31, 0) do
       assert_no_difference -> { Ahoy::Visit.count } do
         assert_no_difference -> { Ahoy::Event.count } do
-          post "/analytics/events",
+          post "/a/e",
             params: {
               events: [
                 {
@@ -687,28 +687,6 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
   private
     def bootstrap_and_track_pageview(path, title:, headers: BROWSER_HEADERS, referrer: "", session: self)
       session.get path, headers: headers
-      host_with_port = session.request.host_with_port
-      protocol = session.request.ssl? ? "https://" : "http://"
-      page_url = "#{protocol}#{host_with_port}#{path}"
-
-      session.post "/analytics/events",
-        params: {
-          events: [
-            {
-              name: "pageview",
-              properties: {
-                page: path,
-                url: page_url,
-                title: title,
-                referrer: referrer,
-                screen_size: "1440x900"
-              },
-              time: Time.current.iso8601
-            }
-          ]
-        },
-        as: :json,
-        headers: headers
     end
 
     def perform_analytics_jobs(&block)

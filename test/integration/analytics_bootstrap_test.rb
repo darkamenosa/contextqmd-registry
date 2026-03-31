@@ -9,19 +9,19 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
 
   test "layout exposes analytics runtime config from rails settings" do
     with_server_visits(true) do
-      assert_no_difference -> { Ahoy::Visit.count } do
-        assert_no_difference -> { Ahoy::Event.count } do
+      assert_difference -> { Ahoy::Visit.count }, +1 do
+        assert_difference -> { Ahoy::Event.count }, +1 do
           get root_path, headers: MODERN_BROWSER_HEADERS
         end
       end
 
       assert_response :success
       assert_includes response.body, "\"version\":1"
-      assert_includes response.body, "\"transport\":{\"eventsEndpoint\":\"/analytics/events\"}"
+      assert_includes response.body, "\"transport\":{\"eventsEndpoint\":\"/a/e\"}"
       assert_includes response.body, "\"site\":{\"websiteId\":"
       assert_includes response.body, "\"token\":"
-      assert_includes response.body, "\"tracking\":{\"hashBasedRouting\":false,\"initialPageviewTracked\":false"
-      assert_includes response.body, %(<script src="/analytics/script.js" defer="defer"></script>)
+      assert_includes response.body, "\"tracking\":{\"hashBasedRouting\":false,\"initialPageviewTracked\":true"
+      assert_includes response.body, %(<script src="/a/t.js" defer="defer"></script>)
       refute_includes response.body, "vite/assets/analytics"
       refute_includes response.body, "meta name=\"ahoy-visit\""
       refute_includes response.body, "meta name=\"ahoy-visitor\""
@@ -44,10 +44,10 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "auth pages bootstrap analytics for client-owned first pageviews" do
+  test "auth pages bootstrap analytics for hybrid first pageviews" do
     with_server_visits(true) do
-      assert_no_difference -> { Ahoy::Visit.count } do
-        assert_no_difference -> { Ahoy::Event.count } do
+      assert_difference -> { Ahoy::Visit.count }, +1 do
+        assert_difference -> { Ahoy::Event.count }, +1 do
           get "/login", headers: MODERN_BROWSER_HEADERS
         end
       end
@@ -55,7 +55,7 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
       assert_response :success
       assert_includes response.body, "\"site\":{\"websiteId\":"
       assert_includes response.body, "\"token\":"
-      assert_includes response.body, "\"tracking\":{\"hashBasedRouting\":false,\"initialPageviewTracked\":false"
+      assert_includes response.body, "\"tracking\":{\"hashBasedRouting\":false,\"initialPageviewTracked\":true"
       refute_includes response.body, "meta name=\"ahoy-visit\""
       refute_includes response.body, "meta name=\"ahoy-visitor\""
     end
@@ -75,7 +75,7 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_includes response.body, "\"includePaths\":[\"/**\"]"
-    assert_includes response.body, "\"excludePaths\":[\"/admin\",\"/.well-known\",\"/analytics\",\"/ahoy\",\"/cable\",\"/preview/**\"]"
+    assert_includes response.body, "\"excludePaths\":[\"/admin\",\"/.well-known\",\"/analytics\",\"/a\",\"/ahoy\",\"/cable\",\"/preview/**\"]"
   end
 
   test "head requests do not bootstrap or track analytics" do
@@ -93,7 +93,7 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
   test "analytics owns the public events endpoint without exposing ahoy engine routes" do
     route_paths = Rails.application.routes.routes.map { |route| route.path.spec.to_s }
 
-    assert_includes route_paths, "/analytics/events(.:format)"
+    assert_includes route_paths, "/a/e(.:format)"
     refute_includes route_paths, "/ahoy"
     refute_includes route_paths, "/events(.:format)"
     refute_includes route_paths, "/visits(.:format)"

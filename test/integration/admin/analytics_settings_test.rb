@@ -367,7 +367,7 @@ class Admin::AnalyticsSettingsTest < ActionDispatch::IntegrationTest
     assert_equal [], payload.fetch("sites")
     assert_equal "/admin/settings/analytics", payload.fetch("paths").fetch("settings")
     tracker = payload.fetch("settings").fetch("tracker")
-    assert_equal "http://www.example.com/analytics/script.js", tracker.fetch("scriptUrl")
+    assert_equal "http://www.example.com/a/t.js", tracker.fetch("scriptUrl")
     assert_equal site.public_id, tracker.fetch("websiteId")
     assert_equal "docs.example.test", tracker.fetch("domainHint")
     assert_includes tracker.fetch("snippetHtml"), %(data-website-id="#{site.public_id}")

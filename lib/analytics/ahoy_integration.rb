@@ -36,10 +36,10 @@ module Analytics
       return true if req.nil?
 
       path = req.path.to_s
-      return false if path.start_with?("/ahoy", "/analytics")
+      return false if [ "/ahoy", "/analytics", "/a" ].any? { |prefix| Analytics::InternalPaths.segment_prefix_match?(path, prefix) }
 
       Analytics::InternalPaths.server_excluded_prefixes.any? do |prefix|
-        path.start_with?(prefix)
+        Analytics::InternalPaths.segment_prefix_match?(path, prefix)
       end
     end
 

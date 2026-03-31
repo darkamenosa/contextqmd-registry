@@ -30,7 +30,7 @@ class Analytics::TrackerBootstrap
       {
         version: VERSION,
         transport: {
-          eventsEndpoint: "/analytics/events"
+          eventsEndpoint: "/a/e"
         },
         site: {
           websiteId: site_resolution&.site&.public_id,
@@ -69,7 +69,7 @@ class Analytics::TrackerBootstrap
       {
         version: VERSION,
         transport: {
-          eventsEndpoint: "#{public_origin}/analytics/events"
+          eventsEndpoint: "#{public_origin}/a/e"
         },
         site: {
           websiteId: site.public_id,

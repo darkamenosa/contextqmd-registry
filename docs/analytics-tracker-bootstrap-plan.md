@@ -72,7 +72,7 @@ Recommended shape:
 ```html
 <script
   defer
-  src="https://datafa.st/analytics/script.js"
+  src="https://datafa.st/a/t.js"
   data-website-id="site_xxx"
 ></script>
 ```
@@ -80,7 +80,7 @@ Recommended shape:
 Properties:
 
 - `data-website-id` is the public lookup key
-- `/analytics/script.js` is a tiny public loader that normalizes the public identifier into `window.analyticsConfig` and then imports the real tracker bundle
+- `/a/t.js` is a tiny public loader that normalizes the public identifier into `window.analyticsConfig` and then imports the real tracker bundle
 
 Do not treat a raw `data-website-id` as authoritative proof of site ownership.
 It is an identifier, not the trust boundary.
@@ -95,7 +95,7 @@ Suggested shape:
 {
   "version": 1,
   "transport": {
-    "eventsEndpoint": "/analytics/events"
+    "eventsEndpoint": "/a/e"
   },
   "site": {
     "websiteId": "site_xxx",
@@ -104,7 +104,7 @@ Suggested shape:
   },
   "tracking": {
     "hashBasedRouting": false,
-    "initialPageviewTracked": false
+    "initialPageviewTracked": true
   },
   "filters": {
     "includePaths": [],
@@ -123,7 +123,7 @@ Suggested shape:
 - `transport.eventsEndpoint`
   - required
   - must be explicit so the same tracker can work first-party and cross-origin
-  - should always point at `/analytics/events`; the app should not expose
+  - should always point at `/a/e`; the app should not expose
     Ahoy's default `/ahoy/events` API publicly
 - `site.websiteId`
   - public identifier for the tracked site
@@ -240,27 +240,27 @@ Recommended comparison rules:
 
 External installs need two public capabilities:
 
-- `GET /analytics/script.js`
+- `GET /a/t.js`
   - no auth
   - no CSRF
   - safe to embed cross-origin
   - loads the real tracker bundle from the analytics service origin
-- `POST /analytics/bootstrap`
+- `POST /a/b`
   - validates the external embed against host/path ownership
   - returns effective runtime config plus a short-lived site token
-- `OPTIONS /analytics/bootstrap`
+- `OPTIONS /a/b`
   - returns permissive tracker CORS headers
-- `OPTIONS /analytics/events`
+- `OPTIONS /a/e`
   - returns permissive tracker CORS headers
   - allows cross-origin `application/json` event posts from the snippet
 
-`POST /analytics/events` responses should return the same tracker CORS headers.
+`POST /a/e` responses should return the same tracker CORS headers.
 
 Internal boundary rule:
 
 - `Analytics` owns the public HTTP surface
 - `Ahoy` stays the internal engine handling event creation and visit lifecycle
-- public docs and snippets should use `/analytics/events`
+- public docs and snippets should use `/a/e`
 
 ## Trust Model
 

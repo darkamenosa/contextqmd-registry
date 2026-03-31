@@ -3,6 +3,7 @@
 module Analytics
   class EventsController < Ahoy::BaseController
     skip_forgery_protection
+    before_action :set_current_identity, if: -> { respond_to?(:set_current_identity, true) }
     before_action { Analytics::BrowserIdentity.ensure!(request, cookies:) }
     after_action { Analytics::TrackerCorsHeaders.apply!(response.headers) }
     around_action do |controller, action|

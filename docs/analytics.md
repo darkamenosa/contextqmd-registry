@@ -39,9 +39,9 @@ One practical strategy note:
 host app
   -> Analytics::HostIntegration
   -> server-side pageview bootstrap
-  -> GET /analytics/script.js
-  -> POST /analytics/bootstrap
-  -> POST /analytics/events
+  -> GET /a/t.js
+  -> POST /a/b
+  -> POST /a/e
   -> Analytics::AhoyStore
   -> analytics DB
   -> Analytics::* dataset queries
@@ -306,9 +306,9 @@ Public ownership rule:
 ```text
 first-party page
   -> window.analyticsConfig in application layout
-  -> GET /analytics/script.js
+  -> GET /a/t.js
   -> analytics.ts tracker
-  -> POST /analytics/events
+  -> POST /a/e
         ↓
   Analytics::EventsController + Analytics::AhoyStore
         ↓
@@ -325,10 +325,10 @@ For external installs, the public flow is:
 
 ```text
 third-party page
-  -> GET /analytics/script.js
-  -> POST /analytics/bootstrap
+  -> GET /a/t.js
+  -> POST /a/b
   -> analytics.ts tracker
-  -> POST /analytics/events
+  -> POST /a/e
 ```
 
 ## Database Isolation
@@ -716,14 +716,14 @@ Today the fact store is still Postgres. Later it can move behind ClickHouse adap
 
 ## Client-Side Tracker
 
-`app/frontend/entrypoints/analytics.ts` — a standalone, framework-agnostic tracker loaded through `GET /analytics/script.js`.
+`app/frontend/entrypoints/analytics.ts` — a standalone, framework-agnostic tracker loaded through `GET /a/t.js`.
 
 ### How it works
 
 1. **First-party bootstrap**: On eligible public HTML `GET` requests, Rails emits the analytics bootstrap payload and ensures the first-party browser continuity cookie exists.
-2. **Client-owned initial pageview**: The standalone tracker sends the initial `pageview` after load/visibility instead of forcing the HTML response path to write analytics synchronously.
+2. **Hybrid initial pageview**: First-party HTML requests write one minimal pageview on the server, while the standalone tracker owns follow-up navigation and engagement events.
 3. **Browser continuity cookie**: Rails ensures a first-party `cq_analytics_browser_id` cookie exists. This browser id is separate from Ahoy visit/session ownership and is used only for anonymous continuity and profile resolution.
-4. **Event-only ingestion**: Tracking uses POST `/analytics/events` only. Ahoy creates a new visit lazily on the next `pageview` when no recent visit exists.
+4. **Unified transport**: Browser-side tracking uses POST `/a/e`. When a first-party HTML request already wrote the initial pageview, the tracker sees `initialPageviewTracked: true` and skips the duplicate first hit.
 5. **Engagement does not open a new visit**: `engagement` events extend an active visit, but are dropped when no recent visit exists. This matches Plausible-style session handling.
 6. **Engagement tracking**: Tracks time-on-page and scroll depth (Plausible-style). Fires `engagement` events on visibility change / blur / navigation.
 7. **Dedup**: Uses a `pageKey` (pathname + search) to prevent double-counting when frameworks call `pushState` then `replaceState` in the same tick.
@@ -737,7 +737,7 @@ canonical nested shape:
 window.analyticsConfig = {
   version: 1,
   transport: {
-    eventsEndpoint: "/analytics/events"
+    eventsEndpoint: "/a/e"
   },
   site: {
     websiteId: "site_public_id_or_null",
@@ -746,11 +746,11 @@ window.analyticsConfig = {
   },
   tracking: {
     hashBasedRouting: false,
-    initialPageviewTracked: false
+    initialPageviewTracked: true
   },
   filters: {
     includePaths: [],
-    excludePaths: ["/admin", "/.well-known", "/analytics", "/ahoy", "/cable"],
+    excludePaths: ["/admin", "/.well-known", "/analytics", "/a", "/ahoy", "/cable"],
     excludeAssets: [".png", ".jpg", ".css", ".js"]
   },
   debug: false
@@ -761,17 +761,17 @@ Important distinction:
 
 - first-party pages usually already have a signed `site.token`, so the loader
   can start immediately
-- external installs bootstrap through `POST /analytics/bootstrap`
+- external installs bootstrap through `POST /a/b`
 - the browser uses `website_id` only for bootstrap, not for steady-state event
   ingestion
 
 For external installs, admin settings should generate a public snippet that points
-to `/analytics/script.js`. The public contract should stay small:
+to `/a/t.js`. The public contract should stay small:
 
 ```html
 <script
   defer
-  src="https://analytics.example.com/analytics/script.js"
+  src="https://analytics.example.com/a/t.js"
   data-website-id="site_xxx"
 ></script>
 ```
@@ -807,12 +807,12 @@ Events use `fetch` with `keepalive: true`, a JSON body, and `X-CSRF-Token` heade
 
 External snippet installs use:
 
-- `GET /analytics/script.js` for the public loader
-- `POST /analytics/bootstrap` to validate the embed and mint runtime config
-- `OPTIONS /analytics/bootstrap` and `OPTIONS /analytics/events` for CORS
-- `POST /analytics/events` for event ingestion
+- `GET /a/t.js` for the public loader
+- `POST /a/b` to validate the embed and mint runtime config
+- `OPTIONS /a/b` and `OPTIONS /a/e` for CORS
+- `POST /a/e` for event ingestion
 
-`GET /analytics/script.js` uses Rails conditional GET support in non-development
+`GET /a/t.js` uses Rails conditional GET support in non-development
 environments, so matching ETags return `304 Not Modified`.
 
 Site ownership should still resolve server-side through `website_id` lookup for
@@ -834,7 +834,7 @@ resolution.
 ### Dedupe model
 
 - server tracks the first rendered pageview
-- layout emits `initialPageviewTracked: false`
+- layout emits `initialPageviewTracked: true` when the server fallback already counted the current HTML load
 - client tracker uses that bootstrap and sends the first pageview itself after load/visibility
 
 ## Server-Side: Ahoy Store

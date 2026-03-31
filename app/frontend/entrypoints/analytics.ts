@@ -7,7 +7,7 @@
  * - Hybrid apps (mix of both)
  *
  * Similar to Plausible.io, wraps the History API to detect navigation.
- * Usage: load through the analytics loader at /analytics/script.js
+ * Usage: load through the public analytics loader at /a/t.js
  */
 
 interface AnalyticsConfig {
@@ -82,9 +82,16 @@ class StandaloneAnalytics {
 
   constructor() {
     this.config = {
-      eventsEndpoint: "/analytics/events",
+      eventsEndpoint: "/a/e",
       // Exclude internal/system endpoints to avoid accidental tracking.
-      excludePaths: ["/admin", "/.well-known", "/analytics", "/ahoy", "/cable"],
+      excludePaths: [
+        "/admin",
+        "/.well-known",
+        "/analytics",
+        "/a",
+        "/ahoy",
+        "/cable",
+      ],
       excludeAssets: [
         ".png",
         ".jpg",
@@ -285,8 +292,13 @@ class StandaloneAnalytics {
   private shouldExclude(pathname: string): boolean {
     const lowerPath = pathname.toLowerCase()
 
-    // Exclude admin paths
-    if (this.config.excludePaths.some((path) => lowerPath.startsWith(path))) {
+    // Exclude internal transport/admin paths by path segment, so short
+    // prefixes like "/a" do not accidentally exclude "/about" or "/app".
+    if (
+      this.config.excludePaths.some((path) =>
+        this.segmentPrefixMatch(lowerPath, path)
+      )
+    ) {
       return true
     }
 
@@ -719,6 +731,21 @@ class StandaloneAnalytics {
     } catch {
       return false
     }
+  }
+
+  private segmentPrefixMatch(actualPath: string, prefix: string): boolean {
+    const normalizedPath = (actualPath || "").trim().toLowerCase()
+    const normalizedPrefix = (prefix || "").trim().toLowerCase()
+    if (!normalizedPath || !normalizedPrefix) return false
+
+    if (normalizedPrefix.endsWith("/")) {
+      return normalizedPath.startsWith(normalizedPrefix)
+    }
+
+    return (
+      normalizedPath === normalizedPrefix ||
+      normalizedPath.startsWith(normalizedPrefix + "/")
+    )
   }
 
   private getLinkEl(node: Element | null): HTMLAnchorElement | null {
