@@ -7,10 +7,10 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
     "HTTP_USER_AGENT" => "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
   }.freeze
 
-  test "layout exposes analytics runtime config from rails settings" do
+  test "homepage stays client-tracked while still exposing analytics runtime config" do
     with_server_visits(true) do
-      assert_difference -> { Ahoy::Visit.count }, +1 do
-        assert_difference -> { Ahoy::Event.count }, +1 do
+      assert_no_difference -> { Ahoy::Visit.count } do
+        assert_no_difference -> { Ahoy::Event.count } do
           get root_path, headers: MODERN_BROWSER_HEADERS
         end
       end
@@ -20,11 +20,25 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
       assert_includes response.body, "\"transport\":{\"eventsEndpoint\":\"/a/e\"}"
       assert_includes response.body, "\"site\":{\"websiteId\":"
       assert_includes response.body, "\"token\":"
-      assert_includes response.body, "\"tracking\":{\"hashBasedRouting\":false,\"initialPageviewTracked\":true"
+      assert_includes response.body, "\"tracking\":{\"hashBasedRouting\":false,\"initialPageviewTracked\":false"
       assert_includes response.body, %(<script src="/a/t.js" defer="defer"></script>)
+      refute_includes response.body, "csrf-token"
       refute_includes response.body, "vite/assets/analytics"
       refute_includes response.body, "meta name=\"ahoy-visit\""
       refute_includes response.body, "meta name=\"ahoy-visitor\""
+    end
+  end
+
+  test "non-home public pages still bootstrap server-side analytics" do
+    with_server_visits(true) do
+      assert_difference -> { Ahoy::Visit.count }, +1 do
+        assert_difference -> { Ahoy::Event.count }, +1 do
+          get about_path, headers: MODERN_BROWSER_HEADERS
+        end
+      end
+
+      assert_response :success
+      assert_includes response.body, "\"tracking\":{\"hashBasedRouting\":false,\"initialPageviewTracked\":true"
     end
   end
 
@@ -76,6 +90,17 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_includes response.body, "\"includePaths\":[\"/**\"]"
     assert_includes response.body, "\"excludePaths\":[\"/admin\",\"/.well-known\",\"/analytics\",\"/a\",\"/ahoy\",\"/cable\",\"/preview/**\"]"
+  end
+
+  test "homepage sends public cache headers for anonymous full html requests" do
+    with_server_visits(true) do
+      get root_path, headers: MODERN_BROWSER_HEADERS
+    end
+
+    assert_response :success
+    assert_equal "max-age=300, public", response.headers["Cache-Control"]
+    assert_equal "public, max-age=300, stale-while-revalidate=60", response.headers["Cloudflare-CDN-Cache-Control"]
+    assert_nil response.headers["Set-Cookie"]
   end
 
   test "head requests do not bootstrap or track analytics" do

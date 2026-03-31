@@ -15,6 +15,7 @@ class ApplicationController < ActionController::Base
   allow_browser versions: :modern
 
   before_action :redirect_trailing_slash
+  helper_method :public_document_request?
 
   def append_info_to_payload(payload)
     super
@@ -22,6 +23,9 @@ class ApplicationController < ActionController::Base
   end
 
   private
+    def public_document_request?
+      false
+    end
 
     # Prevent duplicate content from trailing-slash URLs (preserves query params)
     def redirect_trailing_slash
