@@ -720,13 +720,13 @@ Today the fact store is still Postgres. Later it can move behind ClickHouse adap
 
 ### How it works
 
-1. **Server-first initial pageview**: On eligible public HTML `GET` requests, Rails creates the visit and first `pageview` before the response is sent. The layout bootstraps only the initial `pageKey` and whether the current render was already counted.
-2. **Browser continuity cookie**: Rails ensures a first-party `cq_analytics_browser_id` cookie exists. This browser id is separate from Ahoy visit/session ownership and is used only for anonymous continuity and profile resolution.
-3. **Client follow-up tracking**: The standalone tracker seeds its dedupe/engagement state from that bootstrap and continues tracking SPA navigation, engagement, downloads, and outbound clicks.
-4. **Event-only follow-up ingestion**: Subsequent tracking uses POST `/analytics/events` only. Ahoy creates a new visit lazily on the next `pageview` when no recent visit exists.
+1. **First-party bootstrap**: On eligible public HTML `GET` requests, Rails emits the analytics bootstrap payload and ensures the first-party browser continuity cookie exists.
+2. **Client-owned initial pageview**: The standalone tracker sends the initial `pageview` after load/visibility instead of forcing the HTML response path to write analytics synchronously.
+3. **Browser continuity cookie**: Rails ensures a first-party `cq_analytics_browser_id` cookie exists. This browser id is separate from Ahoy visit/session ownership and is used only for anonymous continuity and profile resolution.
+4. **Event-only ingestion**: Tracking uses POST `/analytics/events` only. Ahoy creates a new visit lazily on the next `pageview` when no recent visit exists.
 5. **Engagement does not open a new visit**: `engagement` events extend an active visit, but are dropped when no recent visit exists. This matches Plausible-style session handling.
 6. **Engagement tracking**: Tracks time-on-page and scroll depth (Plausible-style). Fires `engagement` events on visibility change / blur / navigation.
-7. **Dedup**: Uses a `pageKey` (pathname + search) to prevent double-counting when frameworks call `pushState` then `replaceState` in the same tick, and seeds that key from the server-rendered page on first load.
+7. **Dedup**: Uses a `pageKey` (pathname + search) to prevent double-counting when frameworks call `pushState` then `replaceState` in the same tick.
 
 ### Configuration
 
@@ -746,8 +746,7 @@ window.analyticsConfig = {
   },
   tracking: {
     hashBasedRouting: false,
-    initialPageviewTracked: true,
-    initialPageKey: "/"
+    initialPageviewTracked: false
   },
   filters: {
     includePaths: [],
@@ -790,7 +789,7 @@ from that source. Today that means:
 
 - tracker/bootstrap defaults skip: `/admin`, `/.well-known`, `/analytics`,
   `/ahoy`, `/cable`
-- server-side pageview enforcement also skips internal transport and platform
+- first-party bootstrap and client pageview tracking both skip internal transport and platform
   paths like `/api`, `/rails/*`, `/assets/*`, `/up`, `/jobs`, and `/webhooks`
 - reporting cleanup treats `/analytics`, `/ahoy`, `/cable`, `/rails/*`,
   `/assets/*`, `/up`, `/jobs`, and `/webhooks` as internal
@@ -822,7 +821,7 @@ resolution.
 
 ## Server-Side Initial Pageviews
 
-`app/controllers/concerns/server_side_pageview_tracking.rb` owns the first pageview for eligible public HTML renders by default.
+`app/controllers/concerns/server_side_pageview_tracking.rb` owns first-party analytics bootstrap for eligible public HTML renders and seeds the browser continuity cookie.
 
 ### Eligibility rules
 
@@ -835,8 +834,8 @@ resolution.
 ### Dedupe model
 
 - server tracks the first rendered pageview
-- layout emits `initialPageviewTracked` / `initialPageKey`
-- client tracker seeds its local state from those values and does not send the same first pageview again
+- layout emits `initialPageviewTracked: false`
+- client tracker uses that bootstrap and sends the first pageview itself after load/visibility
 
 ## Server-Side: Ahoy Store
 

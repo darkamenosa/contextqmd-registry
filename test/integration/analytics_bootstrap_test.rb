@@ -9,8 +9,8 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
 
   test "layout exposes analytics runtime config from rails settings" do
     with_server_visits(true) do
-      assert_difference -> { Ahoy::Visit.count }, +1 do
-        assert_difference -> { Ahoy::Event.count }, +1 do
+      assert_no_difference -> { Ahoy::Visit.count } do
+        assert_no_difference -> { Ahoy::Event.count } do
           get root_path, headers: MODERN_BROWSER_HEADERS
         end
       end
@@ -20,7 +20,7 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
       assert_includes response.body, "\"transport\":{\"eventsEndpoint\":\"/analytics/events\"}"
       assert_includes response.body, "\"site\":{\"websiteId\":"
       assert_includes response.body, "\"token\":"
-      assert_includes response.body, "\"tracking\":{\"hashBasedRouting\":false,\"initialPageviewTracked\":true,\"initialPageKey\":\"/\"}"
+      assert_includes response.body, "\"tracking\":{\"hashBasedRouting\":false,\"initialPageviewTracked\":false"
       assert_includes response.body, %(<script src="/analytics/script.js" defer="defer"></script>)
       refute_includes response.body, "vite/assets/analytics"
       refute_includes response.body, "meta name=\"ahoy-visit\""
@@ -44,10 +44,10 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "auth pages bootstrap and track analytics" do
+  test "auth pages bootstrap analytics for client-owned first pageviews" do
     with_server_visits(true) do
-      assert_difference -> { Ahoy::Visit.count }, +1 do
-        assert_difference -> { Ahoy::Event.count }, +1 do
+      assert_no_difference -> { Ahoy::Visit.count } do
+        assert_no_difference -> { Ahoy::Event.count } do
           get "/login", headers: MODERN_BROWSER_HEADERS
         end
       end
@@ -55,7 +55,7 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
       assert_response :success
       assert_includes response.body, "\"site\":{\"websiteId\":"
       assert_includes response.body, "\"token\":"
-      assert_includes response.body, "\"tracking\":{\"hashBasedRouting\":false,\"initialPageviewTracked\":true,\"initialPageKey\":\"/login\"}"
+      assert_includes response.body, "\"tracking\":{\"hashBasedRouting\":false,\"initialPageviewTracked\":false"
       refute_includes response.body, "meta name=\"ahoy-visit\""
       refute_includes response.body, "meta name=\"ahoy-visitor\""
     end

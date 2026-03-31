@@ -104,8 +104,7 @@ Suggested shape:
   },
   "tracking": {
     "hashBasedRouting": false,
-    "initialPageviewTracked": true,
-    "initialPageKey": "/docs?tab=intro"
+    "initialPageviewTracked": false
   },
   "filters": {
     "includePaths": [],
@@ -140,6 +139,7 @@ Suggested shape:
   - not authoritative for ownership
 - `tracking.initialPageviewTracked`
   - first-party only
+  - should be `false` for the current client-owned initial pageview flow
   - omitted or `false` for external installs
 - `tracking.initialPageKey`
   - only meaningful when the server already counted the initial pageview

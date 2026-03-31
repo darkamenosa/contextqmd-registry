@@ -26,7 +26,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     perform_analytics_jobs do
       assert_difference -> { Ahoy::Visit.count }, +1 do
         assert_difference -> { Ahoy::Event.count }, +1 do
-          get root_path, headers: BROWSER_HEADERS
+          bootstrap_and_track_pageview(root_path, title: "Home")
         end
       end
     end
@@ -64,7 +64,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
 
   test "cookieless repeat events do not enqueue profile resolution again for an already resolved anonymous visit" do
     perform_analytics_jobs do
-      get root_path, headers: BROWSER_HEADERS
+      bootstrap_and_track_pageview(root_path, title: "Home")
     end
 
     clear_enqueued_jobs
@@ -135,9 +135,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
   end
 
   test "server-side tracked page sets the analytics browser cookie" do
-    perform_analytics_jobs do
-      get root_path, headers: BROWSER_HEADERS
-    end
+    get root_path, headers: BROWSER_HEADERS
 
     assert_response :success
     assert_includes response.headers["Set-Cookie"].to_s, Analytics::BrowserIdentity::COOKIE_NAME
@@ -152,7 +150,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     sign_in(identity)
 
     perform_analytics_jobs do
-      get root_path, headers: BROWSER_HEADERS
+      bootstrap_and_track_pageview(root_path, title: "Home")
     end
 
     assert_response :success
@@ -166,7 +164,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     assert_equal identity.email, profile.traits["email"]
   end
 
-  test "server-side tracking includes authentication screens" do
+  test "first-party pageview tracking includes authentication screens" do
     [
       [ new_identity_session_path, "/login" ],
       [ new_identity_registration_path, "/register" ],
@@ -174,7 +172,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     ].each do |path, expected_page|
       perform_analytics_jobs do
         assert_difference -> { Ahoy::Event.count }, +1 do
-          get path, headers: BROWSER_HEADERS
+          bootstrap_and_track_pageview(path, title: "Page")
         end
       end
 
@@ -204,7 +202,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
-  test "server-side tracking includes authenticated app dashboard pages" do
+  test "first-party pageview tracking includes authenticated app dashboard pages" do
     identity, account, = create_tenant(
       email: "analytics-dashboard-#{SecureRandom.hex(4)}@example.com",
       name: "Analytics Dashboard User"
@@ -215,7 +213,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     perform_analytics_jobs do
       assert_difference -> { Ahoy::Visit.count }, +1 do
         assert_difference -> { Ahoy::Event.count }, +1 do
-          get app_dashboard_path(account_id: account.external_account_id), headers: BROWSER_HEADERS
+          bootstrap_and_track_pageview(app_dashboard_path(account_id: account.external_account_id), title: "Dashboard")
         end
       end
     end
@@ -230,8 +228,10 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     assert_equal app_dashboard_path(account_id: account.external_account_id), event.properties["page"]
   end
 
-  test "server-side visit stores request host and drops same-site referrers" do
-    get root_path, headers: BROWSER_HEADERS.merge("HTTP_REFERER" => root_url)
+  test "first-party pageview visit stores request host and drops same-site referrers" do
+    perform_analytics_jobs do
+      bootstrap_and_track_pageview(root_path, title: "Home", headers: BROWSER_HEADERS.merge("HTTP_REFERER" => root_url))
+    end
 
     assert_response :success
 
@@ -242,8 +242,10 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     assert_nil visit.referring_domain
   end
 
-  test "server-side visit stores browser and os versions from the request user agent" do
-    get root_path, headers: BROWSER_HEADERS
+  test "first-party pageview visit stores browser and os versions from the request user agent" do
+    perform_analytics_jobs do
+      bootstrap_and_track_pageview(root_path, title: "Home")
+    end
 
     assert_response :success
 
@@ -255,14 +257,14 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     assert_equal "Desktop", visit.device_type
   end
 
-  test "server-side tracking assigns analytics site scope from the request host" do
+  test "first-party pageview tracking assigns analytics site scope from the request host" do
     site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
     boundary = site.boundaries.find_by!(primary: true)
 
     host! "docs.example.test"
 
     perform_analytics_jobs do
-      get root_path, headers: BROWSER_HEADERS
+      bootstrap_and_track_pageview(root_path, title: "Home")
     end
 
     assert_response :success
@@ -276,7 +278,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     assert_equal boundary.id, event.analytics_site_boundary_id
   end
 
-  test "server-side tracking broadcasts live updates for the resolved analytics site" do
+  test "first-party pageview tracking broadcasts live updates for the resolved analytics site" do
     site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
     captured_sites = []
     analytics_live_state_singleton = class << Analytics::LiveState; self; end
@@ -289,7 +291,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     end
 
     begin
-      get root_path, headers: BROWSER_HEADERS
+      bootstrap_and_track_pageview(root_path, title: "Home")
     ensure
       analytics_live_state_singleton.alias_method :broadcast_later, :__test_original_broadcast_later
       analytics_live_state_singleton.remove_method :__test_original_broadcast_later
@@ -374,12 +376,12 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     assert_includes captured_sites, site
   end
 
-  test "server-side tracking uses the bootstrapped default analytics site in singleton mode" do
+  test "first-party pageview tracking uses the bootstrapped default analytics site in singleton mode" do
     host! "localhost:3000"
     site = Analytics::Bootstrap.ensure_default_site!(host: "localhost")
 
     perform_analytics_jobs do
-      get root_path, headers: BROWSER_HEADERS
+      bootstrap_and_track_pageview(root_path, title: "Home")
     end
 
     assert_response :success
@@ -399,10 +401,10 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     browser_b = open_session
 
     perform_analytics_jobs do
-      browser_a.get root_path, headers: BROWSER_HEADERS
+      bootstrap_and_track_pageview(root_path, title: "Home", session: browser_a)
     end
     perform_analytics_jobs do
-      browser_b.get root_path, headers: BROWSER_HEADERS
+      bootstrap_and_track_pageview(root_path, title: "Home", session: browser_b)
     end
 
     assert_equal 2, Ahoy::Visit.count
@@ -415,7 +417,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
 
   test "cookieless event ingestion ignores spoofed client tokens" do
     perform_analytics_jobs do
-      get root_path, headers: BROWSER_HEADERS
+      bootstrap_and_track_pageview(root_path, title: "Home")
     end
     visit = Ahoy::Visit.order(:id).last
 
@@ -510,7 +512,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
 
     travel_to Time.utc(2026, 3, 25, 23, 59, 50) do
       perform_analytics_jobs do
-        get root_path, headers: BROWSER_HEADERS
+        bootstrap_and_track_pageview(root_path, title: "Home")
       end
       visit = Ahoy::Visit.order(:id).last
     end
@@ -548,7 +550,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
   test "cookieless engagement does not create a new visit after the session window expires" do
     travel_to Time.utc(2026, 3, 25, 10, 0, 0) do
       perform_analytics_jobs do
-        get root_path, headers: BROWSER_HEADERS
+        bootstrap_and_track_pageview(root_path, title: "Home")
       end
     end
 
@@ -590,7 +592,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     )
 
     perform_analytics_jobs do
-      get root_path, headers: BROWSER_HEADERS
+      bootstrap_and_track_pageview(root_path, title: "Home")
     end
     initial_visit = Ahoy::Visit.order(:id).last
 
@@ -615,7 +617,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     perform_analytics_jobs do
       assert_difference -> { Ahoy::Visit.count }, +1 do
         assert_difference -> { Ahoy::Event.count }, +1 do
-          get root_path, headers: BROWSER_HEADERS
+          bootstrap_and_track_pageview(root_path, title: "Home")
         end
       end
     end
@@ -637,7 +639,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     )
 
     perform_analytics_jobs do
-      get root_path, headers: BROWSER_HEADERS
+      bootstrap_and_track_pageview(root_path, title: "Home")
     end
     initial_visit = Ahoy::Visit.order(:id).last
 
@@ -671,7 +673,7 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     perform_analytics_jobs do
       assert_difference -> { Ahoy::Visit.count }, +1 do
         assert_difference -> { Ahoy::Event.count }, +1 do
-          get about_path, headers: BROWSER_HEADERS
+          bootstrap_and_track_pageview(about_path, title: "About")
         end
       end
     end
@@ -683,6 +685,32 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
   end
 
   private
+    def bootstrap_and_track_pageview(path, title:, headers: BROWSER_HEADERS, referrer: "", session: self)
+      session.get path, headers: headers
+      host_with_port = session.request.host_with_port
+      protocol = session.request.ssl? ? "https://" : "http://"
+      page_url = "#{protocol}#{host_with_port}#{path}"
+
+      session.post "/analytics/events",
+        params: {
+          events: [
+            {
+              name: "pageview",
+              properties: {
+                page: path,
+                url: page_url,
+                title: title,
+                referrer: referrer,
+                screen_size: "1440x900"
+              },
+              time: Time.current.iso8601
+            }
+          ]
+        },
+        as: :json,
+        headers: headers
+    end
+
     def perform_analytics_jobs(&block)
       perform_enqueued_jobs(
         only: [

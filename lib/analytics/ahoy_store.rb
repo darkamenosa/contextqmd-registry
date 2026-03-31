@@ -106,6 +106,7 @@ class Analytics::AhoyStore < Ahoy::DatabaseStore
       props = event_data[:properties].to_h.with_indifferent_access
       visit_data = {
         started_at: event_data[:time],
+        user_id: user&.id,
         landing_page: props[:url].presence,
         referrer: props[:referrer].presence,
         screen_size: props[:screen_size].presence,

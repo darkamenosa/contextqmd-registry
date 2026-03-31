@@ -18,7 +18,6 @@ module ServerSidePageviewTracking
       :analytics_initial_page_key
 
     before_action :prepare_server_side_pageview_tracking
-    after_action :track_server_side_pageview
   end
 
   private
@@ -26,20 +25,8 @@ module ServerSidePageviewTracking
       return unless analytics_bootstrap_enabled?
 
       Analytics::BrowserIdentity.ensure!(request, cookies:)
-      @analytics_initial_pageview_tracked = true
-      @analytics_initial_page_key = analytics_page_key
-    end
-
-    def track_server_side_pageview
-      return unless analytics_bootstrap_enabled?
-      return unless response.media_type == "text/html"
-      return if response.redirect?
-      return if response.status >= 500
-
-      Current.set(request: request) do
-        ahoy.track_visit
-        ahoy.track("pageview", server_pageview_properties, time: Time.current)
-      end
+      @analytics_initial_pageview_tracked = false
+      @analytics_initial_page_key = nil
     end
 
     def analytics_bootstrap_enabled?
@@ -76,18 +63,6 @@ module ServerSidePageviewTracking
         sec_purpose.include?("prefetch") ||
         sec_purpose.include?("prerender") ||
         x_moz == "prefetch"
-    end
-
-    def analytics_page_key
-      request.fullpath
-    end
-
-    def server_pageview_properties
-      {
-        page: analytics_page_key,
-        url: request.original_url,
-        referrer: request.referer.to_s.presence
-      }.compact
     end
 
     def analytics_initial_pageview_tracked?
