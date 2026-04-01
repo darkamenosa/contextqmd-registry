@@ -27,6 +27,10 @@ interface DateRangePickerProps {
   initialTo?: string | null
 }
 
+type PopoverChangeDetails = {
+  reason?: string
+}
+
 export default function DateRangePicker({
   buttonRef,
   onApply,
@@ -102,10 +106,22 @@ export default function DateRangePicker({
   }, [setOpen])
 
   // Reset date range when popover opens
-  const handleOpenChange = (nextOpen: boolean) => {
+  const handleOpenChange = (
+    nextOpen: boolean,
+    eventDetails?: PopoverChangeDetails
+  ) => {
     if (nextOpen) {
       // Guard: ignore outside interactions for a short window after opening
       ignoreOutsideUntil.current = performance.now() + 250
+    }
+    if (
+      !nextOpen &&
+      !forceCloseOnce.current &&
+      performance.now() < ignoreOutsideUntil.current &&
+      (eventDetails?.reason === "outside-press" ||
+        eventDetails?.reason === "focus-out")
+    ) {
+      return
     }
     if (!nextOpen && forceCloseOnce.current) {
       forceCloseOnce.current = false
