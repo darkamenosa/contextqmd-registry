@@ -76,6 +76,40 @@ class Admin::AnalyticsReportsTest < ActionDispatch::IntegrationTest
     Current.reset
   end
 
+  test "reports shell marks properties available from observed event properties" do
+    staff_identity, = create_tenant(
+      email: "staff-reports-observed-props-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Reports Observed Props"
+    )
+    staff_identity.update!(staff: true)
+
+    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    visit = Ahoy::Visit.create!(
+      visit_token: SecureRandom.hex(16),
+      visitor_token: SecureRandom.hex(16),
+      analytics_site: site,
+      started_at: Time.zone.now.change(usec: 0)
+    )
+    Ahoy::Event.create!(
+      visit: visit,
+      analytics_site: site,
+      name: "signup",
+      properties: { plan: "Pro" },
+      time: Time.zone.now.change(usec: 0)
+    )
+
+    sign_in(staff_identity)
+
+    get reports_path_for(site), headers: INERTIA_HEADERS
+
+    assert_response :success
+
+    resolved_site = JSON.parse(response.body).fetch("props").fetch("site")
+    assert_equal true, resolved_site.fetch("propsAvailable")
+  ensure
+    Current.reset
+  end
+
   test "reports shell can boot visitors mode from analytics profiles" do
     staff_identity, = create_tenant(
       email: "staff-reports-profiles-#{SecureRandom.hex(4)}@example.com",

@@ -33,15 +33,15 @@ if Rails.env.development?
       "/docs/search"
     ].freeze
     DEMO_GOAL_DEFINITIONS = [
-      { display_name: "Scroll to Goals", page_path: "/docs/getting-started", scroll_threshold: 60, custom_props: {} },
-      { display_name: "Visit /register", page_path: "/register", scroll_threshold: -1, custom_props: {} },
-      { display_name: "Add a site", event_name: "Add Site", custom_props: {} },
-      { display_name: "Visit /blog*", page_path: "/blog*", scroll_threshold: -1, custom_props: {} },
-      { display_name: "Visit /activate", page_path: "/activate", scroll_threshold: -1, custom_props: {} },
-      { display_name: "Sign up for a trial", event_name: "Trial Signup", custom_props: {} },
-      { display_name: "Sign up via invitation", event_name: "Invitation Signup", custom_props: {} },
-      { display_name: "Weekly Email Note Click", event_name: "Weekly Email Note Click", custom_props: {} },
-      { display_name: "Sign up to a newsletter", event_name: "Newsletter Signup", custom_props: {} }
+      { display_name: "Signup Started", event_name: "signup_started", custom_props: {} },
+      { display_name: "Newsletter Signup", event_name: "newsletter_signup", custom_props: {} },
+      { display_name: "Scroll To Case Studies", event_name: "scroll_to_case_studies", custom_props: {} },
+      { display_name: "Weekly Email Note Click", event_name: "weekly_email_note_click", custom_props: {} },
+      { display_name: "Scroll To Pricing", event_name: "scroll_to_pricing", custom_props: {} },
+      { display_name: "Invitation Signup", event_name: "invitation_signup", custom_props: {} },
+      { display_name: "Clicked Pricing CTA", event_name: "clicked_pricing_cta", custom_props: {} },
+      { display_name: "Add Site", event_name: "add_site", custom_props: {} },
+      { display_name: "Trial Signup", event_name: "trial_signup", custom_props: {} }
     ].freeze
     DEMO_ALLOWED_EVENT_PROPS = %w[browser_language logged_in theme author plan].freeze
     DEMO_FUNNELS = [
@@ -49,22 +49,22 @@ if Rails.env.development?
         name: "Blog to Email Newsletter",
         steps: [
           { type: "page", match: "contains", value: "/blog", name: "Visit /blog*" },
-          { type: "event", match: "equals", value: "Newsletter Signup", name: "Sign up to a newsletter" }
+          { type: "event", match: "equals", value: "newsletter_signup", name: "Newsletter Signup" }
         ]
       },
       {
-        name: "Blog to Register",
+        name: "Blog to Signup Start",
         steps: [
           { type: "page", match: "contains", value: "/blog", name: "Visit /blog*" },
-          { type: "page", match: "equals", value: "/register", name: "Visit /register" }
+          { type: "event", match: "equals", value: "signup_started", name: "Signup Started" }
         ]
       },
       {
         name: "Registration & Onboarding",
         steps: [
-          { type: "page", match: "equals", value: "/register", name: "Visit /register" },
-          { type: "event", match: "equals", value: "Signup", name: "Signup" },
-          { type: "page", match: "equals", value: "/activate", name: "Visit /activate" }
+          { type: "event", match: "equals", value: "signup_started", name: "Signup Started" },
+          { type: "event", match: "equals", value: "workspace_activated", name: "Workspace Activated" },
+          { type: "event", match: "equals", value: "add_site", name: "Add Site" }
         ]
       }
     ].freeze
@@ -117,7 +117,7 @@ if Rails.env.development?
 
     def seed!
       cleanup!
-      ensure_behavior_config!
+      site = ensure_behavior_config!
 
       now = Time.zone.now.change(usec: 0)
       today = now.to_date
@@ -139,9 +139,9 @@ if Rails.env.development?
       create_profiles!(now)
 
       puts "Seeded analytics demo data:"
-      puts "  Goals: #{Analytics::Goal.order(:display_name).pluck(:display_name).join(', ')}"
-      puts "  Property keys: #{Analytics::Properties.available_keys.join(', ')}"
-      puts "  Funnels: #{Analytics::Funnel.order(:name).pluck(:name).join(', ')}"
+      puts "  Goals: #{Analytics::Goal.effective_scope(site).order(:display_name).pluck(:display_name).join(', ')}"
+      puts "  Property keys: #{Analytics::Properties.available_keys(site: site).join(', ')}"
+      puts "  Funnels: #{Analytics::Funnel.effective_scope(site).order(:name).pluck(:name).join(', ')}"
       puts "  Seed source labels: #{seed_source_labels.join(', ')}"
       puts "  Seed browsers: #{DEVICES.map { |device| device[:browser] }.uniq.join(', ')}"
       puts "  Seed operating systems: #{DEVICES.map { |device| device[:os] }.uniq.join(', ')}"
@@ -230,17 +230,49 @@ if Rails.env.development?
     def ensure_behavior_config!
       site = Analytics::Bootstrap.ensure_default_site!(host: HOSTNAME, name: "ContextQMD")
 
-      Analytics::Goal.sync_from_definitions!(DEMO_GOAL_DEFINITIONS)
-      Analytics::AllowedEventProperty.sync_keys!(
-        (Analytics::Properties.available_keys(site:) + DEMO_ALLOWED_EVENT_PROPS).uniq.sort,
-        site: site
-      )
+      sync_goals!(site:)
+      Analytics::AllowedEventProperty.sync_keys!(DEMO_ALLOWED_EVENT_PROPS, site: site)
+      sync_funnels!(site:)
 
-      DEMO_FUNNELS.each do |payload|
-        funnel = Analytics::Funnel.find_or_initialize_by(name: payload.fetch(:name))
+      site
+    end
+
+    def sync_goals!(site:)
+      relation = Analytics::Goal.for_analytics_site(site)
+
+      keep_ids = DEMO_GOAL_DEFINITIONS.map do |payload|
+        normalized = Analytics::Goal.normalize_definition(payload)
+        goal = relation.find_or_initialize_by(
+          event_name: normalized[:event_name],
+          page_path: normalized[:page_path],
+          scroll_threshold: normalized[:scroll_threshold],
+          custom_props: normalized[:custom_props]
+        )
+        goal.analytics_site = site
+        goal.display_name = normalized.fetch(:display_name)
+        goal.save!
+        goal.id
+      end
+
+      stale_relation = relation
+      stale_relation = stale_relation.where.not(id: keep_ids) if keep_ids.any?
+      stale_relation.delete_all
+    end
+
+    def sync_funnels!(site:)
+      relation = Analytics::Funnel.for_analytics_site(site)
+
+      keep_ids = DEMO_FUNNELS.map do |payload|
+        funnel = relation.find_or_initialize_by(name: payload.fetch(:name))
+        funnel.analytics_site = site
         funnel.steps = payload.fetch(:steps)
         funnel.save!
+        funnel.id
       end
+
+      stale_relation = relation
+      stale_relation = stale_relation.where.not(id: keep_ids) if keep_ids.any?
+      stale_relation.delete_all
     end
 
     def build_today_counts(current_hour)

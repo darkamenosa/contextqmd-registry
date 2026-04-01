@@ -76,6 +76,41 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
     Current.reset
   end
 
+  test "behaviors props endpoint discovers property keys from observed events without config" do
+    staff_identity, = create_tenant(
+      email: "staff-behaviors-discovered-props-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Behaviors Discovered Props"
+    )
+    staff_identity.update!(staff: true)
+
+    visit = Ahoy::Visit.create!(
+      visit_token: SecureRandom.hex(16),
+      visitor_token: SecureRandom.hex(16),
+      started_at: Time.zone.now.change(usec: 0)
+    )
+
+    Ahoy::Event.create!(
+      visit: visit,
+      name: "signup",
+      properties: { plan: "Pro", source: "Ads" },
+      time: Time.zone.now.change(usec: 0)
+    )
+
+    sign_in(staff_identity)
+
+    get behaviors_path,
+        params: { period: "day", mode: "props", with_imported: "false" },
+        headers: { "ACCEPT" => "application/json" }
+
+    assert_response :success
+
+    payload = JSON.parse(response.body)
+    assert_equal %w[plan source], payload.fetch("propertyKeys")
+    assert_equal "plan", payload.fetch("activeProperty")
+  ensure
+    Current.reset
+  end
+
   test "behaviors props endpoint applies property filters to displayed values" do
     staff_identity, = create_tenant(
       email: "staff-behaviors-filter-#{SecureRandom.hex(4)}@example.com",
@@ -436,7 +471,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
     Current.reset
   end
 
-  test "behaviors props endpoint prefers configured property keys over discovered ones" do
+  test "behaviors props endpoint keeps configured property keys first when discovered ones also exist" do
     staff_identity, = create_tenant(
       email: "staff-behaviors-config-props-#{SecureRandom.hex(4)}@example.com",
       name: "Staff Behaviors Config Props"
@@ -467,7 +502,7 @@ class Admin::AnalyticsBehaviorsTest < ActionDispatch::IntegrationTest
     assert_response :success
 
     payload = JSON.parse(response.body)
-    assert_equal [ "plan" ], payload.fetch("propertyKeys")
+    assert_equal %w[plan source], payload.fetch("propertyKeys")
     assert_equal "plan", payload.fetch("activeProperty")
   ensure
     Current.reset

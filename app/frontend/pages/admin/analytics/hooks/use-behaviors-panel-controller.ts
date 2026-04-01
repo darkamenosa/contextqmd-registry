@@ -12,6 +12,7 @@ import { buildBehaviorsRouteSearch } from "../lib/behaviors-route-search"
 import {
   getBehaviorsFunnelFromSearch,
   getBehaviorsPropertyFromSearch,
+  setBehaviorsPropertySearchParam,
 } from "../lib/dashboard-url-state"
 import {
   baseAnalyticsPath,
@@ -19,12 +20,17 @@ import {
   parseDialogFromPath,
 } from "../lib/dialog-path"
 import { navigateAnalytics } from "../lib/location-store"
-import { getBehaviorsModeFromSearch } from "../lib/panel-mode"
+import {
+  getBehaviorsModeFromSearch,
+  setPanelModeSearchParam,
+} from "../lib/panel-mode"
 import {
   analyticsPreferenceKey,
   writeAnalyticsPreference,
 } from "../lib/preferences"
+import { mergeReportQueryParams } from "../lib/query-codec"
 import { useScopedQuery } from "../lib/query-scope"
+import { buildReportUrl } from "../lib/report-url"
 import { useQueryContext } from "../query-context"
 import { useSiteContext } from "../site-context"
 import type {
@@ -294,15 +300,40 @@ export function useBehaviorsPanelController({
         return
       }
 
-      updateQuery((current) => ({
-        ...current,
+      const nextQuery = {
+        ...query,
         filters: {
-          ...current.filters,
+          ...query.filters,
           goal: String(item.filterValue ?? item.name),
         },
-      }))
+      }
+
+      const nextParams = mergeReportQueryParams(search, nextQuery)
+
+      if (site.propsAvailable) {
+        setPanelModeSearchParam(nextParams, "behaviors", "props")
+        setBehaviorsPropertySearchParam(
+          nextParams,
+          activeProperty ?? selectedPropertyState ?? undefined
+        )
+        setModeState("props")
+        setPreferredMode("props")
+        writeAnalyticsPreference(storageKey, "props")
+      }
+
+      navigateAnalytics(buildReportUrl(pathname, nextParams))
     },
-    [activeProperty, mode, updateQuery]
+    [
+      activeProperty,
+      mode,
+      pathname,
+      query,
+      search,
+      selectedPropertyState,
+      site.propsAvailable,
+      storageKey,
+      updateQuery,
+    ]
   )
 
   useEffect(() => {

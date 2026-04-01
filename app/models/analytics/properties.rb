@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 module Analytics::Properties
+  RESERVED_KEYS = %w[page url title referrer screen_size engaged_ms scroll_depth].freeze
+
   class << self
     def filter_key?(key)
       key.to_s.start_with?("prop:")
@@ -14,12 +16,20 @@ module Analytics::Properties
       configured_typed_keys(site)
     end
 
-    def available_keys(_events = nil, site: ::Analytics::Current.site_or_default)
-      configured_keys(site)
+    def available_keys(events = nil, site: ::Analytics::Current.site_or_default)
+      configured = configured_keys(site)
+      discovered =
+        if events.present?
+          event_keys(events)
+        else
+          discovered_keys(site:)
+        end
+
+      configured + (discovered - configured)
     end
 
     def available?(site: ::Analytics::Current.site_or_default)
-      configured_keys(site).any?
+      configured_keys(site).any? || discovered?(site:)
     end
 
     def managed_keys?(site: ::Analytics::Current.site_or_default)
@@ -35,8 +45,32 @@ module Analytics::Properties
       rows
         .map(&:to_s)
         .reject(&:blank?)
-        .reject { |key| %w[page url title referrer screen_size engaged_ms scroll_depth].include?(key) }
+        .reject { |key| RESERVED_KEYS.include?(key) }
         .sort
+    end
+
+    def discovered_keys(site: ::Analytics::Current.site_or_default)
+      return [] unless site.present?
+      return [] unless Ahoy::Event.table_exists?
+
+      event_keys(discoverable_events_for_site(site))
+    rescue ActiveRecord::NoDatabaseError, ActiveRecord::StatementInvalid
+      []
+    end
+
+    def discovered?(site: ::Analytics::Current.site_or_default)
+      return false unless site.present?
+      return false unless Ahoy::Event.table_exists?
+
+      rows = Ahoy::Event.connection.select_values(<<~SQL.squish)
+        SELECT DISTINCT key
+        FROM (#{discoverable_events_for_site(site).select("jsonb_object_keys(ahoy_events.properties) AS key").to_sql}) property_keys
+        LIMIT 20
+      SQL
+
+      rows.any? { |key| key.present? && !RESERVED_KEYS.include?(key.to_s) }
+    rescue ActiveRecord::NoDatabaseError, ActiveRecord::StatementInvalid
+      false
     end
 
     def event_property_exists(property_name)
@@ -93,6 +127,12 @@ module Analytics::Properties
         Analytics::AllowedEventProperty.configured_keys(site)
       rescue ActiveRecord::NoDatabaseError, ActiveRecord::StatementInvalid
         []
+      end
+
+      def discoverable_events_for_site(site)
+        Ahoy::Event
+          .for_analytics_site(site)
+          .where.not(properties: [ nil, {} ])
       end
 
       def properties_column
