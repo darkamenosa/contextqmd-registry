@@ -77,7 +77,7 @@ class Admin::AnalyticsSearchTermsTest < ActionDispatch::IntegrationTest
 
     get "/admin/analytics/sites/#{site.public_id}/search_terms",
       params: {
-        period: "30d",
+        period: "28d",
         f: [
           "is,source,Google",
           "is,page,/docs/install",
@@ -230,7 +230,7 @@ class Admin::AnalyticsSearchTermsTest < ActionDispatch::IntegrationTest
     sign_in(staff_identity)
 
     get "/admin/analytics/sites/#{site.public_id}/search_terms",
-      params: { period: "30d" },
+      params: { period: "28d" },
       headers: { "ACCEPT" => "application/json" }
 
     assert_response :success
@@ -324,7 +324,7 @@ class Admin::AnalyticsSearchTermsTest < ActionDispatch::IntegrationTest
 
     get "/admin/analytics/sites/#{site.public_id}/search_terms",
       params: {
-        period: "30d",
+        period: "28d",
         order_by: [ [ "impressions", "asc" ] ].to_json
       },
       headers: { "ACCEPT" => "application/json" }
@@ -395,7 +395,7 @@ class Admin::AnalyticsSearchTermsTest < ActionDispatch::IntegrationTest
     sign_in(staff_identity)
 
     get "/admin/analytics/sites/#{site.public_id}/search_terms",
-      params: { period: "30d", limit: 2, page: 1 },
+      params: { period: "28d", limit: 2, page: 1 },
       headers: { "ACCEPT" => "application/json" }
 
     assert_response :success
@@ -405,7 +405,7 @@ class Admin::AnalyticsSearchTermsTest < ActionDispatch::IntegrationTest
     assert_equal true, payload.fetch("meta").fetch("hasMore")
 
     get "/admin/analytics/sites/#{site.public_id}/search_terms",
-      params: { period: "30d", limit: 2, page: 2 },
+      params: { period: "28d", limit: 2, page: 2 },
       headers: { "ACCEPT" => "application/json" }
 
     assert_response :success
@@ -446,7 +446,7 @@ class Admin::AnalyticsSearchTermsTest < ActionDispatch::IntegrationTest
 
     get "/admin/analytics/sites/#{site.public_id}/search_terms",
       params: {
-        period: "30d",
+        period: "28d",
         f: [ "is,browser,Safari" ]
       },
       headers: { "ACCEPT" => "application/json" }

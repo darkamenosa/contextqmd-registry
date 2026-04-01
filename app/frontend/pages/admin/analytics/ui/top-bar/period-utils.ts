@@ -1,6 +1,12 @@
+import {
+  getAnalyticsPeriodButtonLabel,
+  normalizeAnalyticsPeriod,
+  type AnalyticsPeriodSelection,
+} from "../../lib/period"
 import type { AnalyticsQuery } from "../../types"
 
 export function getPeriodDisplay(query: AnalyticsQuery) {
+  const period = normalizeAnalyticsPeriod(query.period)
   const pad = (value: number) => String(value).padStart(2, "0")
   const ymd = (date: Date) =>
     `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
@@ -38,9 +44,7 @@ export function getPeriodDisplay(query: AnalyticsQuery) {
     return year
   }
 
-  switch (query.period) {
-    case "realtime":
-      return "Realtime (30m)"
+  switch (period) {
     case "day": {
       const now = new Date()
       if (!query.date) return "Today"
@@ -50,22 +54,10 @@ export function getPeriodDisplay(query: AnalyticsQuery) {
       if (query.date === ymd(yesterday)) return "Yesterday"
       return query.date
     }
-    case "7d":
-      return "Last 7 days"
-    case "28d":
-      return "Last 28 days"
-    case "30d":
-      return "Last 30 days"
-    case "91d":
-      return "Last 91 days"
     case "month":
       return monthLabel(query.date)
     case "year":
       return yearLabel(query.date)
-    case "12mo":
-      return "Last 12 Months"
-    case "all":
-      return "All time"
     case "custom": {
       const from = query.from as string | undefined
       const to = query.to as string | undefined
@@ -103,7 +95,7 @@ export function getPeriodDisplay(query: AnalyticsQuery) {
       return `${fromMonth} ${fromDay}, ${fromYear}–${toMonth} ${toDay}, ${toYear}`
     }
     default:
-      return "Period"
+      return getAnalyticsPeriodButtonLabel(period) ?? "Period"
   }
 }
 
@@ -184,9 +176,25 @@ export function isActiveYear(query: AnalyticsQuery, mode: "current" | "last") {
   return Number(String(query.date).slice(0, 4)) === year
 }
 
+export function isPeriodSelectionActive(
+  query: AnalyticsQuery,
+  option: AnalyticsPeriodSelection
+) {
+  if (option.value === "day") {
+    return isActiveDay(query, option.setDate ?? "current")
+  }
+  if (option.value === "month") {
+    return isActiveMonth(query, option.setDate ?? "current")
+  }
+  if (option.value === "year") {
+    return isActiveYear(query, option.setDate ?? "current")
+  }
+  return query.period === option.value
+}
+
 export function applyPeriodSelection(
   current: AnalyticsQuery,
-  option: { value: AnalyticsQuery["period"]; setDate?: "current" | "last" }
+  option: AnalyticsPeriodSelection
 ) {
   const now = new Date()
   const pad = (value: number) => String(value).padStart(2, "0")
@@ -214,6 +222,10 @@ export function applyPeriodSelection(
     const yesterday = new Date(now)
     yesterday.setDate(now.getDate() - 1)
     next.date = ymd(yesterday)
+    return next
+  }
+  if (option.value === "24h") {
+    next.date = null
     return next
   }
   if (option.value === "month") {

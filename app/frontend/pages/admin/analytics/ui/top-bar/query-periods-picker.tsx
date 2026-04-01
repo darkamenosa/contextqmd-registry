@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { Fragment, useEffect, useRef, useState } from "react"
 import { Calendar, Shuffle } from "lucide-react"
 
 import { useClientComponent } from "@/hooks/use-client-component"
@@ -10,6 +10,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
+import {
+  ANALYTICS_PERIOD_SHORTCUTS,
+  getAnalyticsPeriodPickerGroups,
+} from "../../lib/period"
 import { useQueryContext } from "../../query-context"
 import type { AnalyticsQuery } from "../../types"
 import MenuRow from "./menu-row"
@@ -17,9 +21,7 @@ import {
   applyPeriodSelection,
   getComparisonLabel,
   getPeriodDisplay,
-  isActiveDay,
-  isActiveMonth,
-  isActiveYear,
+  isPeriodSelectionActive,
 } from "./period-utils"
 
 const loadDateRangePickerComponent = () =>
@@ -46,31 +48,13 @@ export default function QueryPeriodsPicker() {
       if (isTyping || event.metaKey || event.ctrlKey || event.altKey) return
 
       const key = (event.key || "").toUpperCase()
-      const map: Record<
-        string,
-        | { value: AnalyticsQuery["period"]; setDate?: "current" | "last" }
-        | "toggle-compare"
-        | "custom"
-      > = {
-        D: { value: "day", setDate: "current" },
-        E: { value: "day", setDate: "last" },
-        R: { value: "realtime" },
-        W: { value: "7d" },
-        F: { value: "28d" },
-        N: { value: "91d" },
-        M: { value: "month", setDate: "current" },
-        P: { value: "month", setDate: "last" },
-        Y: { value: "year", setDate: "current" },
-        L: { value: "12mo" },
-        A: { value: "all" },
-        C: "custom",
-        X: "toggle-compare",
-      }
-      const action = map[key]
-      if (!action) return
+      const periodShortcut = ANALYTICS_PERIOD_SHORTCUTS[key]
+      const isCustomShortcut = key === "C"
+      const isCompareShortcut = key === "X"
+      if (!periodShortcut && !isCustomShortcut && !isCompareShortcut) return
 
       event.preventDefault()
-      if (action === "custom") {
+      if (isCustomShortcut) {
         void loadDateRangePicker()
           .then(() => setCustomOpen(true))
           .catch((error) => {
@@ -78,7 +62,7 @@ export default function QueryPeriodsPicker() {
           })
         return
       }
-      if (action === "toggle-compare") {
+      if (isCompareShortcut) {
         updateQuery((current) => ({
           ...current,
           comparison:
@@ -86,7 +70,8 @@ export default function QueryPeriodsPicker() {
         }))
         return
       }
-      updateQuery((current) => applyPeriodSelection(current, action))
+      if (!periodShortcut) return
+      updateQuery((current) => applyPeriodSelection(current, periodShortcut))
     }
 
     window.addEventListener("keydown", onKeydown)
@@ -95,6 +80,7 @@ export default function QueryPeriodsPicker() {
 
   const compareEnabled = Boolean(query.comparison)
   const compareLabel = getComparisonLabel(query)
+  const periodGroups = getAnalyticsPeriodPickerGroups(query.period)
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -106,176 +92,28 @@ export default function QueryPeriodsPicker() {
           </span>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
-          <DropdownMenuItem
-            className="hover:bg-accent data-[selected=true]:bg-primary/10"
-            onClick={() =>
-              updateQuery((current) =>
-                applyPeriodSelection(current, {
-                  value: "day",
-                  setDate: "current",
-                })
-              )
-            }
-          >
-            <MenuRow
-              label="Today"
-              hint="D"
-              active={isActiveDay(query, "current")}
-            />
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            className="hover:bg-accent data-[selected=true]:bg-primary/10"
-            onClick={() =>
-              updateQuery((current) =>
-                applyPeriodSelection(current, { value: "day", setDate: "last" })
-              )
-            }
-          >
-            <MenuRow
-              label="Yesterday"
-              hint="E"
-              active={isActiveDay(query, "last")}
-            />
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() =>
-              updateQuery((current) =>
-                applyPeriodSelection(current, { value: "realtime" })
-              )
-            }
-            className="hover:bg-accent data-[selected=true]:bg-primary/10"
-          >
-            <MenuRow
-              label="Realtime"
-              hint="R"
-              active={query.period === "realtime"}
-            />
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() =>
-              updateQuery((current) =>
-                applyPeriodSelection(current, { value: "7d" })
-              )
-            }
-            className="hover:bg-accent data-[selected=true]:bg-primary/10"
-          >
-            <MenuRow
-              label="Last 7 Days"
-              hint="W"
-              active={query.period === "7d"}
-            />
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() =>
-              updateQuery((current) =>
-                applyPeriodSelection(current, { value: "28d" })
-              )
-            }
-            className="hover:bg-accent data-[selected=true]:bg-primary/10"
-          >
-            <MenuRow
-              label="Last 28 Days"
-              hint="F"
-              active={query.period === "28d"}
-            />
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() =>
-              updateQuery((current) =>
-                applyPeriodSelection(current, { value: "91d" })
-              )
-            }
-            className="hover:bg-accent data-[selected=true]:bg-primary/10"
-          >
-            <MenuRow
-              label="Last 91 Days"
-              hint="N"
-              active={query.period === "91d"}
-            />
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() =>
-              updateQuery((current) =>
-                applyPeriodSelection(current, {
-                  value: "month",
-                  setDate: "current",
-                })
-              )
-            }
-            className="hover:bg-accent data-[selected=true]:bg-primary/10"
-          >
-            <MenuRow
-              label="Month to Date"
-              hint="M"
-              active={isActiveMonth(query, "current")}
-            />
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() =>
-              updateQuery((current) =>
-                applyPeriodSelection(current, {
-                  value: "month",
-                  setDate: "last",
-                })
-              )
-            }
-            className="hover:bg-accent data-[selected=true]:bg-primary/10"
-          >
-            <MenuRow
-              label="Last Month"
-              hint="P"
-              active={isActiveMonth(query, "last")}
-            />
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() =>
-              updateQuery((current) =>
-                applyPeriodSelection(current, {
-                  value: "year",
-                  setDate: "current",
-                })
-              )
-            }
-            className="hover:bg-accent data-[selected=true]:bg-primary/10"
-          >
-            <MenuRow
-              label="Year to Date"
-              hint="Y"
-              active={isActiveYear(query, "current")}
-            />
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() =>
-              updateQuery((current) =>
-                applyPeriodSelection(current, { value: "12mo" })
-              )
-            }
-            className="hover:bg-accent data-[selected=true]:bg-primary/10"
-          >
-            <MenuRow
-              label="Last 12 Months"
-              hint="L"
-              active={query.period === "12mo"}
-            />
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() =>
-              updateQuery((current) =>
-                applyPeriodSelection(current, { value: "all" })
-              )
-            }
-            className="hover:bg-accent data-[selected=true]:bg-primary/10"
-          >
-            <MenuRow
-              label="All time"
-              hint="A"
-              active={query.period === "all"}
-            />
-          </DropdownMenuItem>
+          {periodGroups.map((group, index) => (
+            <Fragment key={`period-group-${index}`}>
+              {index > 0 ? <DropdownMenuSeparator /> : null}
+              {group.map((option) => (
+                <DropdownMenuItem
+                  key={option.id}
+                  className="hover:bg-accent data-[selected=true]:bg-primary/10"
+                  onClick={() =>
+                    updateQuery((current) =>
+                      applyPeriodSelection(current, option)
+                    )
+                  }
+                >
+                  <MenuRow
+                    label={option.menuLabel}
+                    hint={option.hint}
+                    active={isPeriodSelectionActive(query, option)}
+                  />
+                </DropdownMenuItem>
+              ))}
+            </Fragment>
+          ))}
           <DropdownMenuItem
             onClick={() => {
               setDropdownOpen(false)

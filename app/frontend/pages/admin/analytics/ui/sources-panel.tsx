@@ -56,7 +56,7 @@ export default function SourcesPanel({
     selectedSearchTermsPage,
     setAndStoreMode,
     setDebugOpen,
-    setLast30Days,
+    setLast28Days,
     searchTermsEndpoint,
     showSourceIcon,
     sourcesEndpoint,
@@ -110,7 +110,7 @@ export default function SourcesPanel({
           status={searchTermsStatus}
           selectedPage={selectedSearchTermsPage}
           onOpenDetails={openDetailsDialog}
-          onSelectLast30Days={setLast30Days}
+          onSelectLast28Days={setLast28Days}
         />
       ) : isOverviewEmpty ? (
         <PanelEmptyState />
@@ -270,7 +270,7 @@ function SearchTermsTakeoverContent({
   status,
   selectedPage,
   onOpenDetails,
-  onSelectLast30Days,
+  onSelectLast28Days,
 }: {
   data: ListPayload | null
   limitedData: ListPayload | null
@@ -280,7 +280,7 @@ function SearchTermsTakeoverContent({
   status: ListPayload["meta"]["searchConsole"] | undefined
   selectedPage: string | null
   onOpenDetails: () => void
-  onSelectLast30Days: () => void
+  onSelectLast28Days: () => void
 }) {
   if (loading) {
     return <PanelListSkeleton firstColumnLabel="Search term" />
@@ -327,7 +327,7 @@ function SearchTermsTakeoverContent({
             {error}
           </div>
           {errorCode === "period_too_recent" ? (
-            <Button onClick={onSelectLast30Days}>Search last 30 days</Button>
+            <Button onClick={onSelectLast28Days}>Search last 28 days</Button>
           ) : null}
         </div>
       </PanelEmptyState>

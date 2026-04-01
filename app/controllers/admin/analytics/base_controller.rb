@@ -17,7 +17,7 @@ module Admin
         DEFAULT_LIMIT = 100
         MAX_LIMIT = 500
         MAX_SEARCH_LEN = 100
-        ALLOWED_PERIODS = %w[realtime day 7d 28d 30d 91d month 6mo 12mo year all custom].freeze
+        ALLOWED_PERIODS = %w[realtime 24h day 7d 28d 91d month 6mo 12mo year all custom].freeze
 
         # Pagination and search helpers
         def parsed_pagination

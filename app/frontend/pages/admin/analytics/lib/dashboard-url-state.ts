@@ -1,3 +1,5 @@
+import { canonicalAnalyticsPeriod } from "./period"
+
 const BEHAVIORS_SEARCH_PARAMS = {
   funnel: "behaviors_funnel",
   property: "behaviors_property",
@@ -56,9 +58,14 @@ export function canonicalizeDashboardSearchParams(
   params.delete("dialog")
   params.delete("graph_interval")
 
-  const period = params.get("period") ?? "day"
+  const rawPeriod = params.get("period")
+  const period = canonicalAnalyticsPeriod(rawPeriod)
   if (period === "day") {
     params.delete("period")
+  } else if (rawPeriod && !period) {
+    params.delete("period")
+  } else if (period && period !== rawPeriod) {
+    params.set("period", period)
   }
 
   if (params.get("with_imported") === "false") {

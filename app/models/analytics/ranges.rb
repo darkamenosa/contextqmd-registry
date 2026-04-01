@@ -22,6 +22,10 @@ module Analytics::Ranges
         range = (now - 30.minutes)..now
         allowed = %w[minute]
         default = "minute"
+      when "24h"
+        range = (now - 24.hours)..now
+        allowed = %w[minute hour]
+        default = "hour"
       when "day"
         day = date_param.present? ? (parse_time.call(date_param) || now) : now
         range = day.beginning_of_day..day.end_of_day
@@ -36,12 +40,6 @@ module Analytics::Ranges
       when "28d"
         end_date = (date_param.present? ? (parse_time.call(date_param) || now) : now).to_date - 1.day
         start_date = end_date - 27.days
-        range = start_date.beginning_of_day..end_date.end_of_day
-        allowed = %w[day week]
-        default = "day"
-      when "30d"
-        end_date = (date_param.present? ? (parse_time.call(date_param) || now) : now).to_date - 1.day
-        start_date = end_date - 29.days
         range = start_date.beginning_of_day..end_date.end_of_day
         allowed = %w[day week]
         default = "day"
@@ -135,13 +133,23 @@ module Analytics::Ranges
       range
     end
 
-    def previous_range(range)
+    def previous_range(range, exact: false)
+      return exact_previous_range(range) if exact
+
       from_date = range.begin.to_date
       to_date = range.end.to_date
       days_span = (to_date - from_date).to_i + 1
       prev_from = (from_date - days_span).beginning_of_day
       prev_to = (to_date - days_span).end_of_day
       prev_from..prev_to
+    end
+
+    def exact_previous_range(range)
+      shifted_range(range, range.end - range.begin)
+    end
+
+    def shifted_range(range, offset)
+      (range.begin - offset)..(range.end - offset)
     end
 
     def year_over_year_range(range)
@@ -168,15 +176,30 @@ module Analytics::Ranges
       case query.comparison
       when "year_over_year"
         range = year_over_year_range(source_range)
-        range = align_comparison_weekday(range, source_range) if ActiveModel::Type::Boolean.new.cast(query[:match_day_of_week])
+        range = align_comparison_weekday(range, source_range) if align_comparison_weekday?(query)
         trim_comparison_range_to_source_progress(range, source_range, effective_source_range)
       when "custom"
         custom_compare_range(query)
       when "previous_period"
-        range = previous_range(source_range)
-        range = align_comparison_weekday(range, source_range) if ActiveModel::Type::Boolean.new.cast(query[:match_day_of_week])
+        range =
+          if query.time_range_key.to_s == "24h"
+            if ActiveModel::Type::Boolean.new.cast(query[:match_day_of_week])
+              shifted_range(source_range, 7.days)
+            else
+              shifted_range(source_range, 24.hours)
+            end
+          else
+            previous_range(source_range)
+          end
+        range = align_comparison_weekday(range, source_range) if align_comparison_weekday?(query)
         trim_comparison_range_to_source_progress(range, source_range, effective_source_range)
       end
+    end
+
+    def align_comparison_weekday?(query)
+      query = Analytics::Query.wrap(query)
+      ActiveModel::Type::Boolean.new.cast(query[:match_day_of_week]) &&
+        query.time_range_key.to_s != "24h"
     end
 
     def align_comparison_weekday(comparison_range, source_range)

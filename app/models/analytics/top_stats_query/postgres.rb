@@ -41,7 +41,8 @@ class Analytics::TopStatsQuery::Postgres
     end
 
     def previous_range
-      @previous_range ||= Analytics::Ranges.comparison_range_for(query, raw_range, effective_source_range: range) || Analytics::Ranges.previous_range(range)
+      @previous_range ||= Analytics::Ranges.comparison_range_for(query, raw_range, effective_source_range: range) ||
+        Analytics::Ranges.previous_range(range, exact: query.time_range_key.to_s == "24h")
     end
 
     def stats

@@ -325,10 +325,10 @@ export function useSourcesPanelController({
     [activeSource, host]
   )
 
-  const setLast30Days = useCallback(() => {
+  const setLast28Days = useCallback(() => {
     updateQuery((current) => ({
       ...current,
-      period: "30d",
+      period: "28d",
       comparison: null,
       date: null,
       from: null,
@@ -366,7 +366,7 @@ export function useSourcesPanelController({
     selectedSearchTermsPage,
     setAndStoreMode,
     setDebugOpen,
-    setLast30Days,
+    setLast28Days,
     searchTermsEndpoint,
     showSourceIcon,
     sourcesEndpoint,

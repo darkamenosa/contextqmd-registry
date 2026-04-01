@@ -1,5 +1,6 @@
 import type { AnalyticsQuery } from "../types"
 import { canonicalizeDashboardSearchParams } from "./dashboard-url-state"
+import { canonicalAnalyticsPeriod, normalizeAnalyticsPeriod } from "./period"
 
 const NOT_URL_ENCODED_CHARACTERS = ":/"
 
@@ -71,7 +72,10 @@ const REPORT_QUERY_PARAM_KEYS = [
 ] as const
 
 export function sanitizeReportQuery(query: AnalyticsQuery): AnalyticsQuery {
-  const next = { ...query }
+  const next = {
+    ...query,
+    period: normalizeAnalyticsPeriod(query.period),
+  }
   delete next.metric
   delete next.interval
   delete next.mode
@@ -86,9 +90,10 @@ export function buildQueryParams(
 ) {
   const pieces: string[] = []
   const merged: Record<string, unknown> = { ...query, ...extras }
+  const period = canonicalAnalyticsPeriod(String(merged.period ?? ""))
 
-  if (merged.period) {
-    pieces.push(`period=${encodeURIComponent(String(merged.period))}`)
+  if (period) {
+    pieces.push(`period=${encodeURIComponent(String(period))}`)
   }
   if (merged.comparison) {
     pieces.push(`comparison=${encodeURIComponent(String(merged.comparison))}`)
@@ -228,8 +233,9 @@ export function parseQueryParams(
     advancedFilters,
   }
 
-  const period = params.get("period")
-  if (period) next.period = period as AnalyticsQuery["period"]
+  const period =
+    canonicalAnalyticsPeriod(params.get("period")) ?? fallback.period
+  next.period = period
 
   const comparison = params.get("comparison")
   if (comparison) next.comparison = comparison as AnalyticsQuery["comparison"]

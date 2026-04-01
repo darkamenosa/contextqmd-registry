@@ -32,6 +32,35 @@ class Analytics::RequestQueryParserTest < ActiveSupport::TestCase
     end
   end
 
+  test "falls back to day for unsupported periods" do
+    parsed_30d = Analytics::RequestQueryParser.parse(
+      query_string: "period=30d",
+      params: { period: "30d" },
+      allowed_periods: Admin::Analytics::BaseController::ALLOWED_PERIODS
+    )
+    parsed_90d = Analytics::RequestQueryParser.parse(
+      query_string: "period=90d",
+      params: { period: "90d" },
+      allowed_periods: Admin::Analytics::BaseController::ALLOWED_PERIODS
+    )
+
+    assert_equal "day", parsed_30d[:period]
+    assert_equal "day", parsed_30d.dig(:time_range, :key)
+    assert_equal "day", parsed_90d[:period]
+    assert_equal "day", parsed_90d.dig(:time_range, :key)
+  end
+
+  test "accepts 24h as a supported rolling period" do
+    parsed = Analytics::RequestQueryParser.parse(
+      query_string: "period=24h",
+      params: { period: "24h" },
+      allowed_periods: Admin::Analytics::BaseController::ALLOWED_PERIODS
+    )
+
+    assert_equal "24h", parsed[:period]
+    assert_equal "24h", parsed.dig(:time_range, :key)
+  end
+
   private
     def fixture_cases
       @fixture_cases ||= JSON.parse(File.read(FIXTURE_PATH))

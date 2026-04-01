@@ -1,16 +1,19 @@
+export type AnalyticsPeriod =
+  | "realtime"
+  | "24h"
+  | "day"
+  | "7d"
+  | "28d"
+  | "91d"
+  | "month"
+  | "6mo"
+  | "12mo"
+  | "year"
+  | "all"
+  | "custom"
+
 export type AnalyticsQuery = {
-  period:
-    | "realtime"
-    | "day"
-    | "7d"
-    | "28d"
-    | "30d"
-    | "91d"
-    | "month"
-    | "year"
-    | "12mo"
-    | "all"
-    | "custom"
+  period: AnalyticsPeriod
   comparison?: "previous_period" | "year_over_year" | "custom" | null
   filters: Record<string, string>
   // Optional human-readable labels for some filter keys (country/region/city)

@@ -115,6 +115,39 @@ test("analytics query params serialize false withImported explicitly", async () 
   assert.match(search, /with_imported=false/)
 })
 
+test("analytics query params preserve supported 24h periods", async () => {
+  const api = await loadAnalyticsApiModule()
+  const fallback = {
+    period: "day",
+    comparison: null,
+    filters: {},
+    labels: {},
+    withImported: false,
+    matchDayOfWeek: true,
+  }
+
+  assert.equal(api.parseQueryParams("?period=24h", fallback).period, "24h")
+  assert.match(api.buildQueryParams({ ...fallback, period: "24h" }), /period=24h/)
+})
+
+test("analytics query params reject unsupported periods", async () => {
+  const api = await loadAnalyticsApiModule()
+  const fallback = {
+    period: "7d",
+    comparison: null,
+    filters: {},
+    labels: {},
+    withImported: false,
+    matchDayOfWeek: true,
+  }
+
+  assert.equal(api.parseQueryParams("?period=30d", fallback).period, "7d")
+  assert.equal(api.parseQueryParams("?period=90d", fallback).period, "7d")
+
+  assert.doesNotMatch(api.buildQueryParams({ ...fallback, period: "30d" }), /period=/)
+  assert.doesNotMatch(api.buildQueryParams({ ...fallback, period: "90d" }), /period=/)
+})
+
 test("analytics report query parsing ignores graph and panel UI params", async () => {
   const api = await loadAnalyticsApiModule()
   const fallback = {

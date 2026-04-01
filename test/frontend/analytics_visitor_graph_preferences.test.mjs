@@ -103,3 +103,26 @@ test("analytics visitor graph initial selections still honor explicit URL state"
     "hour"
   )
 })
+
+test("analytics visitor graph period preferences use canonical interval buckets", async () => {
+  const preferences = await loadPreferencesModule()
+
+  assert.deepEqual(preferences.availableIntervalsForPeriod("24h"), [
+    "minute",
+    "hour",
+  ])
+  assert.deepEqual(preferences.availableIntervalsForPeriod("28d"), [
+    "day",
+    "week",
+  ])
+  assert.deepEqual(preferences.availableIntervalsForPeriod("91d"), [
+    "day",
+    "week",
+    "month",
+  ])
+  assert.deepEqual(preferences.availableIntervalsForPeriod("6mo"), [
+    "day",
+    "week",
+    "month",
+  ])
+})

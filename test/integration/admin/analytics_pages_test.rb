@@ -44,7 +44,7 @@ class Admin::AnalyticsPagesTest < ActionDispatch::IntegrationTest
     sign_in(staff_identity)
 
     get "/admin/analytics/sites/#{site.public_id}/pages",
-      params: { period: "30d", mode: "seo" },
+      params: { period: "28d", mode: "seo" },
       headers: { "ACCEPT" => "application/json" }
 
     assert_response :success
@@ -109,7 +109,7 @@ class Admin::AnalyticsPagesTest < ActionDispatch::IntegrationTest
 
     get "/admin/analytics/sites/#{site.public_id}/pages",
       params: {
-        period: "30d",
+        period: "28d",
         mode: "seo",
         f: [ "is,goal,Signup" ]
       },
@@ -143,7 +143,7 @@ class Admin::AnalyticsPagesTest < ActionDispatch::IntegrationTest
 
     get "/admin/analytics/sites/#{site.public_id}/pages",
       params: {
-        period: "30d",
+        period: "28d",
         mode: "seo",
         f: [ "is,browser,Safari" ]
       },
@@ -174,7 +174,7 @@ class Admin::AnalyticsPagesTest < ActionDispatch::IntegrationTest
 
     get "/admin/analytics/sites/#{site.public_id}/pages",
       params: {
-        period: "30d",
+        period: "28d",
         limit: 20,
         page: 1,
         order_by: [ [ "percentage", "asc" ] ].to_json

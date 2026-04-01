@@ -114,3 +114,25 @@ test("dashboard url canonicalization preserves sources_mode=all for channel dril
     "sources_mode=all&f=is%2Cchannel%2CPaid+Social"
   )
 })
+
+test("dashboard url canonicalization drops unsupported periods", async () => {
+  const state = await loadDashboardUrlStateModule()
+
+  assert.equal(
+    state.canonicalizeDashboardSearchParams("?period=30d").toString(),
+    ""
+  )
+  assert.equal(
+    state.canonicalizeDashboardSearchParams("?period=90d").toString(),
+    ""
+  )
+})
+
+test("dashboard url canonicalization preserves supported 24h periods", async () => {
+  const state = await loadDashboardUrlStateModule()
+
+  assert.equal(
+    state.canonicalizeDashboardSearchParams("?period=24h").toString(),
+    "period=24h"
+  )
+})
