@@ -1,5 +1,3 @@
-import { useMemo } from "react"
-
 import { useQueryContext } from "../query-context"
 import { useSiteContext } from "../site-context"
 import type { AnalyticsDashboardBoot } from "../types"
@@ -18,7 +16,7 @@ export default function AnalyticsDashboard({
 }) {
   const { query } = useQueryContext()
   const site = useSiteContext()
-  const isRealtime = useMemo(() => query.period === "realtime", [query.period])
+  const isRealtime = query.period === "realtime"
   const hasBehaviors =
     site.hasGoals ||
     site.funnelsAvailable ||

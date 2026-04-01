@@ -1,16 +1,7 @@
-import { navigateAnalytics } from "./location-store"
-
 const BEHAVIORS_SEARCH_PARAMS = {
   funnel: "behaviors_funnel",
   property: "behaviors_property",
 } as const
-
-type HistoryMode = "push" | "replace"
-
-type UpdateSearchOptions = {
-  history?: HistoryMode
-  pathname?: string
-}
 
 function normalizeSearchValue(value: string | null | undefined) {
   if (value == null) return null
@@ -106,21 +97,6 @@ export function canonicalizeDashboardSearchParams(
   return params
 }
 
-export function updateDashboardSearchParams(
-  mutator: (params: URLSearchParams) => void,
-  options?: UpdateSearchOptions
-) {
-  if (typeof window === "undefined") return
-
-  const params = new URLSearchParams(window.location.search)
-  mutator(params)
-  const qs = canonicalizeDashboardSearchParams(params).toString()
-  const pathname = options?.pathname ?? window.location.pathname
-  const url = qs ? `${pathname}?${qs}` : pathname
-
-  navigateAnalytics(url, { history: options?.history })
-}
-
 export function getBehaviorsFunnelFromSearch(
   search: string,
   legacyFunnel?: string
@@ -163,22 +139,4 @@ export function setBehaviorsPropertySearchParam(
     params.delete(BEHAVIORS_SEARCH_PARAMS.property)
   }
   return params
-}
-
-export function syncBehaviorsFunnelInUrl(
-  funnel?: string | null,
-  options?: UpdateSearchOptions
-) {
-  updateDashboardSearchParams((params) => {
-    setBehaviorsFunnelSearchParam(params, funnel)
-  }, options)
-}
-
-export function syncBehaviorsPropertyInUrl(
-  property?: string | null,
-  options?: UpdateSearchOptions
-) {
-  updateDashboardSearchParams((params) => {
-    setBehaviorsPropertySearchParam(params, property)
-  }, options)
 }

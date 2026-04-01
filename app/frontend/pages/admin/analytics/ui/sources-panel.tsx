@@ -1,753 +1,462 @@
-import {
-  startTransition,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react"
-import { Bug, Mail } from "lucide-react"
+import { Bug } from "lucide-react"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 
-import {
-  analyticsApiErrorCode,
-  analyticsApiErrorMessage,
-  fetchReferrers,
-  fetchSearchTerms,
-  fetchSources,
-} from "../api"
-import { usePanelData } from "../hooks/use-panel-data"
-import {
-  getReportsDialogSearch,
-  openReportsDialogRoute,
-  syncReportsDialogRoute,
-  useCloseReportsDialogRoute,
-} from "../hooks/use-reports-dialog-route"
-import { pickCardMetrics } from "../lib/card-metrics"
-import {
-  buildDialogPath,
-  buildReferrersPath,
-  dialogSegmentForMode,
-  modeForSegment,
-  parseDialogFromPath,
-  type SourcesMode,
-} from "../lib/dialog-path"
-import { navigateAnalytics } from "../lib/location-store"
-import {
-  getSourcesModeFromSearch,
-  hasPanelModeSearchParam,
-  inferSourcesModeFromFilters,
-} from "../lib/panel-mode"
-import { analyticsScopedPath } from "../lib/path-prefix"
-import {
-  analyticsPreferenceKey,
-  writeAnalyticsPreference,
-} from "../lib/preferences"
-import { useScopedQuery } from "../lib/query-scope"
-import {
-  getSourceFaviconDomain,
-  normalizeSourceKey,
-  sourceNeedsLightBackground,
-} from "../lib/source-visuals"
-import { useQueryContext } from "../query-context"
-import { useSiteContext } from "../site-context"
+import { useSourcesPanelController } from "../hooks/use-sources-panel-controller"
+import type { SourcesMode } from "../lib/dialog-path"
+import { SOURCES_CAMPAIGN_OPTIONS } from "../lib/sources-panel"
 import type { ListItem, ListMetricKey, ListPayload } from "../types"
 import DetailsButton from "./details-button"
 import { MetricTable, PanelEmptyState, PanelListSkeleton } from "./list-table"
 import { PanelTab, PanelTabDropdown, PanelTabs } from "./panel-tabs"
 import RemoteDetailsDialog from "./remote-details-dialog"
 import SourceDebugDialog from "./source-debug-dialog"
-
-const CAMPAIGN_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "utm-medium", label: "UTM Mediums" },
-  { value: "utm-source", label: "UTM Sources" },
-  { value: "utm-campaign", label: "UTM Campaigns" },
-  { value: "utm-content", label: "UTM Contents" },
-  { value: "utm-term", label: "UTM Terms" },
-]
-
-const TITLE_FOR_MODE: Record<string, string> = {
-  channels: "Top Channels",
-  all: "Top Sources",
-  "utm-medium": "UTM Mediums",
-  "utm-source": "UTM Sources",
-  "utm-campaign": "UTM Campaigns",
-  "utm-content": "UTM Contents",
-  "utm-term": "UTM Terms",
-}
-
-const STORAGE_PREFIX = "admin.analytics.sources"
+import { SourceIcon } from "./sources-panel/source-icon"
+import { buildSourceExternalLink } from "./sources-panel/source-link"
 
 type SourcesPanelProps = {
   initialData: ListPayload
   initialMode: string
 }
 
+function renderSourceIcon(item: ListItem) {
+  const name = String(item.name ?? "").trim()
+  return <SourceIcon name={name} />
+}
+
 export default function SourcesPanel({
   initialData,
   initialMode,
 }: SourcesPanelProps) {
-  const { query, pathname, search, updateQuery } = useQueryContext()
-  const site = useSiteContext()
-  const explicitSearchMode = hasPanelModeSearchParam(search, "sources")
-    ? getSourcesModeFromSearch(search, query)
-    : null
-
-  const [debugOpen, setDebugOpen] = useState(false)
-  const [preferredMode, setPreferredMode] = useState(
-    () => explicitSearchMode ?? initialMode
-  )
-  const { value: baseQuery } = useScopedQuery(query, {
-    omitMode: true,
-    omitMetric: true,
-    omitInterval: true,
-  })
-  const parsedDialog = useMemo(() => parseDialogFromPath(pathname), [pathname])
-  const dialogMode = useMemo(() => {
-    if (parsedDialog.type === "referrers") return "all"
-    if (parsedDialog.type === "segment")
-      return modeForSegment(parsedDialog.segment)
-    return null
-  }, [parsedDialog])
-  const derivedModeFromFilters = useMemo(
-    () => inferSourcesModeFromFilters(query.filters),
-    [query.filters]
-  )
-  const mode = dialogMode ?? derivedModeFromFilters ?? preferredMode
-  const storageKey = analyticsPreferenceKey(STORAGE_PREFIX, site.domain)
-  const detailsOpen =
-    parsedDialog.type === "segment" ||
-    (parsedDialog.type === "referrers" && /^google$/i.test(parsedDialog.source))
-  const refDetailsOpen =
-    parsedDialog.type === "referrers" && !/^google$/i.test(parsedDialog.source)
-  const initialRequestKey = useMemo(
-    () => JSON.stringify([baseQuery, initialMode]),
-    [baseQuery, initialMode]
-  )
-  const requestKey = useMemo(
-    () => JSON.stringify([baseQuery, mode]),
-    [baseQuery, mode]
-  )
-  const closeDialog = useCloseReportsDialogRoute()
-  const panelState = usePanelData({
+  const {
+    activeSource,
+    campaignActive,
+    campaignLabel,
+    cardTitle,
+    closeDialog,
+    data,
+    debugOpen,
+    detailsOpen,
+    dialogTitle,
+    firstColumnLabel,
+    handlePrimaryRowClick,
+    handleReferrerRowClick,
+    highlightMetric,
+    isGoogleActive,
+    limitedData,
+    limitedTermsData,
+    loading,
+    mode,
+    openDetailsDialog,
+    refData,
+    refDetailsOpen,
+    refLoading,
+    searchTermsStatus,
+    selectedSearchTermsPage,
+    setAndStoreMode,
+    setDebugOpen,
+    setLast30Days,
+    searchTermsEndpoint,
+    showSourceIcon,
+    sourcesEndpoint,
+    sourceDebugSource,
+    syncPrimaryDialog,
+    syncReferrerDialog,
+    takeover,
+    termsData,
+    termsError,
+    termsErrorCode,
+    termsLoading,
+    utmHasUsableData,
+    referrersEndpoint,
+  } = useSourcesPanelController({
     initialData,
-    initialRequestKey,
-    requestKey,
-    fetchData: (controller) =>
-      fetchSources(baseQuery, { mode }, controller.signal),
+    initialMode,
   })
-  const data = panelState.data
-  const loading = panelState.loading
 
-  const setAndStoreMode = useCallback(
-    (value: string) => {
-      setPreferredMode(value)
-      writeAnalyticsPreference(storageKey, value)
-    },
-    [storageKey]
-  )
-
-  const applyFilter = useCallback(
-    (key: string, value: string) => {
-      updateQuery((current) => ({
-        ...current,
-        filters: { ...current.filters, [key]: value },
-      }))
-    },
-    [updateQuery]
-  )
-
-  // Drilldown for a selected source (when mode === 'all')
-  const activeSource =
-    parsedDialog.type === "referrers"
-      ? parsedDialog.source
-      : query.filters?.source
-  const isGoogleActive = useMemo(
-    () => !!(activeSource && /google/i.test(String(activeSource))),
-    [activeSource]
-  )
-  const takeOverWithSearchTerms = useMemo(
-    () => !!activeSource && isGoogleActive,
-    [activeSource, isGoogleActive]
-  )
-  // Allow takeover even for Direct / None (matches Plausible behavior for referrers card)
-  const takeOverWithReferrers = useMemo(
-    () => !!activeSource && !isGoogleActive,
-    [activeSource, isGoogleActive]
-  )
-  const [refData, setRefData] = useState<ListPayload | null>(null)
-  const [refLoading, setRefLoading] = useState(false)
-  const [termsData, setTermsData] = useState<ListPayload | null>(null)
-  const [termsLoading, setTermsLoading] = useState(false)
-  const [termsError, setTermsError] = useState<string | null>(null)
-  const [termsErrorCode, setTermsErrorCode] = useState<string | null>(null)
-  const refRequestIdRef = useRef(0)
-  const termsRequestIdRef = useRef(0)
-  const searchTermsStatus = termsData?.meta.searchConsole
-  const selectedSearchTermsPage = query.filters.page?.trim() || null
-
-  useEffect(() => {
-    if (!activeSource || takeOverWithSearchTerms) {
-      startTransition(() => setRefData(null))
-      startTransition(() => setRefLoading(false))
-      return
-    }
-    const controller = new AbortController()
-    const requestId = refRequestIdRef.current + 1
-    refRequestIdRef.current = requestId
-    startTransition(() => setRefLoading(true))
-    fetchReferrers(baseQuery, { source: activeSource }, controller.signal)
-      .then((payload) => {
-        if (refRequestIdRef.current !== requestId) return
-        setRefData(payload)
-      })
-      .catch((error) => {
-        if (error.name !== "AbortError") console.error(error)
-      })
-      .finally(() => {
-        if (refRequestIdRef.current !== requestId) return
-        setRefLoading(false)
-      })
-    return () => controller.abort()
-  }, [activeSource, baseQuery, takeOverWithSearchTerms])
-
-  // Fetch search terms when Google is active
-  useEffect(() => {
-    if (!takeOverWithSearchTerms) {
-      startTransition(() => setTermsData(null))
-      startTransition(() => setTermsError(null))
-      startTransition(() => setTermsErrorCode(null))
-      startTransition(() => setTermsLoading(false))
-      return
-    }
-    const controller = new AbortController()
-    const requestId = termsRequestIdRef.current + 1
-    termsRequestIdRef.current = requestId
-    startTransition(() => setTermsLoading(true))
-    startTransition(() => setTermsError(null))
-    startTransition(() => setTermsErrorCode(null))
-    fetchSearchTerms(baseQuery, {}, controller.signal)
-      .then((payload) => {
-        if (termsRequestIdRef.current !== requestId) return
-        setTermsData(payload)
-        setTermsError(null)
-        setTermsErrorCode(null)
-      })
-      .catch((error) => {
-        if (error.name !== "AbortError") {
-          if (termsRequestIdRef.current !== requestId) return
-          setTermsData(null)
-          setTermsErrorCode(analyticsApiErrorCode(error))
-          setTermsError(searchTermsErrorMessage(error))
-          console.error(error)
-        }
-      })
-      .finally(() => {
-        if (termsRequestIdRef.current !== requestId) return
-        setTermsLoading(false)
-      })
-    return () => controller.abort()
-  }, [baseQuery, takeOverWithSearchTerms])
-
-  const highlightMetric = useMemo(
-    () => (data.metrics.includes("visitors") ? "visitors" : data.metrics[0]),
-    [data.metrics]
-  )
-
-  const limitedTermsData = useMemo((): ListPayload | null => {
-    if (!termsData) return null
-
-    const metricKey = termsData.metrics[0] ?? "visitors"
-    const sorted = [...termsData.results].sort((a, b) => {
-      const av = Number(a[metricKey] ?? 0)
-      const bv = Number(b[metricKey] ?? 0)
-      if (av === bv) return String(a.name).localeCompare(String(b.name))
-      return bv - av
-    })
-
-    return {
-      ...termsData,
-      results: sorted.slice(0, 9),
-      meta: { ...termsData.meta, hasMore: termsData.results.length > 9 },
-    }
-  }, [termsData])
-
-  const setLast30Days = useCallback(() => {
-    updateQuery((current) => ({
-      ...current,
-      period: "30d",
-      comparison: null,
-      date: null,
-      from: null,
-      to: null,
-      compareFrom: null,
-      compareTo: null,
-      matchDayOfWeek: false,
-    }))
-  }, [updateQuery])
-
-  // Card title follows Plausible: "Top Channels" on card, but modal uses
-  // "Top Acquisition Channels". For other tabs, both are identical.
-  const cardTitle = useMemo(() => {
-    if (mode === "channels") return "Top Channels"
-    if (takeOverWithSearchTerms) return "Search Terms"
-    if (takeOverWithReferrers) return "Top Referrers"
-    return TITLE_FOR_MODE[mode] ?? "Top Sources"
-  }, [mode, takeOverWithReferrers, takeOverWithSearchTerms])
-
-  const dialogTitle = useMemo(() => {
-    if (mode === "channels") return "Top Acquisition Channels"
-    return TITLE_FOR_MODE[mode] ?? "Top Sources"
-  }, [mode])
-  const campaignActive = useMemo(
-    () => CAMPAIGN_OPTIONS.some((option) => option.value === mode),
-    [mode]
-  )
-  const campaignLabel = useMemo(() => {
-    if (!campaignActive) return "Campaigns"
-    const activeOption = CAMPAIGN_OPTIONS.find(
-      (option) => option.value === mode
-    )
-    return activeOption?.label ?? "Campaigns"
-  }, [campaignActive, mode])
-
-  const firstColumnLabel = useMemo(() => {
-    if (mode === "channels") return "Channel"
-    if (mode.startsWith("utm-")) {
-      const label =
-        CAMPAIGN_OPTIONS.find((opt) => opt.value === mode)?.label || "Campaign"
-      return label.replace(/s$/, "") // Remove trailing 's' for singular
-    }
-    return "Source"
-  }, [mode])
-
-  // Limit card view to top 9 by the first metric; Details keeps full list
-  const limitedData = useMemo((): ListPayload => {
-    const metricKey = data.metrics[0] ?? "visitors"
-    const sorted = [...data.results].sort((a, b) => {
-      const av = Number(a[metricKey] ?? 0)
-      const bv = Number(b[metricKey] ?? 0)
-      if (av === bv) return String(a.name).localeCompare(String(b.name))
-      return bv - av
-    })
-    const sliced = sorted.slice(0, 9)
-    return {
-      ...data,
-      metrics: pickCardMetrics(data.metrics),
-      results: sliced,
-      meta: { ...data.meta, hasMore: data.results.length > 9 },
-    }
-  }, [data])
-
-  // Treat UTM tabs with mostly "(none)" as no usable data, so we don't display a meaningless list
-  const isUtmMode = useMemo(() => mode.startsWith("utm-"), [mode])
-  const utmHasUsableData = useMemo(() => {
-    if (!isUtmMode) return true
-    if (!data || !data.results) return false
-    const rows = data.results
-    const total = rows.reduce((sum, r) => sum + Number(r.visitors ?? 0), 0)
-    const nonNone = rows.filter((r) => {
-      const name = String(r.name ?? "").trim()
-      return (
-        name !== "" && name !== "(none)" && name.toLowerCase() !== "(not set)"
-      )
-    })
-    const nonNoneTotal = nonNone.reduce(
-      (sum, r) => sum + Number(r.visitors ?? 0),
-      0
-    )
-    if (nonNone.length === 0) return false
-    // Hide when non-tagged dominates (>= 90% is (none))
-    return nonNoneTotal / Math.max(total, 1) >= 0.1
-  }, [isUtmMode, data])
+  const isOverviewEmpty = data.results.length === 0 || !utmHasUsableData
 
   return (
     <section
       className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4"
       data-testid="sources-panel"
     >
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-base font-medium">{cardTitle}</h2>
-        {/* Hide tabs when referrer or search-terms take over, to match Plausible */}
-        {takeOverWithReferrers || takeOverWithSearchTerms ? null : (
-          <PanelTabs>
-            <PanelTab
-              active={mode === "channels"}
-              onClick={() => setAndStoreMode("channels")}
-            >
-              Channels
-            </PanelTab>
-            <PanelTab
-              active={mode === "all"}
-              onClick={() => setAndStoreMode("all")}
-            >
-              Sources
-            </PanelTab>
-            <PanelTabDropdown
-              active={campaignActive}
-              label={campaignLabel}
-              options={CAMPAIGN_OPTIONS}
-              onSelect={setAndStoreMode}
-            />
-          </PanelTabs>
-        )}
-      </header>
+      <SourcesPanelHeader
+        cardTitle={cardTitle}
+        takeover={takeover}
+        mode={mode}
+        campaignActive={campaignActive}
+        campaignLabel={campaignLabel}
+        onSelectMode={setAndStoreMode}
+      />
 
       {loading ? (
         <PanelListSkeleton firstColumnLabel={firstColumnLabel} />
-      ) : takeOverWithReferrers ? (
-        refLoading ? (
-          <PanelListSkeleton firstColumnLabel="Referrer" />
-        ) : !refData || refData.results.length === 0 ? (
-          <PanelEmptyState />
-        ) : (
-          <>
-            <MetricTable
-              data={{ ...refData, metrics: ["visitors"] as ListMetricKey[] }}
-              firstColumnLabel="Referrer"
-              renderLeading={renderSourceIcon}
-              displayBars={false}
-              barColorTheme="cyan"
-              testId="referrers"
-              onRowClick={(item) => {
-                if (String(item.name) === "Direct / None") return
-                applyFilter("referrer", String(item.name))
-              }}
-            />
-            <div className="mt-auto flex justify-center pt-3">
-              <DetailsButton
-                data-testid="sources-details-btn"
-                onClick={() => {
-                  try {
-                    if (activeSource) {
-                      openReportsDialogRoute((search) =>
-                        buildReferrersPath(activeSource, search)
-                      )
-                    }
-                  } catch {
-                    // Ignore history errors when opening the details route.
-                  }
-                }}
-              >
-                Details
-              </DetailsButton>
-            </div>
-          </>
-        )
-      ) : takeOverWithSearchTerms ? (
-        termsLoading ? (
-          <PanelListSkeleton firstColumnLabel="Search term" />
-        ) : termsData && termsData.results.length > 0 ? (
-          <>
-            {searchTermsStatusNote(searchTermsStatus)}
-            <MetricTable
-              data={
-                limitedTermsData
-                  ? {
-                      ...limitedTermsData,
-                      metrics: ["visitors"],
-                    }
-                  : {
-                      ...termsData,
-                      metrics: ["visitors"],
-                    }
-              }
-              firstColumnLabel="Search term"
-              displayBars={false}
-              barColorTheme="cyan"
-              testId="search-terms"
-            />
-            <div className="mt-auto flex justify-center pt-3">
-              <DetailsButton
-                onClick={() => {
-                  try {
-                    // For Google Search Terms, mirror Plausible route
-                    openReportsDialogRoute((search) =>
-                      buildReferrersPath("Google", search)
-                    )
-                  } catch {
-                    // Ignore history errors when opening the details route.
-                  }
-                }}
-              >
-                Details
-              </DetailsButton>
-            </div>
-          </>
-        ) : termsError ? (
-          <PanelEmptyState>
-            <div className="flex flex-col items-center gap-4 text-center">
-              <div className="text-lg font-semibold text-foreground">
-                {termsErrorCode === "period_too_recent"
-                  ? "Select a different period"
-                  : "Search Terms"}
-              </div>
-              <div className="max-w-prose text-sm text-muted-foreground">
-                {termsError}
-              </div>
-              {termsErrorCode === "period_too_recent" ? (
-                <Button onClick={setLast30Days}>Search last 30 days</Button>
-              ) : null}
-            </div>
-          </PanelEmptyState>
-        ) : searchTermsStatus?.syncInProgress ? (
-          <PanelEmptyState>
-            <div className="flex flex-col items-center gap-4 text-center">
-              <div className="text-lg font-semibold text-foreground">
-                Search Terms
-              </div>
-              <div className="max-w-prose text-sm text-muted-foreground">
-                Search Console sync is in progress for{" "}
-                {searchTermsStatus.refreshWindowFrom ?? "?"} to{" "}
-                {searchTermsStatus.refreshWindowTo ?? "?"}. Results will appear
-                after the sync completes.
-              </div>
-            </div>
-          </PanelEmptyState>
-        ) : searchTermsStatus?.syncStale ? (
-          <PanelEmptyState>
-            <div className="flex flex-col items-center gap-4 text-center">
-              <div className="text-lg font-semibold text-foreground">
-                Search Terms
-              </div>
-              <div className="max-w-prose text-sm text-muted-foreground">
-                Search Console data for this site needs a refresh. Open
-                analytics settings to retry the sync, then come back here.
-              </div>
-            </div>
-          </PanelEmptyState>
-        ) : (
-          <PanelEmptyState>
-            <div className="flex flex-col items-center gap-4 text-center">
-              <div className="text-lg font-semibold text-foreground">
-                {selectedSearchTermsPage
-                  ? "No keywords found for filtered paths"
-                  : "Search Terms"}
-              </div>
-              <div className="max-w-prose text-sm text-muted-foreground">
-                {selectedSearchTermsPage ? (
-                  <>
-                    No search terms rank for the selected path:
-                    <br />
-                    <span className="font-medium text-foreground">
-                      {selectedSearchTermsPage}
-                    </span>
-                    <br />
-                    Try a different path or remove the filter.
-                  </>
-                ) : (
-                  "No Google search terms matched this period and filter set."
-                )}
-              </div>
-            </div>
-          </PanelEmptyState>
-        )
-      ) : data.results.length === 0 || (isUtmMode && !utmHasUsableData) ? (
+      ) : takeover === "referrers" ? (
+        <ReferrersTakeoverContent
+          data={refData}
+          loading={refLoading}
+          onRowClick={handleReferrerRowClick}
+          onOpenDetails={openDetailsDialog}
+        />
+      ) : takeover === "search-terms" ? (
+        <SearchTermsTakeoverContent
+          data={termsData}
+          limitedData={limitedTermsData}
+          loading={termsLoading}
+          error={termsError}
+          errorCode={termsErrorCode}
+          status={searchTermsStatus}
+          selectedPage={selectedSearchTermsPage}
+          onOpenDetails={openDetailsDialog}
+          onSelectLast30Days={setLast30Days}
+        />
+      ) : isOverviewEmpty ? (
         <PanelEmptyState />
       ) : (
-        <>
-          <MetricTable
-            data={limitedData}
-            highlightedMetric={highlightMetric ?? "visitors"}
-            onRowClick={(item) => {
-              const name = String(item.name)
-              if (mode === "channels") {
-                // Follow Plausible: clicking a channel switches to Sources tab with channel filter; no dialog.
-                setAndStoreMode("all")
-                updateQuery((current) => ({
-                  ...current,
-                  filters: { ...current.filters, channel: name },
-                }))
-                return
-              }
-              const filterKey = filterKeyForMode(mode)
-              applyFilter(filterKey, name)
-            }}
-            renderLeading={shouldShowIcon(mode) ? renderSourceIcon : undefined}
-            displayBars={false}
-            firstColumnLabel={firstColumnLabel}
-            barColorTheme="cyan"
-            revealSecondaryMetricsOnHover
-            testId="sources"
-          />
-          {!isUtmMode || utmHasUsableData ? (
-            <div className="mt-auto flex justify-center pt-3">
-              <div className="flex items-center gap-2">
-                {activeSource ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-2"
-                    onClick={() => setDebugOpen(true)}
-                  >
-                    <Bug className="size-3.5" />
-                    Inspect
-                  </Button>
-                ) : null}
-                <DetailsButton
-                  data-testid="sources-details-btn"
-                  onClick={() => {
-                    // If a specific source is active, open Referrer Details instead of Sources
-                    if (activeSource && !isGoogleActive) {
-                      try {
-                        if (activeSource) {
-                          openReportsDialogRoute((search) =>
-                            buildReferrersPath(String(activeSource), search)
-                          )
-                        }
-                      } catch {
-                        // Ignore history errors when opening referrer details.
-                      }
-                    } else {
-                      try {
-                        const seg = dialogSegmentForMode(mode as SourcesMode)
-                        openReportsDialogRoute((search) =>
-                          buildDialogPath(seg, search)
-                        )
-                      } catch {
-                        // Ignore history errors when opening source details.
-                      }
-                    }
-                  }}
-                >
-                  Details
-                </DetailsButton>
-              </div>
-            </div>
-          ) : null}
-        </>
+        <SourcesOverviewContent
+          data={limitedData}
+          highlightedMetric={highlightMetric ?? "visitors"}
+          activeSource={activeSource}
+          firstColumnLabel={firstColumnLabel}
+          showSourceIcon={showSourceIcon}
+          onInspect={() => setDebugOpen(true)}
+          onOpenDetails={openDetailsDialog}
+          onRowClick={handlePrimaryRowClick}
+        />
       )}
 
-      {/* Search Terms takes over the card when Google is the active source; no inline drilldown below */}
-
-      {/* Referrer drilldown card - disabled because main card takes over. */}
       <RemoteDetailsDialog
         open={detailsOpen}
-        onOpenChange={(open) => {
-          try {
-            if (open) {
-              if (isGoogleActive) {
-                // Keep Google keywords route when Search Terms modal is open
-                syncReportsDialogRoute(open, (search) =>
-                  buildReferrersPath("Google", search)
-                )
-              } else {
-                const seg = dialogSegmentForMode(mode as SourcesMode)
-                syncReportsDialogRoute(open, (search) =>
-                  buildDialogPath(seg, search)
-                )
-              }
-            } else {
-              syncReportsDialogRoute(open, (search) =>
-                buildDialogPath(
-                  dialogSegmentForMode(mode as SourcesMode),
-                  search
-                )
-              )
-            }
-          } catch {
-            // Ignore history errors when syncing modal state.
-          }
-        }}
+        onOpenChange={syncPrimaryDialog}
         title={isGoogleActive ? "Google search terms" : dialogTitle}
-        endpoint={
-          isGoogleActive
-            ? analyticsScopedPath("/search_terms")
-            : analyticsScopedPath("/sources")
-        }
+        endpoint={isGoogleActive ? searchTermsEndpoint : sourcesEndpoint}
         extras={isGoogleActive ? {} : { mode }}
         firstColumnLabel={isGoogleActive ? "Search term" : firstColumnLabel}
-        defaultSortKey={isGoogleActive ? "visitors" : "visitors"}
+        defaultSortKey={"visitors"}
         onRowClick={
           isGoogleActive
             ? undefined
             : (item) => {
-                const filterKey = filterKeyForMode(mode)
-                applyFilter(filterKey, String(item.name))
+                handlePrimaryRowClick(item)
                 closeDialog()
               }
         }
         renderLeading={
-          isGoogleActive
-            ? undefined
-            : shouldShowIcon(mode)
-              ? renderSourceIcon
-              : undefined
+          isGoogleActive || !showSourceIcon ? undefined : renderSourceIcon
         }
         sortable
       />
 
-      {/* Referrer Details modal */}
       {activeSource && !isGoogleActive ? (
         <RemoteDetailsDialog
           open={refDetailsOpen}
-          onOpenChange={(open) => {
-            try {
-              const qs = getReportsDialogSearch()
-              if (open && activeSource) {
-                navigateAnalytics(buildReferrersPath(String(activeSource), qs))
-              } else if (!open) {
-                syncReportsDialogRoute(open, (search) =>
-                  buildReferrersPath(String(activeSource), search)
-                )
-              }
-            } catch (e) {
-              console.warn("Failed to push dialog path", e)
-            }
-          }}
-          title={"Referrer Drilldown"}
-          endpoint={analyticsScopedPath("/referrers")}
+          onOpenChange={syncReferrerDialog}
+          title="Referrer Drilldown"
+          endpoint={referrersEndpoint}
           extras={{ source: activeSource }}
-          firstColumnLabel={"Referrer"}
+          firstColumnLabel="Referrer"
           defaultSortKey={"visitors"}
           onRowClick={(item) => {
-            if (String(item.name) === "Direct / None") return
-            applyFilter("referrer", String(item.name))
+            handleReferrerRowClick(item)
             closeDialog()
           }}
           renderLeading={renderSourceIcon}
-          getExternalLinkUrl={(item) => {
-            const name = String(item.name)
-            if (!name || name === "Direct / None" || name.startsWith("("))
-              return null
-            // If it already looks like a URL with scheme, use as is. Else prefix https://
-            return /^(https?:)?\/\//i.test(name)
-              ? name.startsWith("http")
-                ? name
-                : `https:${name}`
-              : `https://${name}`
-          }}
+          getExternalLinkUrl={(item) =>
+            buildSourceExternalLink(String(item.name))
+          }
         />
       ) : null}
 
       <SourceDebugDialog
         open={debugOpen}
         onOpenChange={setDebugOpen}
-        source={mode === "all" ? activeSource || null : null}
+        source={sourceDebugSource}
       />
     </section>
   )
 }
 
-function searchTermsErrorMessage(error: unknown) {
-  switch (analyticsApiErrorCode(error)) {
-    case "not_configured":
-      return "Google Search Console is not configured yet. Enable it in analytics settings to load search terms."
-    case "unsupported_filters":
-      return "Google search terms support page, country, and device filters only. Remove entry page, exit page, referrer, UTM, browser, OS, custom property, or other non-Google dimensions and try again."
-    case "period_too_recent":
-      return "Google search terms are not available for very recent periods. Try a date range ending at least three days ago."
-    default:
-      return analyticsApiErrorMessage(error) ?? "Failed to load search terms."
-  }
+function SourcesPanelHeader({
+  cardTitle,
+  takeover,
+  mode,
+  campaignActive,
+  campaignLabel,
+  onSelectMode,
+}: {
+  cardTitle: string
+  takeover: "none" | "referrers" | "search-terms"
+  mode: SourcesMode
+  campaignActive: boolean
+  campaignLabel: string
+  onSelectMode: (mode: SourcesMode) => void
+}) {
+  return (
+    <header className="flex flex-wrap items-center justify-between gap-3">
+      <h2 className="text-base font-medium">{cardTitle}</h2>
+      {takeover === "none" ? (
+        <PanelTabs>
+          <PanelTab
+            active={mode === "channels"}
+            onClick={() => onSelectMode("channels")}
+          >
+            Channels
+          </PanelTab>
+          <PanelTab active={mode === "all"} onClick={() => onSelectMode("all")}>
+            Sources
+          </PanelTab>
+          <PanelTabDropdown
+            active={campaignActive}
+            label={campaignLabel}
+            options={SOURCES_CAMPAIGN_OPTIONS}
+            onSelect={(value) => onSelectMode(value as SourcesMode)}
+          />
+        </PanelTabs>
+      ) : null}
+    </header>
+  )
 }
 
-function searchTermsStatusNote(
+function ReferrersTakeoverContent({
+  data,
+  loading,
+  onRowClick,
+  onOpenDetails,
+}: {
+  data: ListPayload | null
+  loading: boolean
+  onRowClick: (item: ListItem) => void
+  onOpenDetails: () => void
+}) {
+  if (loading) {
+    return <PanelListSkeleton firstColumnLabel="Referrer" />
+  }
+
+  if (!data || data.results.length === 0) {
+    return <PanelEmptyState />
+  }
+
+  return (
+    <>
+      <MetricTable
+        data={{ ...data, metrics: ["visitors"] as ListMetricKey[] }}
+        firstColumnLabel="Referrer"
+        renderLeading={renderSourceIcon}
+        displayBars={false}
+        barColorTheme="cyan"
+        testId="referrers"
+        onRowClick={onRowClick}
+      />
+      <div className="mt-auto flex justify-center pt-3">
+        <DetailsButton
+          data-testid="sources-details-btn"
+          onClick={onOpenDetails}
+        >
+          Details
+        </DetailsButton>
+      </div>
+    </>
+  )
+}
+
+function SearchTermsTakeoverContent({
+  data,
+  limitedData,
+  loading,
+  error,
+  errorCode,
+  status,
+  selectedPage,
+  onOpenDetails,
+  onSelectLast30Days,
+}: {
+  data: ListPayload | null
+  limitedData: ListPayload | null
+  loading: boolean
+  error: string | null
+  errorCode: string | null
   status: ListPayload["meta"]["searchConsole"] | undefined
-) {
+  selectedPage: string | null
+  onOpenDetails: () => void
+  onSelectLast30Days: () => void
+}) {
+  if (loading) {
+    return <PanelListSkeleton firstColumnLabel="Search term" />
+  }
+
+  if (data && data.results.length > 0) {
+    return (
+      <>
+        <SearchTermsStatusNote status={status} />
+        <MetricTable
+          data={
+            limitedData
+              ? {
+                  ...limitedData,
+                  metrics: ["visitors"] as ListMetricKey[],
+                }
+              : {
+                  ...data,
+                  metrics: ["visitors"] as ListMetricKey[],
+                }
+          }
+          firstColumnLabel="Search term"
+          displayBars={false}
+          barColorTheme="cyan"
+          testId="search-terms"
+        />
+        <div className="mt-auto flex justify-center pt-3">
+          <DetailsButton onClick={onOpenDetails}>Details</DetailsButton>
+        </div>
+      </>
+    )
+  }
+
+  if (error) {
+    return (
+      <PanelEmptyState>
+        <div className="flex flex-col items-center gap-4 text-center">
+          <div className="text-lg font-semibold text-foreground">
+            {errorCode === "period_too_recent"
+              ? "Select a different period"
+              : "Search Terms"}
+          </div>
+          <div className="max-w-prose text-sm text-muted-foreground">
+            {error}
+          </div>
+          {errorCode === "period_too_recent" ? (
+            <Button onClick={onSelectLast30Days}>Search last 30 days</Button>
+          ) : null}
+        </div>
+      </PanelEmptyState>
+    )
+  }
+
+  if (status?.syncInProgress) {
+    return (
+      <PanelEmptyState>
+        <div className="flex flex-col items-center gap-4 text-center">
+          <div className="text-lg font-semibold text-foreground">
+            Search Terms
+          </div>
+          <div className="max-w-prose text-sm text-muted-foreground">
+            Search Console sync is in progress for{" "}
+            {status.refreshWindowFrom ?? "?"} to {status.refreshWindowTo ?? "?"}
+            . Results will appear after the sync completes.
+          </div>
+        </div>
+      </PanelEmptyState>
+    )
+  }
+
+  if (status?.syncStale) {
+    return (
+      <PanelEmptyState>
+        <div className="flex flex-col items-center gap-4 text-center">
+          <div className="text-lg font-semibold text-foreground">
+            Search Terms
+          </div>
+          <div className="max-w-prose text-sm text-muted-foreground">
+            Search Console data for this site needs a refresh. Open analytics
+            settings to retry the sync, then come back here.
+          </div>
+        </div>
+      </PanelEmptyState>
+    )
+  }
+
+  return (
+    <PanelEmptyState>
+      <div className="flex flex-col items-center gap-4 text-center">
+        <div className="text-lg font-semibold text-foreground">
+          {selectedPage
+            ? "No keywords found for filtered paths"
+            : "Search Terms"}
+        </div>
+        <div className="max-w-prose text-sm text-muted-foreground">
+          {selectedPage ? (
+            <>
+              No search terms rank for the selected path:
+              <br />
+              <span className="font-medium text-foreground">
+                {selectedPage}
+              </span>
+              <br />
+              Try a different path or remove the filter.
+            </>
+          ) : (
+            "No Google search terms matched this period and filter set."
+          )}
+        </div>
+      </div>
+    </PanelEmptyState>
+  )
+}
+
+function SourcesOverviewContent({
+  data,
+  highlightedMetric,
+  activeSource,
+  firstColumnLabel,
+  showSourceIcon,
+  onInspect,
+  onOpenDetails,
+  onRowClick,
+}: {
+  data: ListPayload
+  highlightedMetric: ListMetricKey
+  activeSource: string | undefined
+  firstColumnLabel: string
+  showSourceIcon: boolean
+  onInspect: () => void
+  onOpenDetails: () => void
+  onRowClick: (item: ListItem) => void
+}) {
+  return (
+    <>
+      <MetricTable
+        data={data}
+        highlightedMetric={highlightedMetric}
+        onRowClick={onRowClick}
+        renderLeading={showSourceIcon ? renderSourceIcon : undefined}
+        displayBars={false}
+        firstColumnLabel={firstColumnLabel}
+        barColorTheme="cyan"
+        revealSecondaryMetricsOnHover
+        testId="sources"
+      />
+      <div className="mt-auto flex justify-center pt-3">
+        <div className="flex items-center gap-2">
+          {activeSource ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={onInspect}
+            >
+              <Bug className="size-3.5" />
+              Inspect
+            </Button>
+          ) : null}
+          <DetailsButton
+            data-testid="sources-details-btn"
+            onClick={onOpenDetails}
+          >
+            Details
+          </DetailsButton>
+        </div>
+      </div>
+    </>
+  )
+}
+
+function SearchTermsStatusNote({
+  status,
+}: {
+  status: ListPayload["meta"]["searchConsole"] | undefined
+}) {
   if (!status?.configured) return null
 
   if (status.syncInProgress) {
@@ -783,193 +492,4 @@ function searchTermsStatusNote(
   }
 
   return null
-}
-
-function shouldShowIcon(mode: string) {
-  return mode === "all" || mode === "utm-source"
-}
-
-function filterKeyForMode(mode: string) {
-  switch (mode) {
-    case "channels":
-      return "channel"
-    case "utm-medium":
-      return "utm_medium"
-    case "utm-source":
-      return "utm_source"
-    case "utm-campaign":
-      return "utm_campaign"
-    case "utm-content":
-      return "utm_content"
-    case "utm-term":
-      return "utm_term"
-    case "all":
-    default:
-      return "source"
-  }
-}
-
-function renderSourceIcon(item: ListItem) {
-  const name = String(item.name ?? "").trim()
-  return <SourceIcon name={name} />
-}
-
-function SourceIcon({ name }: { name: string }) {
-  const [error, setError] = useState(false)
-  const slug = name.toLowerCase()
-  const normalizedName = normalizeSourceKey(name)
-
-  // Traffic category sources (no real domain) - use emojis directly
-  const CATEGORY_EMOJIS: Record<string, string> = {
-    "Direct / None": "↩️",
-    "Organic Search": "🔍",
-    "Organic Social": "👥",
-    "Paid Search": "💰",
-    Email: "✉️",
-    Referral: "🔗",
-  }
-
-  const renderIconBadge = (icon: ReactNode, className: string) => (
-    <span
-      className={`flex size-6 items-center justify-center rounded-full ${className}`}
-      aria-hidden
-    >
-      {icon}
-    </span>
-  )
-
-  const knownLocalIcon = () => {
-    if (
-      normalizedName === "newsletter" ||
-      normalizedName === "email" ||
-      normalizedName === "emails"
-    ) {
-      return renderIconBadge(
-        <Mail className="size-3.5" strokeWidth={2.1} />,
-        "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
-      )
-    }
-    return null
-  }
-
-  const fallbackEmoji = (): string | null => {
-    if (slug.includes("google")) return "🔍"
-    if (slug.includes("perplexity") || slug.includes("chatgpt")) return "🤖"
-    if (slug.includes("facebook")) return "📘"
-    if (slug.includes("twitter") || slug.includes("x.com")) return "🐦"
-    if (slug.includes("github")) return "🐙"
-    if (slug.includes("bing")) return "🅱️"
-    if (slug.includes("brave")) return "🦁"
-    if (slug.includes("duck")) return "🦆"
-    if (slug.includes("slack")) return "💬"
-    if (slug.includes("product hunt") || slug.includes("producthunt"))
-      return "🚀"
-    if (slug.includes("teams")) return "👥"
-    if (slug.includes("wikipedia")) return "📚"
-    if (slug.includes("email")) return "✉️"
-    if (slug.includes("direct") || slug.includes("none")) return "↩️"
-    if (slug.includes("linkedin")) return "💼"
-    if (slug.includes("youtube")) return "📺"
-    if (slug.includes("reddit")) return "🤖"
-    if (slug.includes("instagram")) return "📷"
-    if (slug.includes("search")) return "🔍"
-    if (slug.includes("social")) return "👥"
-    if (slug.includes("referral") || slug.includes("link")) return "🔗"
-    return null
-  }
-
-  if (!name) {
-    return fallbackBadge("#")
-  }
-
-  // Check if this is a traffic category (not a real domain)
-  if (CATEGORY_EMOJIS[name]) {
-    return (
-      <span
-        className="flex size-6 items-center justify-center text-lg"
-        aria-hidden
-      >
-        {CATEGORY_EMOJIS[name]}
-      </span>
-    )
-  }
-
-  const localIcon = knownLocalIcon()
-  if (localIcon) return localIcon
-
-  // If image failed to load, show emoji or badge
-  if (error) {
-    if (localIcon) return localIcon
-    const emoji = fallbackEmoji()
-    if (emoji) {
-      return (
-        <span
-          className="flex size-6 items-center justify-center text-lg"
-          aria-hidden
-        >
-          {emoji}
-        </span>
-      )
-    }
-    return fallbackBadge(name)
-  }
-
-  const domain = getSourceFaviconDomain(name)
-  if (!domain) {
-    const emoji = fallbackEmoji()
-    return emoji ? (
-      <span
-        className="flex size-6 items-center justify-center text-lg"
-        aria-hidden
-      >
-        {emoji}
-      </span>
-    ) : (
-      fallbackBadge(name)
-    )
-  }
-
-  const faviconUrl = `/favicon/sources/${encodeURIComponent(name)}`
-
-  return (
-    <span className="flex size-6 items-center justify-center" aria-hidden>
-      <img
-        src={faviconUrl}
-        alt=""
-        className={[
-          "size-5 shrink-0 object-contain",
-          sourceNeedsLightBackground(domain)
-            ? "rounded-full border border-white/90 bg-white p-0.5"
-            : "",
-        ]
-          .filter(Boolean)
-          .join(" ")}
-        onError={() => setError(true)}
-        referrerPolicy="no-referrer"
-      />
-    </span>
-  )
-}
-
-function fallbackBadge(value: string) {
-  const badge = value.slice(0, 1).toUpperCase() || "#"
-  const palette = [
-    "bg-primary/10 text-primary",
-    "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
-    "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400",
-    "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-    "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400",
-  ]
-  const hash = value
-    .split("")
-    .reduce((acc, char) => acc + char.charCodeAt(0), 0)
-  const classes = palette[hash % palette.length]
-  return (
-    <span
-      className={`flex size-6 items-center justify-center rounded-full text-[10px] font-semibold ${classes}`}
-      aria-hidden
-    >
-      {badge}
-    </span>
-  )
 }

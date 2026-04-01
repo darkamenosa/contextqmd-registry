@@ -1,21 +1,15 @@
 import { useCallback, useMemo, useState } from "react"
 
-import { fetchPages } from "../api"
+import { useAnalyticsApi } from "../hooks/use-analytics-api"
 import { usePanelData } from "../hooks/use-panel-data"
+import { useAnalyticsHost } from "../host-context"
+import { limitListPayloadForCard, pickCardMetrics } from "../lib/card-metrics"
 import {
-  openReportsDialogRoute,
-  syncReportsDialogRoute,
-  useCloseReportsDialogRoute,
-} from "../hooks/use-reports-dialog-route"
-import { pickCardMetrics } from "../lib/card-metrics"
-import {
-  buildDialogPath,
   pagesModeForSegment,
   pagesSegmentForMode,
   parseDialogFromPath,
   type PagesMode,
 } from "../lib/dialog-path"
-import { analyticsScopedPath } from "../lib/path-prefix"
 import {
   analyticsPreferenceKey,
   writeAnalyticsPreference,
@@ -91,7 +85,9 @@ export default function PagesPanel({
   initialData,
   initialMode,
 }: PagesPanelProps) {
-  const { query, pathname, updateQuery } = useQueryContext()
+  const { fetchPages } = useAnalyticsApi()
+  const host = useAnalyticsHost()
+  const { query, updateQuery } = useQueryContext()
   const site = useSiteContext()
 
   const [preferredMode, setPreferredMode] = useState<CardPagesMode>(() =>
@@ -104,10 +100,10 @@ export default function PagesPanel({
   })
   const storageKey = analyticsPreferenceKey(STORAGE_PREFIX, site.domain)
   const dialogMode = useMemo(() => {
-    const parsed = parseDialogFromPath(pathname)
+    const parsed = parseDialogFromPath(host.pathname, host.reportsPath)
     if (parsed.type !== "segment") return null
     return pagesModeForSegment(parsed.segment)
-  }, [pathname])
+  }, [host.pathname, host.reportsPath])
   const mode = preferredMode
   const detailsMode: PagesMode = dialogMode ?? preferredMode
   const detailsOpen = Boolean(dialogMode)
@@ -119,7 +115,7 @@ export default function PagesPanel({
     () => JSON.stringify([baseQuery, mode]),
     [baseQuery, mode]
   )
-  const closeDetailsDialog = useCloseReportsDialogRoute()
+  const closeDetailsDialog = host.closeDialogRoute
   const panelState = usePanelData({
     initialData,
     initialRequestKey,
@@ -130,18 +126,12 @@ export default function PagesPanel({
   const data = panelState.data
   const loading = panelState.loading
 
-  const highlightMetric = useMemo(
-    () => (data.metrics.includes("visitors") ? "visitors" : data.metrics[0]),
-    [data.metrics]
-  )
-
-  const activeTitle = useMemo(() => TITLE_FOR_MODE[mode] ?? "Pages", [mode])
-  const detailsTitle = useMemo(
-    () => TITLE_FOR_MODE[detailsMode] ?? "Pages",
-    [detailsMode]
-  )
-
-  const firstColumnLabel = useMemo(() => firstColumnLabelForMode(mode), [mode])
+  const highlightMetric = data.metrics.includes("visitors")
+    ? "visitors"
+    : data.metrics[0]
+  const activeTitle = TITLE_FOR_MODE[mode] ?? "Pages"
+  const detailsTitle = TITLE_FOR_MODE[detailsMode] ?? "Pages"
+  const firstColumnLabel = firstColumnLabelForMode(mode)
 
   const drillInto = useCallback(
     (value: string, modeValue: PagesMode = mode) => {
@@ -155,22 +145,13 @@ export default function PagesPanel({
   )
 
   // Limit card view to top 9 by the first metric; Details uses full list
-  const limitedData = useMemo((): ListPayload => {
-    const metricKey = data.metrics[0] ?? "visitors"
-    const sorted = [...data.results].sort((a, b) => {
-      const av = Number(a[metricKey] ?? 0)
-      const bv = Number(b[metricKey] ?? 0)
-      if (av === bv) return String(a.name).localeCompare(String(b.name))
-      return bv - av
-    })
-    const sliced = sorted.slice(0, 9)
-    return {
-      ...data,
-      metrics: pickCardMetrics(data.metrics),
-      results: sliced,
-      meta: { ...data.meta, hasMore: data.results.length > 9 },
-    }
-  }, [data])
+  const limitedData = useMemo(
+    (): ListPayload =>
+      limitListPayloadForCard(data, {
+        metrics: pickCardMetrics(data.metrics),
+      }),
+    [data]
+  )
 
   return (
     <section
@@ -233,8 +214,8 @@ export default function PagesPanel({
               onClick={() => {
                 try {
                   const seg = pagesSegmentForMode(mode)
-                  openReportsDialogRoute((search) =>
-                    buildDialogPath(seg, search)
+                  host.openDialogRoute((search) =>
+                    host.buildDialogPath(seg, search)
                   )
                 } catch {
                   // Ignore history errors when opening the details modal.
@@ -252,15 +233,15 @@ export default function PagesPanel({
         onOpenChange={(open) => {
           try {
             const seg = pagesSegmentForMode(detailsMode)
-            syncReportsDialogRoute(open, (search) =>
-              buildDialogPath(seg, search)
+            host.syncDialogRoute(open, (search) =>
+              host.buildDialogPath(seg, search)
             )
           } catch {
             // Ignore history errors when syncing the modal route.
           }
         }}
         title={detailsTitle}
-        endpoint={analyticsScopedPath("/pages")}
+        endpoint={host.scopedPath("/pages")}
         extras={{ mode: detailsMode }}
         defaultSortKey={detailsMode === "seo" ? "clicks" : "visitors"}
         firstColumnLabel={firstColumnLabelForMode(detailsMode)}

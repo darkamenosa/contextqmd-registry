@@ -1,11 +1,8 @@
 import { useCallback } from "react"
 
-import {
-  fetchBehaviorPropertyKeys,
-  fetchBehaviorPropertyValues,
-  fetchListPage,
-} from "../../api"
-import { analyticsScopedPath } from "../../lib/path-prefix"
+import { fetchListPage } from "../../api"
+import { useAnalyticsApi } from "../../hooks/use-analytics-api"
+import { useAnalyticsHost } from "../../host-context"
 import { useQueryContext } from "../../query-context"
 import type { AnalyticsQuery, ListPayload } from "../../types"
 import type { SuggestionOption } from "./shared"
@@ -21,6 +18,7 @@ function listResultsToOptions(
 }
 
 export function usePageFetcher(mode: "default" | "entry" | "exit") {
+  const host = useAnalyticsHost()
   const { query } = useQueryContext()
   return useCallback(
     async (input: string) => {
@@ -30,7 +28,7 @@ export function usePageFetcher(mode: "default" | "entry" | "exit") {
 
       try {
         const payload: ListPayload = await fetchListPage(
-          analyticsScopedPath("/pages"),
+          host.scopedPath("/pages"),
           query as AnalyticsQuery,
           extras,
           { limit: 20, page: 1, search: input }
@@ -40,17 +38,18 @@ export function usePageFetcher(mode: "default" | "entry" | "exit") {
         return []
       }
     },
-    [mode, query]
+    [host, mode, query]
   )
 }
 
 export function useLocationFetcher(mode: "countries" | "regions" | "cities") {
+  const host = useAnalyticsHost()
   const { query } = useQueryContext()
   return useCallback(
     async (input: string) => {
       try {
         const payload: ListPayload = await fetchListPage(
-          analyticsScopedPath("/locations"),
+          host.scopedPath("/locations"),
           query as AnalyticsQuery,
           { mode },
           { limit: 20, page: 1, search: input }
@@ -62,7 +61,7 @@ export function useLocationFetcher(mode: "countries" | "regions" | "cities") {
         return []
       }
     },
-    [mode, query]
+    [host, mode, query]
   )
 }
 
@@ -75,12 +74,13 @@ export function useSourcesFetcher(
     | "utm-content"
     | "utm-term"
 ) {
+  const host = useAnalyticsHost()
   const { query } = useQueryContext()
   return useCallback(
     async (input: string) => {
       try {
         const payload: ListPayload = await fetchListPage(
-          analyticsScopedPath("/sources"),
+          host.scopedPath("/sources"),
           query as AnalyticsQuery,
           { mode },
           { limit: 20, page: 1, search: input }
@@ -90,7 +90,7 @@ export function useSourcesFetcher(
         return []
       }
     },
-    [mode, query]
+    [host, mode, query]
   )
 }
 
@@ -102,12 +102,13 @@ export function useDeviceFetcher(
     | "operating-system-versions"
     | "screen-sizes"
 ) {
+  const host = useAnalyticsHost()
   const { query } = useQueryContext()
   return useCallback(
     async (input: string) => {
       try {
         const payload: ListPayload = await fetchListPage(
-          analyticsScopedPath("/devices"),
+          host.scopedPath("/devices"),
           query as AnalyticsQuery,
           { mode },
           { limit: 20, page: 1, search: input }
@@ -117,17 +118,18 @@ export function useDeviceFetcher(
         return []
       }
     },
-    [mode, query]
+    [host, mode, query]
   )
 }
 
 export function useBehaviorFetcher(mode: "conversions") {
+  const host = useAnalyticsHost()
   const { query } = useQueryContext()
   return useCallback(
     async (input: string) => {
       try {
         const payload: ListPayload = await fetchListPage(
-          analyticsScopedPath("/behaviors"),
+          host.scopedPath("/behaviors"),
           query as AnalyticsQuery,
           { mode },
           { limit: 20, page: 1, search: input }
@@ -137,11 +139,12 @@ export function useBehaviorFetcher(mode: "conversions") {
         return []
       }
     },
-    [mode, query]
+    [host, mode, query]
   )
 }
 
 export function useBehaviorPropertyKeyFetcher() {
+  const { fetchBehaviorPropertyKeys } = useAnalyticsApi()
   const { query } = useQueryContext()
   return useCallback(
     async (input: string) => {
@@ -155,11 +158,12 @@ export function useBehaviorPropertyKeyFetcher() {
         return []
       }
     },
-    [query]
+    [fetchBehaviorPropertyKeys, query]
   )
 }
 
 export function useBehaviorPropertyValueFetcher(property: string) {
+  const { fetchBehaviorPropertyValues } = useAnalyticsApi()
   const { query } = useQueryContext()
   return useCallback(
     async (input: string) => {
@@ -176,6 +180,6 @@ export function useBehaviorPropertyValueFetcher(property: string) {
         return []
       }
     },
-    [property, query]
+    [fetchBehaviorPropertyValues, property, query]
   )
 }

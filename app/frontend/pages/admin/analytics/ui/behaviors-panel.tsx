@@ -1,7 +1,7 @@
 import { Input } from "@/components/ui/input"
 
 import { useBehaviorsPanelController } from "../hooks/use-behaviors-panel-controller"
-import { analyticsScopedPath } from "../lib/path-prefix"
+import { useAnalyticsHost } from "../host-context"
 import type { BottomPanelPayload, ListMetricKey } from "../types"
 import FunnelSteps from "./behaviors-panel/funnel-steps"
 import ProfilesList from "./behaviors-panel/profiles-list"
@@ -25,6 +25,7 @@ export default function BehaviorsPanel({
   initialFunnel,
   initialProperty,
 }: BehaviorsPanelProps) {
+  const host = useAnalyticsHost()
   const {
     activeProperty,
     activeTitle,
@@ -283,7 +284,7 @@ export default function BehaviorsPanel({
           open={detailsOpen}
           onOpenChange={setDetailsDialogOpen}
           title={activeTitle}
-          endpoint={analyticsScopedPath("/behaviors")}
+          endpoint={host.scopedPath("/behaviors")}
           extras={{
             mode,
             funnel: selectedFunnel,

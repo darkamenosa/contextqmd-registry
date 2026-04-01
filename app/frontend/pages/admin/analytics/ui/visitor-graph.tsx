@@ -38,8 +38,8 @@ import {
 
 // Tooltip imports removed (sampling tooltip currently commented out)
 
-import { fetchMainGraph, fetchTopStats } from "../api"
-import { useLastLoadContext } from "../last-load-context"
+import { useAnalyticsDashboardContext } from "../dashboard-context"
+import { useAnalyticsApi } from "../hooks/use-analytics-api"
 import {
   getGraphIntervalFromSearch,
   getGraphMetricFromSearch,
@@ -52,7 +52,6 @@ import {
 } from "../lib/top-stat-change"
 import { useQueryContext } from "../query-context"
 import { useSiteContext } from "../site-context"
-import { useTopStatsContext } from "../top-stats-context"
 import type { MainGraphPayload, TopStat } from "../types"
 import {
   createChartData,
@@ -97,9 +96,13 @@ type VisitorGraphProps = {
 }
 
 export default function VisitorGraph({ initialGraph }: VisitorGraphProps) {
+  const { fetchMainGraph, fetchTopStats } = useAnalyticsApi()
   const { query, search } = useQueryContext()
-  const { payload, update } = useTopStatsContext()
-  const { touch } = useLastLoadContext()
+  const {
+    topStats: payload,
+    touchLastLoaded: touch,
+    updateTopStats: update,
+  } = useAnalyticsDashboardContext()
   const site = useSiteContext()
   const [hoverCapable, setHoverCapable] = useState(true)
 
@@ -179,21 +182,6 @@ export default function VisitorGraph({ initialGraph }: VisitorGraphProps) {
     site.domain,
   ])
 
-  const fetchGraphData = useCallback(
-    async (
-      nextMetric: string,
-      nextInterval: string,
-      controller: AbortController
-    ) => {
-      return fetchMainGraph(
-        baseQuery,
-        { metric: nextMetric, interval: nextInterval },
-        controller.signal
-      )
-    },
-    [baseQuery]
-  )
-
   useEffect(() => {
     if (!didFetchTopStatsRef.current) {
       didFetchTopStatsRef.current = true
@@ -214,7 +202,7 @@ export default function VisitorGraph({ initialGraph }: VisitorGraphProps) {
       })
 
     return () => controller.abort()
-  }, [baseQuery, touch, update])
+  }, [baseQuery, fetchTopStats, touch, update])
 
   useEffect(() => {
     if (!didFetchGraphRef.current) {
@@ -234,7 +222,11 @@ export default function VisitorGraph({ initialGraph }: VisitorGraphProps) {
     abortRef.current = controller
     startTransition(() => setLoading(true))
 
-    fetchGraphData(effectiveMetric, effectiveInterval, controller)
+    fetchMainGraph(
+      baseQuery,
+      { metric: effectiveMetric, interval: effectiveInterval },
+      controller.signal
+    )
       .then((data) => {
         if (graphRequestIdRef.current !== requestId) return
         setGraph(data)
@@ -254,7 +246,7 @@ export default function VisitorGraph({ initialGraph }: VisitorGraphProps) {
     baseQuery,
     effectiveInterval,
     effectiveMetric,
-    fetchGraphData,
+    fetchMainGraph,
     initialGraph.interval,
     initialGraph.metric,
   ])

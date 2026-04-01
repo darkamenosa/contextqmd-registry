@@ -7,16 +7,12 @@ import {
   type ReactNode,
 } from "react"
 
-import { navigateAnalytics, useAnalyticsLocation } from "./lib/location-store"
+import { useAnalyticsHost } from "./host-context"
 import {
   mergeReportQueryParams,
   resolveInitialReportQuery,
 } from "./lib/query-codec"
-import {
-  parseLocationFromUrl,
-  resolveAnalyticsLocation,
-} from "./lib/query-location"
-import { buildReportUrl, canonicalReportSearch } from "./lib/report-url"
+import { canonicalReportSearch } from "./lib/report-url"
 import type { AnalyticsQuery } from "./types"
 
 export type QueryContextValue = {
@@ -34,24 +30,13 @@ const QueryContext = createContext<QueryContextValue | null>(null)
 export function QueryProvider({
   initialQuery,
   defaultQuery,
-  initialUrl,
   children,
 }: {
   initialQuery: AnalyticsQuery
   defaultQuery: AnalyticsQuery
-  initialUrl?: string
   children: ReactNode
 }) {
-  const location = useAnalyticsLocation()
-  const initialLocation = useMemo(
-    () => parseLocationFromUrl(initialUrl),
-    [initialUrl]
-  )
-  const resolvedLocation = useMemo(
-    () => resolveAnalyticsLocation(location, initialLocation),
-    [initialLocation, location]
-  )
-  const { pathname, search } = resolvedLocation
+  const { pathname, search, buildReportUrl, navigate } = useAnalyticsHost()
 
   const query = useMemo(
     () => resolveInitialReportQuery(search, initialQuery, defaultQuery),
@@ -64,32 +49,27 @@ export function QueryProvider({
       options?: { history?: "push" | "replace" }
     ) => {
       const next = updater(query)
-      const nextUrl = buildReportUrl(
-        pathname,
-        mergeReportQueryParams(search, next)
-      )
-      const currentUrl = buildReportUrl(pathname, search)
+      const nextUrl = buildReportUrl(mergeReportQueryParams(search, next))
+      const currentUrl = buildReportUrl(search)
 
       if (nextUrl === currentUrl) return
 
-      navigateAnalytics(nextUrl, {
+      navigate(nextUrl, {
         history: options?.history ?? "push",
       })
     },
-    [pathname, query, search]
+    [buildReportUrl, navigate, query, search]
   )
 
   useEffect(() => {
-    if (typeof window === "undefined") return
-
-    const current = window.location.search.replace(/^\?/, "")
-    const canonical = canonicalReportSearch(window.location.search)
+    const current = search.replace(/^\?/, "")
+    const canonical = canonicalReportSearch(search)
     if (canonical === current) return
 
-    navigateAnalytics(buildReportUrl(window.location.pathname, canonical), {
+    navigate(buildReportUrl(canonical), {
       history: "replace",
     })
-  }, [pathname, search])
+  }, [buildReportUrl, navigate, search])
 
   const value = useMemo<QueryContextValue>(
     () => ({

@@ -1,26 +1,20 @@
 import { useCallback, useMemo, useState } from "react"
 
-import { fetchDevices } from "../api"
+import { useAnalyticsApi } from "../hooks/use-analytics-api"
 import { usePanelData } from "../hooks/use-panel-data"
-import {
-  openReportsDialogRoute,
-  syncReportsDialogRoute,
-  useCloseReportsDialogRoute,
-} from "../hooks/use-reports-dialog-route"
-import { pickCardMetrics } from "../lib/card-metrics"
+import { useAnalyticsHost } from "../host-context"
+import { limitListPayloadForCard, pickCardMetrics } from "../lib/card-metrics"
 import {
   categorizeScreenSize,
   getBrowserIcon,
   getOSIcon,
 } from "../lib/device-visuals"
 import {
-  buildDialogPath,
   devicesModeForSegment,
   devicesSegmentForMode,
   parseDialogFromPath,
 } from "../lib/dialog-path"
 import { inferDevicesModeFromFilters } from "../lib/panel-mode"
-import { analyticsScopedPath } from "../lib/path-prefix"
 import {
   analyticsPreferenceKey,
   writeAnalyticsPreference,
@@ -68,7 +62,9 @@ export default function DevicesPanel({
   initialBaseMode,
   initialMode,
 }: DevicesPanelProps) {
-  const { query, pathname, updateQuery } = useQueryContext()
+  const { fetchDevices } = useAnalyticsApi()
+  const host = useAnalyticsHost()
+  const { query, updateQuery } = useQueryContext()
   const site = useSiteContext()
 
   const [preferredMode, setPreferredMode] = useState(() => initialBaseMode)
@@ -79,10 +75,10 @@ export default function DevicesPanel({
   })
   const storageKey = analyticsPreferenceKey(STORAGE_PREFIX, site.domain)
   const dialogMode = useMemo(() => {
-    const parsed = parseDialogFromPath(pathname)
+    const parsed = parseDialogFromPath(host.pathname, host.reportsPath)
     if (parsed.type !== "segment") return null
     return devicesModeForSegment(parsed.segment)
-  }, [pathname])
+  }, [host.pathname, host.reportsPath])
   const baseMode = dialogMode ?? preferredMode
   const mode = useMemo(
     () => inferDevicesModeFromFilters(baseMode, query.filters),
@@ -97,7 +93,7 @@ export default function DevicesPanel({
     () => JSON.stringify([baseQuery, mode]),
     [baseQuery, mode]
   )
-  const closeDetailsDialog = useCloseReportsDialogRoute()
+  const closeDetailsDialog = host.closeDialogRoute
   const panelState = usePanelData({
     initialData,
     initialRequestKey,
@@ -108,39 +104,27 @@ export default function DevicesPanel({
   const data = panelState.data
   const loading = panelState.loading
 
-  const highlightMetric = useMemo<ListMetricKey>(() => "visitors", [])
-
-  const activeTitle = useMemo(() => {
-    switch (mode) {
-      case "browser-versions":
-        return "Browser Versions"
-      case "operating-systems":
-        return "Operating Systems"
-      case "operating-system-versions":
-        return "OS Versions"
-      case "screen-sizes":
-        return "Screen Sizes"
-      case "browsers":
-      default:
-        return "Browsers"
-    }
-  }, [mode])
-
-  const activeTab = useMemo(() => MODE_TO_TAB[mode] ?? "browser", [mode])
-  const dialogBaseMode = useMemo(() => TAB_TO_MODE[activeTab], [activeTab])
-
-  const firstColumnLabel = useMemo(() => {
-    switch (activeTab) {
-      case "browser":
-        return "Browser"
-      case "os":
-        return "OS"
-      case "size":
-        return "Screen Size"
-      default:
-        return "Item"
-    }
-  }, [activeTab])
+  const highlightMetric: ListMetricKey = "visitors"
+  const activeTitle =
+    mode === "browser-versions"
+      ? "Browser Versions"
+      : mode === "operating-systems"
+        ? "Operating Systems"
+        : mode === "operating-system-versions"
+          ? "OS Versions"
+          : mode === "screen-sizes"
+            ? "Screen Sizes"
+            : "Browsers"
+  const activeTab = MODE_TO_TAB[mode] ?? "browser"
+  const dialogBaseMode = TAB_TO_MODE[activeTab]
+  const firstColumnLabel =
+    activeTab === "browser"
+      ? "Browser"
+      : activeTab === "os"
+        ? "OS"
+        : activeTab === "size"
+          ? "Screen Size"
+          : "Item"
 
   const setAndStoreMode = useCallback(
     (next: string) => {
@@ -173,22 +157,14 @@ export default function DevicesPanel({
   )
 
   // Limit card view to top 9 by the first metric; Details keeps full list
-  const limitedData = useMemo((): DevicesPayload => {
-    const metricKey = "visitors"
-    const sorted = [...data.results].sort((a, b) => {
-      const av = Number(a[metricKey] ?? 0)
-      const bv = Number(b[metricKey] ?? 0)
-      if (av === bv) return String(a.name).localeCompare(String(b.name))
-      return bv - av
-    })
-    const sliced = sorted.slice(0, 9)
-    return {
-      ...data,
-      metrics: pickCardMetrics(data.metrics),
-      results: sliced,
-      meta: { ...data.meta, hasMore: data.results.length > 9 },
-    }
-  }, [data])
+  const limitedData = useMemo(
+    (): DevicesPayload =>
+      limitListPayloadForCard(data, {
+        metricKey: "visitors",
+        metrics: pickCardMetrics(data.metrics),
+      }),
+    [data]
+  )
 
   return (
     <section
@@ -241,8 +217,8 @@ export default function DevicesPanel({
                       | "operating-systems"
                       | "screen-sizes"
                   )
-                  openReportsDialogRoute((search) =>
-                    buildDialogPath(seg, search)
+                  host.openDialogRoute((search) =>
+                    host.buildDialogPath(seg, search)
                   )
                 } catch {
                   // Ignore history errors when opening the details modal.
@@ -265,15 +241,15 @@ export default function DevicesPanel({
                 | "operating-systems"
                 | "screen-sizes"
             )
-            syncReportsDialogRoute(open, (search) =>
-              buildDialogPath(seg, search)
+            host.syncDialogRoute(open, (search) =>
+              host.buildDialogPath(seg, search)
             )
           } catch {
             // Ignore history errors when syncing modal state.
           }
         }}
         title={`Top ${activeTitle}`}
-        endpoint={analyticsScopedPath("/devices")}
+        endpoint={host.scopedPath("/devices")}
         extras={{ mode }}
         firstColumnLabel={firstColumnLabel}
         defaultSortKey={"visitors"}

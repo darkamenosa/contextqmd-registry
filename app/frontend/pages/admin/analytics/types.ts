@@ -154,6 +154,7 @@ export type AnalyticsSettingsPaths = {
   reports?: string
   live?: string
   settings?: string
+  funnels?: string
   settingsData?: string
   googleSearchConsoleConnect?: string
   googleSearchConsole?: string

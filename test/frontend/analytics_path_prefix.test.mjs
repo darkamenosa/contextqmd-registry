@@ -1,10 +1,10 @@
 import assert from "node:assert/strict"
 import { mkdtemp, rm } from "node:fs/promises"
-import { fileURLToPath } from "node:url"
 import { createRequire } from "node:module"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
+import { fileURLToPath } from "node:url"
 import { build } from "esbuild"
 
 const repoRoot = path.resolve(
@@ -36,24 +36,17 @@ async function loadModule(entryPoint, outfileName) {
 
 test("analytics scoped paths stay under the selected site route", async () => {
   const paths = await loadModule(
-    "app/frontend/pages/admin/analytics/lib/path-prefix.ts",
+    "app/frontend/pages/admin/analytics/lib/admin-analytics-host.ts",
     "analytics-path-prefix.cjs"
   )
 
   assert.equal(
-    paths.analyticsScopePath("/admin/analytics/sites/site-123"),
+    paths.resolveAdminAnalyticsScopePath("/admin/analytics/sites/site-123"),
     "/admin/analytics/sites/site-123"
   )
   assert.equal(
-    paths.analyticsReportsPath("/admin/analytics/sites/site-123"),
+    paths.resolveAdminAnalyticsReportsPath("/admin/analytics/sites/site-123"),
     "/admin/analytics/sites/site-123"
-  )
-  assert.equal(
-    paths.analyticsScopedPath(
-      "/search_terms",
-      "/admin/analytics/sites/site-123"
-    ),
-    "/admin/analytics/sites/site-123/search_terms"
   )
 })
 
@@ -73,8 +66,16 @@ test("analytics dialog paths support site-scoped report routes", async () => {
   )
   assert.deepEqual(
     dialogPath.parseDialogFromPath(
-      "/admin/analytics/sites/site-123/_/referrers/Google"
+      "/admin/analytics/sites/site-123/_/referrers/Google",
+      "/admin/analytics/sites/site-123"
     ),
     { type: "referrers", source: "Google" }
+  )
+  assert.deepEqual(
+    dialogPath.parseDialogFromPath(
+      "/admin/analytics/sites/site-123/reports/_/sources",
+      "/admin/analytics/sites/site-123"
+    ),
+    { type: "segment", segment: "sources" }
   )
 })

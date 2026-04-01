@@ -7,19 +7,15 @@ import {
   useState,
 } from "react"
 
-import { fetchBehaviors, fetchProfiles } from "../api"
+import { useAnalyticsHost } from "../host-context"
 import { buildBehaviorsRouteSearch } from "../lib/behaviors-route-search"
+import { limitListPayloadForCard } from "../lib/card-metrics"
 import {
   getBehaviorsFunnelFromSearch,
   getBehaviorsPropertyFromSearch,
   setBehaviorsPropertySearchParam,
 } from "../lib/dashboard-url-state"
-import {
-  baseAnalyticsPath,
-  buildDialogPath,
-  parseDialogFromPath,
-} from "../lib/dialog-path"
-import { navigateAnalytics } from "../lib/location-store"
+import { parseDialogFromPath } from "../lib/dialog-path"
 import {
   getBehaviorsModeFromSearch,
   setPanelModeSearchParam,
@@ -30,7 +26,6 @@ import {
 } from "../lib/preferences"
 import { mergeReportQueryParams } from "../lib/query-codec"
 import { useScopedQuery } from "../lib/query-scope"
-import { buildReportUrl } from "../lib/report-url"
 import { useQueryContext } from "../query-context"
 import { useSiteContext } from "../site-context"
 import type {
@@ -40,6 +35,7 @@ import type {
   ProfileListItem,
   ProfilesPayload,
 } from "../types"
+import { useAnalyticsApi } from "./use-analytics-api"
 
 const BEHAVIOR_TABS: Array<{ value: string; label: string }> = [
   { value: "visitors", label: "Visitors" },
@@ -82,7 +78,9 @@ export function useBehaviorsPanelController({
   initialFunnel,
   initialProperty,
 }: UseBehaviorsPanelControllerOptions) {
-  const { query, pathname, search, updateQuery } = useQueryContext()
+  const { fetchBehaviors, fetchProfiles } = useAnalyticsApi()
+  const host = useAnalyticsHost()
+  const { query, search, updateQuery } = useQueryContext()
   const site = useSiteContext()
 
   const behaviourTabs = useMemo(
@@ -145,9 +143,9 @@ export function useBehaviorsPanelController({
     omitInterval: true,
   })
   const detailsOpen = useMemo(() => {
-    const parsed = parseDialogFromPath(pathname)
+    const parsed = parseDialogFromPath(host.pathname, host.reportsPath)
     return parsed.type === "segment" && parsed.segment === "behaviors"
-  }, [pathname])
+  }, [host.pathname, host.reportsPath])
 
   const localMode = behaviourTabs.some((tab) => tab.value === modeState)
     ? modeState
@@ -321,12 +319,12 @@ export function useBehaviorsPanelController({
         writeAnalyticsPreference(storageKey, "props")
       }
 
-      navigateAnalytics(buildReportUrl(pathname, nextParams))
+      host.navigate(host.buildReportUrl(nextParams))
     },
     [
       activeProperty,
+      host,
       mode,
-      pathname,
       query,
       search,
       selectedPropertyState,
@@ -474,54 +472,44 @@ export function useBehaviorsPanelController({
 
   const closeDetailsDialog = useCallback(() => {
     try {
-      navigateAnalytics(baseAnalyticsPath(buildCurrentRouteSearch()))
+      host.navigate(host.basePath(buildCurrentRouteSearch()))
     } catch {
       // Ignore history errors; the modal can still close locally.
     }
-  }, [buildCurrentRouteSearch])
+  }, [buildCurrentRouteSearch, host])
 
   const openDetailsDialog = useCallback(() => {
     try {
-      navigateAnalytics(buildDialogPath("behaviors", buildCurrentRouteSearch()))
+      host.navigate(
+        host.buildDialogPath("behaviors", buildCurrentRouteSearch())
+      )
     } catch {
       // Ignore history errors; the dialog can still open from local state.
     }
-  }, [buildCurrentRouteSearch])
+  }, [buildCurrentRouteSearch, host])
 
   const setDetailsDialogOpen = useCallback(
     (open: boolean) => {
       try {
         const qs = buildCurrentRouteSearch()
         if (open) {
-          navigateAnalytics(buildDialogPath("behaviors", qs))
+          host.navigate(host.buildDialogPath("behaviors", qs))
         } else {
-          navigateAnalytics(baseAnalyticsPath(qs))
+          host.navigate(host.basePath(qs))
         }
       } catch {
         // Ignore history errors; keep the current dialog state.
       }
     },
-    [buildCurrentRouteSearch]
+    [buildCurrentRouteSearch, host]
   )
 
   const tablePayload = listPayload
   const limitedTablePayload = useMemo((): ListPayload | null => {
     if (!tablePayload) return null
-    const isConversions = mode === "conversions"
-    const metricKey = isConversions
-      ? "uniques"
-      : (tablePayload.metrics[0] ?? "visitors")
-    const sorted = [...tablePayload.results].sort((a, b) => {
-      const av = Number((a as Record<string, unknown>)[metricKey] ?? 0)
-      const bv = Number((b as Record<string, unknown>)[metricKey] ?? 0)
-      if (av === bv) return String(a.name).localeCompare(String(b.name))
-      return bv - av
+    return limitListPayloadForCard(tablePayload, {
+      metricKey: mode === "conversions" ? "uniques" : undefined,
     })
-    return {
-      ...tablePayload,
-      results: sorted.slice(0, 9),
-      meta: { ...tablePayload.meta, hasMore: tablePayload.results.length > 9 },
-    }
   }, [tablePayload, mode])
 
   const activeTitle = useMemo(() => {

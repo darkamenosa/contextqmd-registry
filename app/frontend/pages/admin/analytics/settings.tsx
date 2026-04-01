@@ -68,12 +68,15 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import AdminLayout from "@/layouts/admin-layout"
 
-import { navigateAnalytics, useAnalyticsLocation } from "./lib/location-store"
 import {
   buildAnalyticsSettingsTabUrl,
   getAnalyticsSettingsTabFromUrl,
   type AnalyticsSettingsTab,
 } from "./lib/settings-tabs"
+import {
+  AnalyticsLocationProvider,
+  useAnalyticsLocationContext,
+} from "./location-context"
 import type {
   AnalyticsInitializationState,
   AnalyticsSettingsPageProps,
@@ -2391,14 +2394,26 @@ function SitePicker({
 export default function AnalyticsSettingsPage(
   props: AnalyticsSettingsPageProps
 ) {
-  const { site, sites, initialization, funnels, settings, paths } = props
   const page = usePage<SharedProps>()
   const { flash } = page.props
-  const location = useAnalyticsLocation()
-  const currentSettingsUrl =
-    location.pathname || location.search
-      ? `${location.pathname}${location.search}`
-      : page.url
+
+  return (
+    <AnalyticsLocationProvider initialUrl={page.url}>
+      <AnalyticsSettingsPageContent props={props} flash={flash} />
+    </AnalyticsLocationProvider>
+  )
+}
+
+function AnalyticsSettingsPageContent({
+  props,
+  flash,
+}: {
+  props: AnalyticsSettingsPageProps
+  flash: SharedProps["flash"]
+}) {
+  const { site, sites, initialization, funnels, settings, paths } = props
+  const { currentUrl: currentSettingsUrl, navigate } =
+    useAnalyticsLocationContext()
   const activeTab: AnalyticsSettingsTab =
     getAnalyticsSettingsTabFromUrl(currentSettingsUrl)
 
@@ -2407,9 +2422,7 @@ export default function AnalyticsSettingsPage(
     [settings.goalDefinitions]
   )
 
-  const funnelsPath = site?.id
-    ? `/admin/analytics/sites/${site.id}/funnels`
-    : ""
+  const funnelsPath = paths.funnels ?? ""
 
   function handleTabChange(nextTab: string) {
     const normalized = getAnalyticsSettingsTabFromUrl(`/?tab=${nextTab}`)
@@ -2418,7 +2431,7 @@ export default function AnalyticsSettingsPage(
       normalized
     )
     if (targetUrl !== currentSettingsUrl) {
-      navigateAnalytics(targetUrl)
+      navigate(targetUrl)
     }
   }
 

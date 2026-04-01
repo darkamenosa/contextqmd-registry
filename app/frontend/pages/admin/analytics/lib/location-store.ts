@@ -1,21 +1,19 @@
-import { useSyncExternalStore } from "react"
-
 export const ANALYTICS_LOCATION_CHANGE_EVENT = "analytics:location-change"
 
-type AnalyticsLocationSnapshot = {
+export type AnalyticsLocationSnapshot = {
   pathname: string
   search: string
 }
 
-const EMPTY_SNAPSHOT: AnalyticsLocationSnapshot = {
+export const EMPTY_ANALYTICS_LOCATION_SNAPSHOT: AnalyticsLocationSnapshot = {
   pathname: "",
   search: "",
 }
 
-let cachedSnapshot = EMPTY_SNAPSHOT
+let cachedSnapshot = EMPTY_ANALYTICS_LOCATION_SNAPSHOT
 
-function getSnapshot(): AnalyticsLocationSnapshot {
-  if (typeof window === "undefined") return EMPTY_SNAPSHOT
+export function getAnalyticsLocationSnapshot(): AnalyticsLocationSnapshot {
+  if (typeof window === "undefined") return EMPTY_ANALYTICS_LOCATION_SNAPSHOT
 
   const pathname = window.location.pathname
   const search = window.location.search
@@ -31,7 +29,7 @@ function getSnapshot(): AnalyticsLocationSnapshot {
   return cachedSnapshot
 }
 
-function subscribe(callback: () => void) {
+export function subscribeAnalyticsLocation(callback: () => void) {
   if (typeof window === "undefined") {
     return () => {}
   }
@@ -43,10 +41,6 @@ function subscribe(callback: () => void) {
     window.removeEventListener("popstate", callback)
     window.removeEventListener(ANALYTICS_LOCATION_CHANGE_EVENT, callback)
   }
-}
-
-export function useAnalyticsLocation() {
-  return useSyncExternalStore(subscribe, getSnapshot, () => EMPTY_SNAPSHOT)
 }
 
 export function navigateAnalytics(

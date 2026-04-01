@@ -20,6 +20,7 @@ class Analytics::Paths
     return {} if site.blank?
 
     shell_paths.merge(
+      funnels: funnels,
       settings_data: settings_data,
       google_search_console_connect: google_search_console_connect,
       google_search_console: google_search_console,
@@ -48,6 +49,10 @@ class Analytics::Paths
 
   def settings_data
     helpers.settings_data_admin_analytics_site_path(site: site.public_id)
+  end
+
+  def funnels
+    helpers.funnels_admin_analytics_site_path(site: site.public_id)
   end
 
   def google_search_console

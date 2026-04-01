@@ -1,6 +1,6 @@
 // Central helpers for building and parsing analytics dialog deep-links
 
-import { analyticsReportsPath } from "./path-prefix"
+import { DEFAULT_ANALYTICS_REPORTS_PATH } from "./admin-analytics-host"
 
 export type SourcesMode =
   | "channels"
@@ -107,55 +107,91 @@ export type ParsedDialog =
   | { type: "referrers"; source: string }
   | { type: "none" }
 
-export function parseDialogFromPath(pathname: string): ParsedDialog {
-  // Canonical:
-  //   /admin/analytics/_/referrers/:source
-  //   /admin/analytics/sites/:site/_/referrers/:source
-  // Legacy:
-  //   /admin/analytics/reports/_/referrers/:source
-  //   /admin/analytics/sites/:site/reports/_/referrers/:source
-  const ref = pathname.match(
-    /\/admin\/analytics(?:\/sites\/[^/]+)?(?:\/reports)?\/_\/referrers\/(.+)$/
-  )
-  if (ref && ref[1]) {
-    try {
-      return { type: "referrers", source: decodeURIComponent(ref[1]) }
-    } catch {
-      return { type: "referrers", source: ref[1] }
+export function parseDialogFromPath(
+  pathname: string,
+  reportsPath?: string
+): ParsedDialog {
+  return parseDialogFromPathWithBase(pathname, reportsPath)
+}
+
+function normalizeReportsPath(reportsPath: string) {
+  return reportsPath.endsWith("/") ? reportsPath.slice(0, -1) : reportsPath
+}
+
+function getDialogSubpath(pathname: string, reportsPath: string) {
+  const normalizedReportsPath = normalizeReportsPath(reportsPath)
+  const candidates = new Set([normalizedReportsPath])
+
+  if (!normalizedReportsPath.endsWith("/reports")) {
+    candidates.add(`${normalizedReportsPath}/reports`)
+  }
+
+  for (const basePath of candidates) {
+    const prefix = `${basePath}/_/`
+    if (pathname.startsWith(prefix)) {
+      return pathname.slice(prefix.length)
     }
   }
-  const m = pathname.match(
-    /\/admin\/analytics(?:\/sites\/[^/]+)?(?:\/reports)?\/_\/([a-z0-9_-]+)$/
-  )
-  if (m && m[1]) {
-    const raw = m[1]
-    const seg = SEGMENT_NORMALIZE[raw]
-    if (seg) return { type: "segment", segment: seg }
+
+  return null
+}
+
+function parseDialogSubpath(subpath: string): ParsedDialog {
+  const [segment, ...rest] = subpath.split("/")
+  if (!segment) return { type: "none" }
+
+  if (segment === "referrers" && rest[0]) {
+    try {
+      return { type: "referrers", source: decodeURIComponent(rest[0]) }
+    } catch {
+      return { type: "referrers", source: rest[0] }
+    }
   }
+
+  const normalizedSegment = SEGMENT_NORMALIZE[segment]
+  if (normalizedSegment) {
+    return { type: "segment", segment: normalizedSegment }
+  }
+
+  return { type: "none" }
+}
+
+export function parseDialogFromPathWithBase(
+  pathname: string,
+  reportsPath = DEFAULT_ANALYTICS_REPORTS_PATH
+): ParsedDialog {
+  const subpath = getDialogSubpath(pathname, reportsPath)
+  if (subpath !== null) {
+    return parseDialogSubpath(subpath)
+  }
+
   return { type: "none" }
 }
 
 export function buildDialogPath(
   segment: DialogSegment,
   qs: string = "",
-  pathname?: string
+  reportsPath = DEFAULT_ANALYTICS_REPORTS_PATH
 ): string {
-  const base = `${analyticsReportsPath(pathname)}/_/${segment}`
+  const base = `${normalizeReportsPath(reportsPath)}/_/${segment}`
   return qs ? `${base}?${qs}` : base
 }
 
 export function buildReferrersPath(
   source: string,
   qs: string = "",
-  pathname?: string
+  reportsPath = DEFAULT_ANALYTICS_REPORTS_PATH
 ): string {
-  const base = `${analyticsReportsPath(pathname)}/_/referrers/${encodeURIComponent(source)}`
+  const base = `${normalizeReportsPath(reportsPath)}/_/referrers/${encodeURIComponent(source)}`
   return qs ? `${base}?${qs}` : base
 }
 
-export function baseAnalyticsPath(qs: string = "", pathname?: string): string {
-  const reportsPath = analyticsReportsPath(pathname)
-  return qs ? `${reportsPath}?${qs}` : reportsPath
+export function baseAnalyticsPath(
+  qs: string = "",
+  reportsPath = DEFAULT_ANALYTICS_REPORTS_PATH
+): string {
+  const basePath = normalizeReportsPath(reportsPath)
+  return qs ? `${basePath}?${qs}` : basePath
 }
 
 // Map dialog segment back to the Sources panel mode

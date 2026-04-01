@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
+import { useAnalyticsDashboardContext } from "../dashboard-context"
 import { useSiteContext } from "../site-context"
-import { useTopStatsContext } from "../top-stats-context"
 import FilterBadges from "./top-bar/filter-badges"
 import FilterMenu from "./top-bar/filter-menu"
 import QueryPeriodsPicker from "./top-bar/query-periods-picker"
@@ -73,26 +73,40 @@ export default function TopBar({ showCurrentVisitors }: TopBarProps) {
 
 function CurrentVisitors() {
   const site = useSiteContext()
-  const { payload } = useTopStatsContext()
-  const current = useMemo(() => {
-    const live = payload.topStats.find(
-      (stat) => stat.graphMetric === "currentVisitors"
-    )
-    if (live) return Math.round(live.value)
-    const fallback = payload.topStats[0]
-    return fallback ? Math.round(fallback.value) : 0
-  }, [payload.topStats])
-
-  return (
-    <a
-      href={site.paths?.live || "/admin/analytics/live"}
-      className="flex items-center gap-2 rounded-full bg-muted px-3 py-1.5 text-sm font-semibold transition hover:bg-muted/80"
-    >
+  const { topStats } = useAnalyticsDashboardContext()
+  const live = topStats.topStats.find(
+    (stat) => stat.graphMetric === "currentVisitors"
+  )
+  const fallback = topStats.topStats[0]
+  const current = live
+    ? Math.round(live.value)
+    : fallback
+      ? Math.round(fallback.value)
+      : 0
+  const content = (
+    <>
       <span
         className={`inline-flex size-2 rounded-full ${current > 0 ? "animate-pulse bg-emerald-500" : "bg-muted-foreground/50"}`}
         aria-hidden="true"
       />
       <span>{current} live visitors</span>
+    </>
+  )
+
+  if (!site.paths?.live) {
+    return (
+      <div className="flex items-center gap-2 rounded-full bg-muted px-3 py-1.5 text-sm font-semibold">
+        {content}
+      </div>
+    )
+  }
+
+  return (
+    <a
+      href={site.paths.live}
+      className="flex items-center gap-2 rounded-full bg-muted px-3 py-1.5 text-sm font-semibold transition hover:bg-muted/80"
+    >
+      {content}
     </a>
   )
 }

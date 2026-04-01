@@ -1,5 +1,4 @@
 import type { AnalyticsQuery } from "../types"
-import { updateDashboardSearchParams } from "./dashboard-url-state"
 
 export const PANEL_MODE_SEARCH_PARAMS = {
   sources: "sources_mode",
@@ -241,19 +240,6 @@ export function copyPanelModeSearchParams(
     }
   }
   return target
-}
-
-export function syncPanelModeInUrl(
-  panel: PanelModeSearchKey,
-  mode: string,
-  options?: {
-    history?: "push" | "replace"
-    pathname?: string
-  }
-) {
-  updateDashboardSearchParams((params) => {
-    setPanelModeSearchParam(params, panel, mode)
-  }, options)
 }
 
 export function readStoredMode<T extends string>(

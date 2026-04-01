@@ -2,23 +2,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { useClientComponent } from "@/hooks/use-client-component"
 
-import { fetchLocations } from "../api"
+import { useAnalyticsApi } from "../hooks/use-analytics-api"
 import { usePanelData } from "../hooks/use-panel-data"
-import {
-  openReportsDialogRoute,
-  syncReportsDialogRoute,
-  useCloseReportsDialogRoute,
-} from "../hooks/use-reports-dialog-route"
-import { pickCardMetrics } from "../lib/card-metrics"
+import { useAnalyticsHost } from "../host-context"
+import { limitListPayloadForCard, pickCardMetrics } from "../lib/card-metrics"
 import { flagFromIso2 } from "../lib/country-flag"
 import {
-  buildDialogPath,
   locationsModeForSegment,
   locationsSegmentForMode,
   parseDialogFromPath,
 } from "../lib/dialog-path"
 import { getLocationsModeAfterFilterChange } from "../lib/panel-mode"
-import { analyticsScopedPath } from "../lib/path-prefix"
 import {
   analyticsPreferenceKey,
   writeAnalyticsPreference,
@@ -68,7 +62,9 @@ export default function LocationsPanel({
   initialData,
   initialMode,
 }: LocationsPanelProps) {
-  const { query, pathname, updateQuery } = useQueryContext()
+  const { fetchLocations } = useAnalyticsApi()
+  const host = useAnalyticsHost()
+  const { query, updateQuery } = useQueryContext()
   const site = useSiteContext()
 
   const [preferredMode, setPreferredMode] = useState(() => initialMode)
@@ -79,10 +75,10 @@ export default function LocationsPanel({
   })
   const storageKey = analyticsPreferenceKey(STORAGE_PREFIX, site.domain)
   const dialogMode = useMemo(() => {
-    const parsed = parseDialogFromPath(pathname)
+    const parsed = parseDialogFromPath(host.pathname, host.reportsPath)
     if (parsed.type !== "segment") return null
     return locationsModeForSegment(parsed.segment)
-  }, [pathname])
+  }, [host.pathname, host.reportsPath])
   const mode = dialogMode ?? preferredMode
   const { Component: CountriesMapComponent } = useClientComponent(
     loadCountriesMapComponent,
@@ -99,7 +95,7 @@ export default function LocationsPanel({
   )
   const previousFiltersRef = useRef(query.filters)
   const countriesRestoreModeRef = useRef<"map" | "countries">("countries")
-  const closeDetailsDialog = useCloseReportsDialogRoute()
+  const closeDetailsDialog = host.closeDialogRoute
   const panelState = usePanelData<PanelData>({
     initialData:
       "map" in initialData
@@ -197,20 +193,9 @@ export default function LocationsPanel({
   // Limit card view to top 9 only for list modes; keep map view unchanged
   const limitedListPayload = useMemo(() => {
     if (data.type !== "list") return null
-    const metricKey = data.payload.metrics[0] ?? "visitors"
-    const sorted = [...data.payload.results].sort((a, b) => {
-      const av = Number(a[metricKey] ?? 0)
-      const bv = Number(b[metricKey] ?? 0)
-      if (av === bv) return String(a.name).localeCompare(String(b.name))
-      return bv - av
-    })
-    const sliced = sorted.slice(0, 9)
-    return {
-      ...data.payload,
+    return limitListPayloadForCard(data.payload, {
       metrics: pickCardMetrics(data.payload.metrics),
-      results: sliced,
-      meta: { ...data.payload.meta, hasMore: data.payload.results.length > 9 },
-    }
+    })
   }, [data])
 
   const handleCountrySelect = useCallback(
@@ -305,8 +290,8 @@ export default function LocationsPanel({
                   const seg = locationsSegmentForMode(
                     mode as "map" | "countries" | "regions" | "cities"
                   )
-                  openReportsDialogRoute((search) =>
-                    buildDialogPath(seg, search)
+                  host.openDialogRoute((search) =>
+                    host.buildDialogPath(seg, search)
                   )
                 } catch {
                   // Ignore history errors when opening details.
@@ -370,8 +355,8 @@ export default function LocationsPanel({
                   const seg = locationsSegmentForMode(
                     mode as "map" | "countries" | "regions" | "cities"
                   )
-                  openReportsDialogRoute((search) =>
-                    buildDialogPath(seg, search)
+                  host.openDialogRoute((search) =>
+                    host.buildDialogPath(seg, search)
                   )
                 } catch {
                   // Ignore history errors when opening details.
@@ -392,15 +377,15 @@ export default function LocationsPanel({
               const seg = locationsSegmentForMode(
                 mode as "map" | "countries" | "regions" | "cities"
               )
-              syncReportsDialogRoute(open, (search) =>
-                buildDialogPath(seg, search)
+              host.syncDialogRoute(open, (search) =>
+                host.buildDialogPath(seg, search)
               )
             } catch {
               // Ignore history errors when syncing modal state.
             }
           }}
           title={`Top ${activeTitle}`}
-          endpoint={analyticsScopedPath("/locations")}
+          endpoint={host.scopedPath("/locations")}
           extras={{ mode: mode === "map" ? "countries" : mode }}
           firstColumnLabel={firstColumnLabel}
           renderLeading={

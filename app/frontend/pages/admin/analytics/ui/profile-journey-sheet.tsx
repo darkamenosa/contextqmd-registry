@@ -26,11 +26,7 @@ import {
 import DeviceTypeIcon from "@/components/analytics/device-type-icon"
 import VisitorAvatar from "@/components/analytics/visitor-avatar"
 
-import {
-  fetchProfileJourney,
-  fetchProfileSession,
-  fetchProfileSessions,
-} from "../api"
+import { useAnalyticsApi } from "../hooks/use-analytics-api"
 import { getBrowserIcon, getOSIcon } from "../lib/device-visuals"
 import { getSourceFaviconDomain } from "../lib/source-visuals"
 import { useQueryContext } from "../query-context"
@@ -174,6 +170,8 @@ export default function ProfileJourneySheet({
   onOpenChange: (open: boolean) => void
   profile: ProfileListItem | null
 }) {
+  const { fetchProfileJourney, fetchProfileSession, fetchProfileSessions } =
+    useAnalyticsApi()
   const { query } = useQueryContext()
   const [data, setData] = useState<ProfileJourneyPayload | null>(null)
   const [loading, setLoading] = useState(false)
@@ -227,7 +225,7 @@ export default function ProfileJourneySheet({
       })
 
     return () => controller.abort()
-  }, [open, profile, query])
+  }, [fetchProfileJourney, open, profile, query])
 
   const selectedActivityDateParam = selectedActivityDay?.date
 
@@ -272,7 +270,7 @@ export default function ProfileJourneySheet({
       })
 
     return () => controller.abort()
-  }, [open, profile, selectedActivityDateParam])
+  }, [fetchProfileSessions, open, profile, selectedActivityDateParam])
 
   const loadMoreSessions = () => {
     if (!profile || sessionsLoading || !sessionsHasMore) return

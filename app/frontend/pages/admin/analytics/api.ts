@@ -1,4 +1,7 @@
-import { analyticsScopedPath } from "./lib/path-prefix"
+import {
+  DEFAULT_ANALYTICS_REPORTS_PATH,
+  resolveAdminAnalyticsScopePath,
+} from "./lib/admin-analytics-host"
 import {
   buildQueryParams,
   mergeReportQueryParams,
@@ -30,6 +33,20 @@ export {
 }
 
 type AnalyticsApiErrorBody = Record<string, unknown> | string | null | undefined
+type ScopedPathResolver = (suffix: string) => string
+
+function normalizeScopedSuffix(suffix: string) {
+  return suffix.startsWith("/") ? suffix : `/${suffix}`
+}
+
+function currentAnalyticsPathname() {
+  if (typeof window === "undefined") return DEFAULT_ANALYTICS_REPORTS_PATH
+  return window.location.pathname
+}
+
+const defaultAnalyticsApi = createAnalyticsApi((suffix) => {
+  return `${resolveAdminAnalyticsScopePath(currentAnalyticsPathname())}${normalizeScopedSuffix(suffix)}`
+})
 
 export class AnalyticsApiError extends Error {
   status: number
@@ -108,238 +125,256 @@ async function fetchJson<T>(
   return body as T
 }
 
-export function fetchTopStats(query: AnalyticsQuery, signal?: AbortSignal) {
-  return fetchJson<TopStatsPayload>(
-    analyticsScopedPath("/top_stats"),
-    query,
-    {},
-    signal
-  )
-}
-
-export function fetchMainGraph(
-  query: AnalyticsQuery,
-  extras: { metric?: string; interval?: string } = {},
-  signal?: AbortSignal
-) {
-  return fetchJson<MainGraphPayload>(
-    analyticsScopedPath("/main_graph"),
-    query,
-    extras,
-    signal
-  )
-}
-
-export function fetchSources(
-  query: AnalyticsQuery,
-  extras: { mode?: string } = {},
-  signal?: AbortSignal
-) {
-  return fetchJson<ListPayload>(
-    analyticsScopedPath("/sources"),
-    query,
-    extras,
-    signal
-  )
-}
-
-export function fetchReferrers(
-  query: AnalyticsQuery,
-  extras: { source: string },
-  signal?: AbortSignal
-) {
-  return fetchJson<ListPayload>(
-    analyticsScopedPath("/referrers"),
-    query,
-    extras,
-    signal
-  )
-}
-
-export function fetchSourceDebug(
-  query: AnalyticsQuery,
-  extras: { source: string },
-  signal?: AbortSignal
-) {
-  return fetchJson<SourceDebugPayload>(
-    analyticsScopedPath("/source_debug"),
-    query,
-    extras,
-    signal
-  )
-}
-
-export function fetchSearchTerms(
-  query: AnalyticsQuery,
-  extras: Record<string, unknown> = {},
-  signal?: AbortSignal
-) {
-  return fetchJson<ListPayload>(
-    analyticsScopedPath("/search_terms"),
-    query,
-    extras,
-    signal
-  )
-}
-
-export function fetchPages(
-  query: AnalyticsQuery,
-  extras: { mode?: string } = {},
-  signal?: AbortSignal
-) {
-  return fetchJson<ListPayload>(
-    analyticsScopedPath("/pages"),
-    query,
-    extras,
-    signal
-  )
-}
-
-export function fetchLocations(
-  query: AnalyticsQuery,
-  extras: { mode?: string } = {},
-  signal?: AbortSignal
-) {
-  return fetchJson<MapPayload | ListPayload>(
-    analyticsScopedPath("/locations"),
-    query,
-    extras,
-    signal
-  )
-}
-
-export function fetchDevices(
-  query: AnalyticsQuery,
-  extras: { mode?: string } = {},
-  signal?: AbortSignal
-) {
-  return fetchJson<DevicesPayload>(
-    analyticsScopedPath("/devices"),
-    query,
-    extras,
-    signal
-  )
-}
-
-export function fetchBehaviors(
-  query: AnalyticsQuery,
-  extras: { mode?: string; funnel?: string; property?: string } = {},
-  signal?: AbortSignal
-) {
-  return fetchJson<BehaviorsPayload>(
-    analyticsScopedPath("/behaviors"),
-    query,
-    extras,
-    signal
-  )
-}
-
-export function fetchProfiles(
-  query: AnalyticsQuery,
-  extras: { limit?: number; page?: number; search?: string } = {},
-  signal?: AbortSignal
-) {
-  return fetchJson<ProfilesPayload>(
-    analyticsScopedPath("/profiles"),
-    query,
-    extras,
-    signal
-  )
-}
-
-export function fetchProfileJourney(
-  profileId: string,
-  query: AnalyticsQuery,
-  signal?: AbortSignal
-) {
-  return fetchJson<ProfileJourneyPayload>(
-    analyticsScopedPath(`/profiles/${encodeURIComponent(profileId)}`),
-    query,
-    {},
-    signal
-  )
-}
-
-export async function fetchProfileSessions(
-  profileId: string,
-  extras: { limit?: number; page?: number; date?: string } = {},
-  signal?: AbortSignal
-) {
-  const params = new URLSearchParams()
-  if (extras.limit) params.set("limit", String(extras.limit))
-  if (extras.page) params.set("page", String(extras.page))
-  if (extras.date) params.set("date", extras.date)
-  const url = `${analyticsScopedPath(`/profiles/${encodeURIComponent(profileId)}/sessions`)}?${params}`
-  const response = await fetch(url, {
-    headers: { Accept: "application/json" },
-    signal,
-  })
-  if (!response.ok) throw new Error(`Request failed: ${response.status}`)
-  return (await response.json()) as ProfileSessionsListPayload
-}
-
-export function fetchProfileSession(
-  profileId: string,
-  visitId: number,
-  query: AnalyticsQuery,
-  signal?: AbortSignal
-) {
-  return fetchJson<ProfileSessionPayload>(
-    analyticsScopedPath(
-      `/profiles/${encodeURIComponent(profileId)}/sessions/${visitId}`
-    ),
-    query,
-    {},
-    signal
-  )
-}
-
-export async function fetchBehaviorPropertyKeys(
-  query: AnalyticsQuery,
-  signal?: AbortSignal
-) {
-  const payload = await fetchJson<BehaviorsPayload>(
-    analyticsScopedPath("/behaviors"),
-    query,
-    {
-      mode: "props",
-      limit: "1",
-      page: "1",
+export function createAnalyticsApi(scopedPath: ScopedPathResolver) {
+  return {
+    fetchTopStats(query: AnalyticsQuery, signal?: AbortSignal) {
+      return fetchJson<TopStatsPayload>(
+        scopedPath("/top_stats"),
+        query,
+        {},
+        signal
+      )
     },
-    signal
-  )
 
-  return "list" in payload && Array.isArray(payload.propertyKeys)
-    ? payload.propertyKeys
-    : []
-}
-
-export async function fetchBehaviorPropertyValues(
-  query: AnalyticsQuery,
-  property: string,
-  search = "",
-  signal?: AbortSignal
-) {
-  const payload = await fetchJson<BehaviorsPayload>(
-    analyticsScopedPath("/behaviors"),
-    query,
-    {
-      mode: "props",
-      property,
-      limit: "20",
-      page: "1",
-      search,
+    fetchMainGraph(
+      query: AnalyticsQuery,
+      extras: { metric?: string; interval?: string } = {},
+      signal?: AbortSignal
+    ) {
+      return fetchJson<MainGraphPayload>(
+        scopedPath("/main_graph"),
+        query,
+        extras,
+        signal
+      )
     },
-    signal
-  )
 
-  if (!("list" in payload)) return []
+    fetchSources(
+      query: AnalyticsQuery,
+      extras: { mode?: string } = {},
+      signal?: AbortSignal
+    ) {
+      return fetchJson<ListPayload>(
+        scopedPath("/sources"),
+        query,
+        extras,
+        signal
+      )
+    },
 
-  return payload.list.results.map((item) => ({
-    label: String(item.name),
-    value: String(item.name),
-  }))
+    fetchReferrers(
+      query: AnalyticsQuery,
+      extras: { source: string },
+      signal?: AbortSignal
+    ) {
+      return fetchJson<ListPayload>(
+        scopedPath("/referrers"),
+        query,
+        extras,
+        signal
+      )
+    },
+
+    fetchSourceDebug(
+      query: AnalyticsQuery,
+      extras: { source: string },
+      signal?: AbortSignal
+    ) {
+      return fetchJson<SourceDebugPayload>(
+        scopedPath("/source_debug"),
+        query,
+        extras,
+        signal
+      )
+    },
+
+    fetchSearchTerms(
+      query: AnalyticsQuery,
+      extras: Record<string, unknown> = {},
+      signal?: AbortSignal
+    ) {
+      return fetchJson<ListPayload>(
+        scopedPath("/search_terms"),
+        query,
+        extras,
+        signal
+      )
+    },
+
+    fetchPages(
+      query: AnalyticsQuery,
+      extras: { mode?: string } = {},
+      signal?: AbortSignal
+    ) {
+      return fetchJson<ListPayload>(scopedPath("/pages"), query, extras, signal)
+    },
+
+    fetchLocations(
+      query: AnalyticsQuery,
+      extras: { mode?: string } = {},
+      signal?: AbortSignal
+    ) {
+      return fetchJson<MapPayload | ListPayload>(
+        scopedPath("/locations"),
+        query,
+        extras,
+        signal
+      )
+    },
+
+    fetchDevices(
+      query: AnalyticsQuery,
+      extras: { mode?: string } = {},
+      signal?: AbortSignal
+    ) {
+      return fetchJson<DevicesPayload>(
+        scopedPath("/devices"),
+        query,
+        extras,
+        signal
+      )
+    },
+
+    fetchBehaviors(
+      query: AnalyticsQuery,
+      extras: { mode?: string; funnel?: string; property?: string } = {},
+      signal?: AbortSignal
+    ) {
+      return fetchJson<BehaviorsPayload>(
+        scopedPath("/behaviors"),
+        query,
+        extras,
+        signal
+      )
+    },
+
+    fetchProfiles(
+      query: AnalyticsQuery,
+      extras: { limit?: number; page?: number; search?: string } = {},
+      signal?: AbortSignal
+    ) {
+      return fetchJson<ProfilesPayload>(
+        scopedPath("/profiles"),
+        query,
+        extras,
+        signal
+      )
+    },
+
+    fetchProfileJourney(
+      profileId: string,
+      query: AnalyticsQuery,
+      signal?: AbortSignal
+    ) {
+      return fetchJson<ProfileJourneyPayload>(
+        scopedPath(`/profiles/${encodeURIComponent(profileId)}`),
+        query,
+        {},
+        signal
+      )
+    },
+
+    async fetchProfileSessions(
+      profileId: string,
+      extras: { limit?: number; page?: number; date?: string } = {},
+      signal?: AbortSignal
+    ) {
+      const params = new URLSearchParams()
+      if (extras.limit) params.set("limit", String(extras.limit))
+      if (extras.page) params.set("page", String(extras.page))
+      if (extras.date) params.set("date", extras.date)
+      const url = `${scopedPath(`/profiles/${encodeURIComponent(profileId)}/sessions`)}?${params}`
+      const response = await fetch(url, {
+        headers: { Accept: "application/json" },
+        signal,
+      })
+      if (!response.ok) throw new Error(`Request failed: ${response.status}`)
+      return (await response.json()) as ProfileSessionsListPayload
+    },
+
+    fetchProfileSession(
+      profileId: string,
+      visitId: number,
+      query: AnalyticsQuery,
+      signal?: AbortSignal
+    ) {
+      return fetchJson<ProfileSessionPayload>(
+        scopedPath(
+          `/profiles/${encodeURIComponent(profileId)}/sessions/${visitId}`
+        ),
+        query,
+        {},
+        signal
+      )
+    },
+
+    async fetchBehaviorPropertyKeys(
+      query: AnalyticsQuery,
+      signal?: AbortSignal
+    ) {
+      const payload = await fetchJson<BehaviorsPayload>(
+        scopedPath("/behaviors"),
+        query,
+        {
+          mode: "props",
+          limit: "1",
+          page: "1",
+        },
+        signal
+      )
+
+      return "list" in payload && Array.isArray(payload.propertyKeys)
+        ? payload.propertyKeys
+        : []
+    },
+
+    async fetchBehaviorPropertyValues(
+      query: AnalyticsQuery,
+      property: string,
+      search = "",
+      signal?: AbortSignal
+    ) {
+      const payload = await fetchJson<BehaviorsPayload>(
+        scopedPath("/behaviors"),
+        query,
+        {
+          mode: "props",
+          property,
+          limit: "20",
+          page: "1",
+          search,
+        },
+        signal
+      )
+
+      if (!("list" in payload)) return []
+
+      return payload.list.results.map((item) => ({
+        label: String(item.name),
+        value: String(item.name),
+      }))
+    },
+  }
 }
+
+export const fetchTopStats = defaultAnalyticsApi.fetchTopStats
+export const fetchMainGraph = defaultAnalyticsApi.fetchMainGraph
+export const fetchSources = defaultAnalyticsApi.fetchSources
+export const fetchReferrers = defaultAnalyticsApi.fetchReferrers
+export const fetchSourceDebug = defaultAnalyticsApi.fetchSourceDebug
+export const fetchSearchTerms = defaultAnalyticsApi.fetchSearchTerms
+export const fetchPages = defaultAnalyticsApi.fetchPages
+export const fetchLocations = defaultAnalyticsApi.fetchLocations
+export const fetchDevices = defaultAnalyticsApi.fetchDevices
+export const fetchBehaviors = defaultAnalyticsApi.fetchBehaviors
+export const fetchProfiles = defaultAnalyticsApi.fetchProfiles
+export const fetchProfileJourney = defaultAnalyticsApi.fetchProfileJourney
+export const fetchProfileSessions = defaultAnalyticsApi.fetchProfileSessions
+export const fetchProfileSession = defaultAnalyticsApi.fetchProfileSession
+export const fetchBehaviorPropertyKeys =
+  defaultAnalyticsApi.fetchBehaviorPropertyKeys
+export const fetchBehaviorPropertyValues =
+  defaultAnalyticsApi.fetchBehaviorPropertyValues
 
 // Generic paginated list fetcher for Details modals
 export async function fetchListPage(

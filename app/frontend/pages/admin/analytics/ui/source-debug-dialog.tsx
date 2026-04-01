@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 
-import { fetchSourceDebug } from "../api"
+import { useAnalyticsApi } from "../hooks/use-analytics-api"
 import { useQueryContext } from "../query-context"
 import type { CountBreakdownRow, SourceDebugPayload } from "../types"
 
@@ -23,6 +23,7 @@ export default function SourceDebugDialog({
   onOpenChange,
   source,
 }: SourceDebugDialogProps) {
+  const { fetchSourceDebug } = useAnalyticsApi()
   const { query } = useQueryContext()
   const [data, setData] = useState<SourceDebugPayload | null>(null)
 
@@ -37,7 +38,7 @@ export default function SourceDebugDialog({
       })
 
     return () => controller.abort()
-  }, [open, query, source])
+  }, [fetchSourceDebug, open, query, source])
 
   const payload = data?.source.requestedValue === source ? data : null
 
