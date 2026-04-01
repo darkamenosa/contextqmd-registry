@@ -172,10 +172,24 @@ export default function LiveSessionCard({
           </span>
         </div>
         <div className="flex items-center justify-between border-b border-border/30 py-1.5">
-          <span className="text-xs/4 text-muted-foreground">Current URL</span>
-          <span className="truncate pl-3 text-right font-mono text-xs/4 font-medium text-foreground">
-            {session.currentPage || "/"}
+          <span className="shrink-0 text-xs/4 text-muted-foreground">
+            Current URL
           </span>
+          {session.currentPage ? (
+            <a
+              href={session.currentPage}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="truncate pl-3 text-right font-mono text-xs/4 font-medium text-foreground underline decoration-muted-foreground/30 underline-offset-2 hover:decoration-foreground"
+              title={session.currentPage}
+            >
+              {session.currentPage}
+            </a>
+          ) : (
+            <span className="truncate pl-3 text-right font-mono text-xs/4 font-medium text-foreground">
+              /
+            </span>
+          )}
         </div>
         <div className="flex items-center justify-between border-b border-border/30 py-1.5">
           <span className="text-xs/4 text-muted-foreground">Session time</span>

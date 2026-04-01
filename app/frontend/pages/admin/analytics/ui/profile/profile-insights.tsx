@@ -246,6 +246,7 @@ export function ActivityHeatmap({
         space={2}
         legendCellSize={0}
         weekLabels={false}
+        rectProps={{ rx: rectSize > 10 ? 3 : 2 }}
         style={{ width: "100%", maxHeight: 100 }}
         panelColors={{
           0: "#ebebeb",
@@ -260,7 +261,7 @@ export function ActivityHeatmap({
           return (
             <rect
               {...props}
-              rx={1.5}
+              rx={rectSize > 10 ? 3 : 2}
               onMouseEnter={(e) => {
                 if (!hasHover) return
                 const cell = e.currentTarget.getBoundingClientRect()
@@ -358,12 +359,15 @@ export function SessionSourceSummary({
             textClassName="font-medium"
           />
         </span>
-        {sourceSummary.landingPage ? (
-          <span className="rounded-md border border-border bg-background px-2 py-1 text-muted-foreground">
-            landed on {sourceSummary.landingPage}
-          </span>
-        ) : null}
       </div>
+      {sourceSummary.landingPage ? (
+        <p
+          className="mt-2 truncate rounded-md border border-border bg-background px-2 py-1 text-xs text-muted-foreground"
+          title={sourceSummary.landingPage}
+        >
+          landed on {sourceSummary.landingPage}
+        </p>
+      ) : null}
 
       {sourceSummary.referringDomain &&
       sourceSummary.referringDomain !== sourceSummary.sourceLabel &&
