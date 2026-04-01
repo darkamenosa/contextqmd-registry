@@ -48,6 +48,8 @@ test("top stat change tone inverts bounce rate trends", async () => {
 
   assert.equal(topStatChange.topStatChangeTone("visitors", 10), "good")
   assert.equal(topStatChange.topStatChangeTone("visitors", -10), "bad")
+  assert.equal(topStatChange.topStatChangeTone("visitors", 0), "neutral")
   assert.equal(topStatChange.topStatChangeTone("bounce_rate", 10), "bad")
   assert.equal(topStatChange.topStatChangeTone("bounce_rate", -10), "good")
+  assert.equal(topStatChange.topStatChangeTone("bounce_rate", 0), "neutral")
 })

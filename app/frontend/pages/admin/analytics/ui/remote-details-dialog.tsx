@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input"
 import { fetchListPage } from "../api"
 import { useDebounce } from "../hooks/use-debounce"
 import { lockBodyScroll } from "../lib/body-scroll-lock"
+import { formatMetric, resolveMetricLabel } from "../lib/metric-display"
 import { normalizeMetricKey } from "../lib/metric-key"
 import { useQueryContext } from "../query-context"
 import type {
@@ -23,7 +24,7 @@ import type {
   ListMetricKey,
   ListPayload,
 } from "../types"
-import { FORMATTERS, isPathLike, METRIC_LABELS, renderFlag } from "./list-table"
+import { isPathLike, renderFlag } from "./list-table"
 
 type SortState = {
   key: "name" | ListMetricKey
@@ -401,20 +402,14 @@ export default function RemoteDetailsDialog({
                           className="inline-flex w-full items-center justify-end gap-1"
                           onClick={() => toggleSort(metric as SortState["key"])}
                         >
-                          {metricLabels[metric] ??
-                            METRIC_LABELS[metric] ??
-                            metric}
+                          {resolveMetricLabel(metric, metricLabels)}
                           <SortArrow
                             active={sort.key === metric}
                             direction={sort.direction}
                           />
                         </button>
                       ) : (
-                        <span>
-                          {metricLabels[metric] ??
-                            METRIC_LABELS[metric] ??
-                            metric}
-                        </span>
+                        <span>{resolveMetricLabel(metric, metricLabels)}</span>
                       )}
                     </th>
                   ))}
@@ -514,8 +509,5 @@ function SortArrow({
 }
 
 function formatCell(metric: string, value: unknown) {
-  const formatter = FORMATTERS[metric as ListMetricKey]
-  return formatter
-    ? formatter(value as number | null | undefined)
-    : String(value ?? 0)
+  return formatMetric(metric, value as ListItem[keyof ListItem])
 }

@@ -3,6 +3,10 @@ import dayjs from "dayjs"
 import timezone from "dayjs/plugin/timezone"
 import utc from "dayjs/plugin/utc"
 
+import {
+  percentageFormatter,
+  numberLongFormatter as sharedNumberLongFormatter,
+} from "../../lib/number-formatter"
 import type { MainGraphPayload, TopStat } from "../../types"
 
 dayjs.extend(utc)
@@ -117,12 +121,12 @@ export function formatTopStatValue(stat: TopStat) {
     case "bounce_rate":
     case "conversion_rate":
     case "scroll_depth":
-      return `${value.toFixed(2)}%`
+      return percentageFormatter(value)
     case "time_on_page":
     case "visit_duration":
       return durationFormatter(value)
     case "views_per_visit":
-      return value.toFixed(2)
+      return numberShortFormatter(value)
     case "visitors":
     case "events":
     case "visits":
@@ -131,15 +135,52 @@ export function formatTopStatValue(stat: TopStat) {
     default: {
       const name = (stat.name || "").toLowerCase()
       if (name.includes("rate") || name.includes("scroll")) {
-        return `${value.toFixed(2)}%`
+        return percentageFormatter(value)
       }
       if (name.includes("duration") || name.includes("time on")) {
         return durationFormatter(value)
       }
-      if (name.includes("views per")) return value.toFixed(2)
+      if (name.includes("views per")) return numberShortFormatter(value)
       return numberShortFormatter(value)
     }
   }
+}
+
+export function formatTopStatLongValue(stat: TopStat) {
+  const value = Number(stat.value ?? 0)
+  const metric = (stat.graphMetric || "").toString().toLowerCase()
+
+  switch (metric) {
+    case "bounce_rate":
+    case "conversion_rate":
+    case "scroll_depth":
+      return percentageFormatter(value)
+    case "time_on_page":
+    case "visit_duration":
+      return durationFormatter(value)
+    case "views_per_visit":
+      return sharedNumberLongFormatter(value)
+    case "visitors":
+    case "events":
+    case "visits":
+    case "pageviews":
+      return sharedNumberLongFormatter(value)
+    default: {
+      const name = (stat.name || "").toLowerCase()
+      if (name.includes("rate") || name.includes("scroll")) {
+        return percentageFormatter(value)
+      }
+      if (name.includes("duration") || name.includes("time on")) {
+        return durationFormatter(value)
+      }
+      if (name.includes("views per")) return sharedNumberLongFormatter(value)
+      return sharedNumberLongFormatter(value)
+    }
+  }
+}
+
+export function isTopStatValueAbbreviated(stat: TopStat) {
+  return /[kMB]$/.test(formatTopStatValue(stat))
 }
 
 export function formatComparisonRangeLabel(
@@ -315,9 +356,9 @@ export function createChartOptions(
       metric === "conversion_rate" ||
       metric === "scroll_depth"
     ) {
-      return `${value.toFixed(2)}%`
+      return percentageFormatter(value)
     }
-    if (metric === "views_per_visit") return value.toFixed(2)
+    if (metric === "views_per_visit") return numberShortFormatter(value)
     return numberShortFormatter(value)
   }
 

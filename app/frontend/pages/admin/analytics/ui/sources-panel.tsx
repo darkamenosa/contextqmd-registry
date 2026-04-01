@@ -570,6 +570,7 @@ export default function SourcesPanel({
             displayBars={false}
             firstColumnLabel={firstColumnLabel}
             barColorTheme="cyan"
+            revealSecondaryMetricsOnHover
             testId="sources"
           />
           {!isUtmMode || utmHasUsableData ? (

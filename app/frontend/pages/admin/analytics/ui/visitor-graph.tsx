@@ -30,6 +30,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 // Tooltip imports removed (sampling tooltip currently commented out)
 
@@ -54,6 +59,7 @@ import {
   createChartOptions,
   formatComparisonRangeLabel,
   formatPrimaryRangeLabel,
+  formatTopStatLongValue,
   formatTopStatValue,
 } from "./visitor-graph/chart-utils"
 import {
@@ -288,6 +294,7 @@ export default function VisitorGraph({ initialGraph }: VisitorGraphProps) {
           graphableMetrics={graphableMetrics}
           selectedMetric={effectiveMetric}
           onSelectMetric={changeMetric}
+          metricWarnings={payload.meta.metricWarnings}
           comparingFrom={payload.comparingFrom}
           comparingTo={payload.comparingTo}
           period={query.period}
@@ -332,6 +339,7 @@ type TopStatsGridProps = {
   graphableMetrics: string[]
   selectedMetric: string
   onSelectMetric: (metric: string) => void
+  metricWarnings?: Record<string, { code: string; message?: string }>
   comparingFrom?: string | null
   comparingTo?: string | null
   period?: string
@@ -346,6 +354,7 @@ function TopStatsGrid({
   graphableMetrics,
   selectedMetric,
   onSelectMetric,
+  metricWarnings,
   comparingFrom,
   comparingTo,
   period = "day",
@@ -401,10 +410,9 @@ function TopStatsGrid({
         timezone
       )
     }
-
-    return (
+    const primaryValue = formatTopStatValue(stat)
+    const buttonContent = (
       <button
-        key={stat.name}
         type="button"
         className={classes}
         onClick={() => {
@@ -412,7 +420,8 @@ function TopStatsGrid({
             onSelectMetric(stat.graphMetric)
           }
         }}
-        disabled={!canSelect}
+        aria-disabled={canSelect ? undefined : true}
+        tabIndex={canSelect ? 0 : -1}
       >
         <span
           className={[
@@ -424,9 +433,7 @@ function TopStatsGrid({
         >
           {stat.name}
         </span>
-        <span className="text-lg font-bold tabular-nums">
-          {formatTopStatValue(stat)}
-        </span>
+        <span className="text-lg font-bold tabular-nums">{primaryValue}</span>
         {primaryLabel && showComparison ? (
           <span className="text-xs text-muted-foreground">{primaryLabel}</span>
         ) : null}
@@ -453,7 +460,9 @@ function TopStatsGrid({
               className={`inline-flex items-center gap-1 text-xs font-medium ${
                 tone === "good"
                   ? "text-emerald-600 dark:text-emerald-400"
-                  : "text-rose-600 dark:text-rose-400"
+                  : tone === "bad"
+                    ? "text-rose-600 dark:text-rose-400"
+                    : "text-muted-foreground"
               }`}
             >
               {direction === "up" ? "▲ " : direction === "down" ? "▼ " : ""}
@@ -463,6 +472,22 @@ function TopStatsGrid({
         })()}
       </button>
     )
+
+    return (
+      <Tooltip key={stat.name} disableHoverablePopup>
+        <TooltipTrigger render={buttonContent} />
+        <TooltipContent
+          sideOffset={6}
+          className="pointer-events-none max-w-none px-3 py-2"
+        >
+          <TopStatTooltipContent
+            stat={stat}
+            metricWarnings={metricWarnings}
+            showComparison={hasComparison}
+          />
+        </TooltipContent>
+      </Tooltip>
+    )
   })
 
   return (
@@ -470,6 +495,96 @@ function TopStatsGrid({
       {items}
     </div>
   )
+}
+
+function TopStatTooltipContent({
+  stat,
+  metricWarnings,
+  showComparison,
+}: {
+  stat: TopStat
+  metricWarnings?: Record<string, { code: string; message?: string }>
+  showComparison: boolean
+}) {
+  const statName = describeTopStat(stat)
+  const warning = topStatWarningText(stat.graphMetric, metricWarnings)
+  const comparisonStat =
+    showComparison && stat.comparisonValue != null
+      ? { ...stat, value: stat.comparisonValue }
+      : null
+  const direction =
+    typeof stat.change === "number" ? topStatChangeDirection(stat.change) : null
+  const tone =
+    typeof stat.change === "number"
+      ? topStatChangeTone(stat.graphMetric, stat.change)
+      : null
+
+  return (
+    <div className="space-y-1 text-left">
+      {comparisonStat ? (
+        <div className="flex items-center gap-3 whitespace-nowrap">
+          <span className="font-medium">
+            {formatTopStatLongValue(stat)} vs.{" "}
+            {formatTopStatLongValue(comparisonStat)} {statName}
+          </span>
+          {typeof stat.change === "number" ? (
+            <span
+              className={`inline-flex items-center gap-1 text-[11px] font-medium ${
+                tone === "good"
+                  ? "text-emerald-300"
+                  : tone === "bad"
+                    ? "text-rose-300"
+                    : "text-background/70"
+              }`}
+            >
+              {direction === "up" ? "▲" : direction === "down" ? "▼" : ""}
+              {formatTopStatChangeValue(stat.change)}
+            </span>
+          ) : null}
+        </div>
+      ) : (
+        <div className="font-medium whitespace-nowrap">
+          {formatTopStatLongValue(stat)} {statName}
+        </div>
+      )}
+      {warning ? (
+        <div className="text-[11px] whitespace-nowrap text-background/70">
+          * {warning}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function describeTopStat(stat: TopStat) {
+  return stat.value === 1
+    ? stat.name.toLowerCase().replace(/s$/, "")
+    : stat.name.toLowerCase()
+}
+
+function topStatWarningText(
+  metric: string | undefined,
+  metricWarnings?: Record<string, { code: string; message?: string }>
+) {
+  const warning = metric && metricWarnings ? metricWarnings[metric] : null
+  if (!warning) return null
+
+  if (metric === "bounce_rate" && warning.code === "no_imported_bounce_rate") {
+    return "Does not include imported data"
+  }
+
+  if (
+    metric === "scroll_depth" &&
+    warning.code === "no_imported_scroll_depth"
+  ) {
+    return "Does not include imported data"
+  }
+
+  if (metric === "time_on_page") {
+    return warning.message ?? null
+  }
+
+  return null
 }
 
 type IntervalPickerProps = {

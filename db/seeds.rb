@@ -114,6 +114,32 @@ if Rails.env.development?
     AUTHORS = [ "Alice", "Bao", "Mai", "Luca" ].freeze
     THEMES = %w[light dark system].freeze
     LANGUAGES = [ "en-US", "vi-VN", "de-DE", "ja-JP" ].freeze
+    K_VALUE_DEMO = {
+      current_count: 1_248,
+      previous_count: 986,
+      source: {
+        referrer: "https://www.google.com/search?q=contextqmd+pricing",
+        referring_domain: "google.com",
+        utm_source: "google",
+        utm_medium: "organic",
+        utm_campaign: nil
+      },
+      location: {
+        country: "United States",
+        country_code: "US",
+        region: "California",
+        city: "San Francisco",
+        latitude: 37.7749,
+        longitude: -122.4194
+      },
+      device: {
+        browser: "Chrome",
+        browser_version: "135.0",
+        os: "Mac OS X",
+        device_type: "Desktop",
+        screen_size: "1440x900"
+      }
+    }.freeze
 
     def seed!
       cleanup!
@@ -136,6 +162,7 @@ if Rails.env.development?
       create_hourly_visits!(today - 1.day, yesterday_counts)
       create_hourly_visits!(today, today_counts)
       create_live_visitors!(now)
+      create_k_value_demo!(now)
       create_profiles!(now)
 
       puts "Seeded analytics demo data:"
@@ -147,6 +174,7 @@ if Rails.env.development?
       puts "  Seed operating systems: #{DEVICES.map { |device| device[:os] }.uniq.join(', ')}"
       puts "  Today hourly visits: #{today_counts.inspect}"
       puts "  Yesterday hourly visits: #{yesterday_counts.inspect}"
+      puts "  K-value demo: Google /pricing #{K_VALUE_DEMO.fetch(:current_count)} today vs #{K_VALUE_DEMO.fetch(:previous_count)} yesterday"
       puts "  Dashboard check: /admin/analytics/reports?period=day&comparison=previous_period"
     end
 
@@ -313,11 +341,41 @@ if Rails.env.development?
       end
     end
 
-    def create_visit_with_events!(bucket_time:, sequence:, burst_index:, live:)
-      source = SOURCES[burst_index % SOURCES.length]
-      location = LOCATIONS[burst_index % LOCATIONS.length]
-      device = DEVICES[burst_index % DEVICES.length]
-      scenario = scenario_for(burst_index, live)
+    def create_k_value_demo!(now)
+      current_bucket_time = [ now.beginning_of_hour, now.beginning_of_day ].max
+
+      create_k_value_demo_visits!(
+        bucket_time: current_bucket_time - 1.day,
+        count: K_VALUE_DEMO.fetch(:previous_count),
+        window: "previous"
+      )
+      create_k_value_demo_visits!(
+        bucket_time: current_bucket_time,
+        count: K_VALUE_DEMO.fetch(:current_count),
+        window: "current"
+      )
+    end
+
+    def create_k_value_demo_visits!(bucket_time:, count:, window:)
+      count.times do |index|
+        create_visit_with_events!(
+          bucket_time: bucket_time,
+          sequence: "k-demo-#{window}-#{index}",
+          burst_index: index,
+          live: false,
+          source: K_VALUE_DEMO.fetch(:source),
+          location: K_VALUE_DEMO.fetch(:location),
+          device: K_VALUE_DEMO.fetch(:device),
+          scenario: k_value_demo_scenario(index)
+        )
+      end
+    end
+
+    def create_visit_with_events!(bucket_time:, sequence:, burst_index:, live:, source: nil, location: nil, device: nil, scenario: nil)
+      source ||= SOURCES[burst_index % SOURCES.length]
+      location ||= LOCATIONS[burst_index % LOCATIONS.length]
+      device ||= DEVICES[burst_index % DEVICES.length]
+      scenario ||= scenario_for(burst_index, live)
       pages = scenario.fetch(:pages)
       second_offset = ((burst_index * 7) % 50).seconds
       started_at = [ bucket_time + second_offset, Time.zone.now.change(usec: 0) ].min
@@ -378,6 +436,26 @@ if Rails.env.development?
           properties: event_payload.fetch(:properties)
         )
       end
+    end
+
+    def k_value_demo_scenario(seed)
+      props = {
+        browser_language: "en-US",
+        logged_in: "false",
+        theme: "light",
+        author: "Alice",
+        plan: "Team"
+      }
+
+      {
+        pages: [ "/pricing" ],
+        landing_page: "/pricing?via=seed-k-demo",
+        engagement_page: "/pricing",
+        events: [
+          { name: "clicked_pricing_cta", properties: props.merge(page: "/pricing") }
+        ],
+        seed: seed
+      }
     end
 
     def create_engagement_event!(visit, started_at, scenario)

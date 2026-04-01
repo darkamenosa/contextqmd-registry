@@ -358,6 +358,7 @@ export default function LocationsPanel({
               displayBars={false}
               firstColumnLabel={firstColumnLabel}
               barColorTheme="cyan"
+              revealSecondaryMetricsOnHover
               testId="locations"
             />
           )}

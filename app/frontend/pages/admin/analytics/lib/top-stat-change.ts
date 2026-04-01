@@ -15,6 +15,8 @@ export function formatTopStatChangeValue(change: number): string {
 }
 
 export function topStatChangeTone(metric: string | undefined, change: number) {
+  if (change === 0) return "neutral"
+
   const inverted = INVERTED_TREND_METRICS.has(normalizeMetric(metric))
   return change > 0 !== inverted ? "good" : "bad"
 }

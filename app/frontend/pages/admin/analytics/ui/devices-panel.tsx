@@ -227,6 +227,7 @@ export default function DevicesPanel({
             displayBars={false}
             firstColumnLabel={firstColumnLabel}
             barColorTheme="cyan"
+            revealSecondaryMetricsOnHover
             testId="devices"
           />
           <div className="mt-auto flex justify-center pt-3">

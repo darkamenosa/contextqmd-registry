@@ -216,6 +216,7 @@ export default function PagesPanel({
             onRowClick={(item) => drillInto(String(item.name))}
             displayBars={false}
             firstColumnLabel={firstColumnLabel}
+            revealSecondaryMetricsOnHover
             metricLabels={
               mode === "entry"
                 ? { visitors: "Unique Entrances" }
