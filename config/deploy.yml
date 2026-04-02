@@ -65,7 +65,7 @@ env:
 
     # Web server configuration - optimized for 2 vCPU, 4GB RAM
     WEB_CONCURRENCY: 2
-    RAILS_MAX_THREADS: 6
+    RAILS_MAX_THREADS: 3
 
 # Aliases for common commands.
 aliases:
