@@ -53,6 +53,7 @@ env:
 
     # Database configuration
     DB_HOST: contextqmd_registry-db
+    DB_POOL: 5
     APP_HOST: contextqmd.com
     INERTIA_SSR_URL: http://vite_ssr:13714
     CLOUDFLARE_ACCOUNT_ID: <%= ENV["CLOUDFLARE_ACCOUNT_ID"] %>
