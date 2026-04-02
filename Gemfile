@@ -6,8 +6,8 @@ gem "rails", "~> 8.1.2"
 gem "propshaft"
 # Use postgresql as the database for Active Record
 gem "pg", "~> 1.1"
-# Use the Falcon web server [https://github.com/socketry/falcon]
-gem "falcon"
+# Use the Puma web server [https://github.com/puma/puma]
+gem "puma", ">= 5.0"
 # Build JSON APIs with ease [https://github.com/rails/jbuilder]
 gem "jbuilder"
 
