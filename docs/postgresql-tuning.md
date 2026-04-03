@@ -47,6 +47,7 @@ Current production split:
 PgBouncer runs in `transaction` pooling mode with conservative limits for this
 host:
 
+- `auth_type = scram-sha-256`
 - `default_pool_size = 5`
 - `min_pool_size = 1`
 - `reserve_pool_size = 2`
@@ -57,6 +58,36 @@ host:
 Rails production config disables Active Record advisory locks so deploy-time
 tasks do not rely on session-level locks while running through the pooler, and
 it caps `statement_limit = 200` to match the PgBouncer prepared-statement cache.
+
+### First rollout and auth
+
+Two operational details matter here:
+
+- `kamal deploy` does not boot new accessories. `kamal setup` does, or you must
+  run `bin/kamal accessory boot pgbouncer --primary` yourself the first time.
+- This `edoburu/pgbouncer` image defaults to `auth_type = md5`. Our Postgres 18
+  role password is stored as `SCRAM-SHA-256`, so production PgBouncer must set
+  `AUTH_TYPE=scram-sha-256` or Rails connections will fail with `wrong password type`.
+
+Safe first-time PgBouncer rollout order:
+
+```bash
+bin/kamal accessory boot pgbouncer --primary
+bin/kamal deploy
+```
+
+If you change PgBouncer env or image later, use:
+
+```bash
+bin/kamal accessory reboot pgbouncer --primary
+```
+
+Quick verification after boot/reboot:
+
+```bash
+bin/kamal accessory logs pgbouncer --primary --lines=40
+curl -sS -o /dev/null -w '%{http_code} %{time_total}\n' https://contextqmd.com/up
+```
 
 ### Secret
 
