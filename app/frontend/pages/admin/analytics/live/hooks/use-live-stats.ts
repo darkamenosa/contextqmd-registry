@@ -6,6 +6,8 @@ import { sortInitialEvents } from "../lib/live-utils"
 import { liveStatsChannelIdentifier } from "../live-stats-channel"
 import type { LiveStats } from "../types"
 
+export { liveStatsChannelIdentifier }
+
 export function useLiveStats(
   initialStats: LiveStats,
   subscriptionToken?: string | null
