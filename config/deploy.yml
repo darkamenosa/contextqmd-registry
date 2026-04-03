@@ -67,7 +67,7 @@ env:
     JOB_CONCURRENCY: 2
 
     # Web server configuration - conservative starting point for 4 vCPU / 7.5 GiB RAM
-    WEB_CONCURRENCY: 2
+    WEB_CONCURRENCY: 3
     RAILS_MAX_THREADS: 3
 
 # Aliases for common commands.
