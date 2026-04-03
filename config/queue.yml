@@ -11,6 +11,10 @@ default: &default
       threads: 1
       processes: 1
       polling_interval: 0.5
+    - queues: "solid_queue_recurring"
+      threads: 1
+      processes: 1
+      polling_interval: 1
     - queues: "crawl_website"
       threads: 1
       processes: 1
