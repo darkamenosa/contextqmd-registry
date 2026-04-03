@@ -8,9 +8,7 @@ import {
   Globe,
   Plus,
   Search,
-  Server,
   Star,
-  Terminal,
   TrendingUp,
 } from "lucide-react"
 
@@ -73,39 +71,27 @@ npx -y contextqmd docs search "proxy" --library kamal`
 const features = [
   {
     icon: Download,
-    title: "Install Once, Search Locally",
+    title: "Install once, search forever",
     description:
-      "Download documentation packages to your machine. Search stays fast and offline — no API calls per query.",
+      "Docs live on your machine after install. No network needed, no waiting on remote APIs.",
   },
   {
     icon: Search,
-    title: "Hybrid Search with QMD",
+    title: "Search that actually works",
     description:
-      "Full-text and semantic search powered by QMD. Find the right docs instantly with BM25 + vector retrieval.",
-  },
-  {
-    icon: Server,
-    title: "CLI + MCP",
-    description:
-      "Use the standalone CLI in your terminal or add the MCP server to Claude, Cursor, Windsurf, and other MCP-compatible editors.",
-  },
-  {
-    icon: Globe,
-    title: "Free & Open Registry",
-    description:
-      "All documentation is freely accessible. No API keys needed for read operations. Submit your own libraries.",
+      "QMD combines keyword and semantic search. Find the right docs even when you don't know the exact name.",
   },
   {
     icon: BookOpen,
-    title: "Version-Aware Docs",
+    title: "Pin your version",
     description:
-      "Pin to a specific version or follow latest. Never get outdated docs mixed with your current stack.",
+      "Install React 19 docs and get React 19 results. No more mixing up APIs from different versions.",
   },
   {
-    icon: Terminal,
-    title: "Developer-First API",
+    icon: Globe,
+    title: "No API keys, no credits",
     description:
-      "Clean REST API for programmatic access. Resolve libraries, fetch manifests, and download compressed documentation bundles.",
+      "The registry is free and open. No sign-up to read, no rate limits on local searches.",
   },
 ]
 
@@ -276,13 +262,15 @@ export default function Home({
         <div className="mx-auto max-w-7xl px-4 pt-8 pb-6 sm:px-6 sm:pt-20 sm:pb-12 lg:px-8">
           <div className="mx-auto max-w-3xl text-center">
             <h1 className="text-3xl font-bold tracking-tight sm:text-6xl">
-              Local-first docs{" "}
-              <span className="text-muted-foreground">for your AI editor</span>
+              <span className="text-muted-foreground">
+                Your AI editor keeps
+              </span>{" "}
+              using the wrong docs
             </h1>
-            <p className="mx-auto mt-2 max-w-xl text-base/relaxed text-muted-foreground sm:mt-4 sm:text-lg/relaxed">
-              Install documentation packages locally from the CLI or your MCP
-              client. Search offline with hybrid retrieval, version-pinned and
-              always available.
+            <p className="mx-auto mt-3 max-w-xl text-base/relaxed text-muted-foreground sm:mt-5 sm:text-lg/relaxed">
+              ContextQMD installs documentation to your machine so your AI tools
+              always have the right version. No API keys, no credits, works
+              offline.
             </p>
 
             {/* Search bar */}
@@ -385,54 +373,35 @@ export default function Home({
                 Quick Start
               </Badge>
               <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                Start in your terminal or editor
+                One command to get started
               </h2>
               <p className="mt-4 text-muted-foreground">
-                Use the CLI package `contextqmd` for terminal workflows, or add
-                `contextqmd-mcp` to Claude Desktop, Cursor, Windsurf, and other
-                MCP-compatible tools.
+                Install docs from the terminal with{" "}
+                <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                  contextqmd
+                </code>
+                , or add the MCP server to Claude Code, Cursor, Windsurf, and
+                other editors.
               </p>
               <div className="mt-6 space-y-3 text-sm">
                 <div className="flex items-start gap-3">
                   <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                     1
                   </div>
-                  <span>
-                    Search the registry and install docs with `contextqmd`
-                  </span>
+                  <span>Search and install docs from the registry</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                     2
                   </div>
-                  <span>
-                    Search and read installed docs locally with{" "}
-                    <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
-                      contextqmd docs search
-                    </code>{" "}
-                    and{" "}
-                    <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
-                      contextqmd docs get
-                    </code>
-                  </span>
+                  <span>Search installed docs locally, offline</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                     3
                   </div>
                   <span>
-                    Add{" "}
-                    <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
-                      contextqmd-mcp
-                    </code>{" "}
-                    to your editor if you want MCP tools like{" "}
-                    <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
-                      install_docs
-                    </code>{" "}
-                    and{" "}
-                    <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
-                      search_docs
-                    </code>
+                    Or add the MCP server to your editor for automatic context
                   </span>
                 </div>
               </div>
@@ -450,14 +419,14 @@ export default function Home({
         <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-24 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              What you get
+              Why developers use it
             </h2>
             <p className="mt-4 text-muted-foreground">
-              A documentation package manager with a standalone CLI and an MCP
-              server, both backed by the same open registry.
+              Think of it like npm for docs. Install what you need, search it
+              locally, and your AI editor always has the right context.
             </p>
           </div>
-          <div className="mt-10 grid gap-4 sm:mt-16 sm:gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-10 grid gap-4 sm:mt-16 sm:gap-6 md:grid-cols-2">
             {features.map((feature) => (
               <article
                 key={feature.title}
@@ -487,11 +456,11 @@ export default function Home({
         <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-24 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              Try it now
+              One command away
             </h2>
             <p className="mt-4 text-lg text-muted-foreground">
-              Install a library in one command. Give your AI coding tools the
-              context they need.
+              Next time your AI writes code against the wrong API, you&apos;ll
+              know what to do.
             </p>
             <div className="mx-auto mt-6 max-w-md text-left">
               <CodeWindow
