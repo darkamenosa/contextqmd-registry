@@ -9,7 +9,8 @@ module Analytics::InternalPaths
 
   TRACKER_ONLY_PREFIXES = [
     "/admin",
-    "/.well-known"
+    "/.well-known",
+    "/favicon"
   ].freeze
 
   SERVER_ONLY_PREFIXES = [
@@ -22,6 +23,7 @@ module Analytics::InternalPaths
   ].freeze
 
   REPORT_ONLY_PREFIXES = [
+    "/favicon",
     "/cable",
     "/rails/",
     "/assets/",

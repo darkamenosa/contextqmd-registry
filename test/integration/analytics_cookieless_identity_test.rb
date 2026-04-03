@@ -202,6 +202,23 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  test "server-side tracking excludes favicon proxy requests" do
+    perform_analytics_jobs do
+      assert_no_difference -> { Ahoy::Visit.count } do
+        assert_no_difference -> { Ahoy::Event.count } do
+          with_stubbed_favicon_fetch(
+            body: "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>",
+            headers: { "content-type" => [ "image/svg+xml" ] }
+          ) do
+            get "/favicon/sources/ChatGPT", headers: BROWSER_HEADERS
+          end
+        end
+      end
+    end
+
+    assert_response :success
+  end
+
   test "first-party pageview tracking includes authenticated app dashboard pages" do
     identity, account, = create_tenant(
       email: "analytics-dashboard-#{SecureRandom.hex(4)}@example.com",
@@ -685,6 +702,14 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
   end
 
   private
+    def with_stubbed_favicon_fetch(result)
+      original = Analytics::SourceFavicon.method(:fetch)
+      Analytics::SourceFavicon.singleton_class.send(:define_method, :fetch) { |_source| result }
+      yield
+    ensure
+      Analytics::SourceFavicon.singleton_class.send(:define_method, :fetch, original)
+    end
+
     def bootstrap_and_track_pageview(path, title:, headers: BROWSER_HEADERS, referrer: "", session: self)
       session.get path, headers: headers
     end
