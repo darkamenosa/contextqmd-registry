@@ -1,6 +1,7 @@
 import { Link, usePage } from "@inertiajs/react"
 import { ChevronRight, type LucideIcon } from "lucide-react"
 
+import type { ShellLinkPrefetchProps } from "@/lib/shell-prefetch"
 import {
   Collapsible,
   CollapsibleContent,
@@ -64,9 +65,11 @@ function isGroupActive(path: string, item: NavItem): boolean {
 export function NavMain({
   label,
   items,
+  linkPropsForUrl,
 }: {
   label?: string
   items: NavItem[]
+  linkPropsForUrl?: (url: string) => Partial<ShellLinkPrefetchProps>
 }) {
   const { url: currentUrl } = usePage()
   const path = normalizePath(currentUrl)
@@ -105,7 +108,12 @@ export function NavMain({
                       return item.items.map((subItem) => (
                         <SidebarMenuSubItem key={subItem.title}>
                           <SidebarMenuSubButton
-                            render={<Link href={subItem.url} />}
+                            render={
+                              <Link
+                                href={subItem.url}
+                                {...(linkPropsForUrl?.(subItem.url) ?? {})}
+                              />
+                            }
                             isActive={isActive(subItem.url, activeSubItemUrl)}
                           >
                             <span>{subItem.title}</span>
@@ -128,7 +136,10 @@ export function NavMain({
                       rel="noopener noreferrer"
                     />
                   ) : (
-                    <Link href={item.url} />
+                    <Link
+                      href={item.url}
+                      {...(linkPropsForUrl?.(item.url) ?? {})}
+                    />
                   )
                 }
                 tooltip={item.title}

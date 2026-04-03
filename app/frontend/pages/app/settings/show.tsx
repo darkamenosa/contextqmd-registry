@@ -4,6 +4,7 @@ import type { SharedProps } from "@/types"
 import { Info } from "lucide-react"
 
 import { withAccountScope } from "@/lib/account-scope"
+import { ALL_APP_SHELL_CACHE_TAGS } from "@/lib/app-shell-prefetch"
 import { userInitials } from "@/lib/user-initials"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -63,7 +64,9 @@ function ProfileSection({ name, email }: { name: string; email: string }) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     transform((data) => ({ settings: data }))
-    patch(withAccountScope(url, "/app/settings"))
+    patch(withAccountScope(url, "/app/settings"), {
+      invalidateCacheTags: [...ALL_APP_SHELL_CACHE_TAGS],
+    })
   }
 
   const initials = userInitials(name)
@@ -119,6 +122,7 @@ function PasswordSection() {
     e.preventDefault()
     transform((data) => ({ settings: data }))
     patch(withAccountScope(url, "/app/settings"), {
+      invalidateCacheTags: [...ALL_APP_SHELL_CACHE_TAGS],
       onSuccess: () => reset(),
     })
   }

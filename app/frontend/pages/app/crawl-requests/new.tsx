@@ -2,6 +2,7 @@ import type { ComponentProps, ComponentType, FormEvent } from "react"
 import { Head, useForm, usePage } from "@inertiajs/react"
 import { BookOpen } from "lucide-react"
 
+import { appShellCacheTags } from "@/lib/app-shell-prefetch"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -139,7 +140,9 @@ export default function AppCrawlRequestsNew() {
         url: data.url.trim(),
       },
     }))
-    post(createPath)
+    post(createPath, {
+      invalidateCacheTags: appShellCacheTags("/app/dashboard"),
+    })
   }
 
   return (

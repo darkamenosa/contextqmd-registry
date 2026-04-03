@@ -9,6 +9,7 @@ import {
 } from "lucide-react"
 
 import { withAccountScope, withCurrentAccountScope } from "@/lib/account-scope"
+import { prefetchAppShellPage } from "@/lib/app-shell-prefetch"
 import { currentUserSummary } from "@/lib/current-user"
 import {
   DropdownMenu,
@@ -33,11 +34,23 @@ export function NavUser() {
   const { isMobile } = useSidebar()
   const scopedPath = (path: string) =>
     withAccountScope(page.url, path, summary.accountId)
+  const settingsPath = scopedPath("/app/settings")
+  const accessTokensPath = withCurrentAccountScope(
+    page.url,
+    "/app/access_tokens"
+  )
+
+  function handleMenuOpenChange(open: boolean) {
+    if (!open) return
+
+    prefetchAppShellPage(settingsPath)
+    prefetchAppShellPage(accessTokensPath)
+  }
 
   return (
     <SidebarMenu>
       <SidebarMenuItem>
-        <DropdownMenu>
+        <DropdownMenu onOpenChange={handleMenuOpenChange}>
           <DropdownMenuTrigger
             render={
               <SidebarMenuButton
@@ -73,19 +86,11 @@ export function NavUser() {
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem
-                onClick={() => router.visit(scopedPath("/app/settings"))}
-              >
+              <DropdownMenuItem onClick={() => router.visit(settingsPath)}>
                 <UserCircle />
                 Settings
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() =>
-                  router.visit(
-                    withCurrentAccountScope(page.url, "/app/access_tokens")
-                  )
-                }
-              >
+              <DropdownMenuItem onClick={() => router.visit(accessTokensPath)}>
                 <KeyRound />
                 Access Tokens
               </DropdownMenuItem>

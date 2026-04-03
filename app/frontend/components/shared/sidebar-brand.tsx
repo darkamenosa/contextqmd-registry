@@ -1,6 +1,7 @@
 import { Link } from "@inertiajs/react"
 import { Command } from "lucide-react"
 
+import type { ShellLinkPrefetchProps } from "@/lib/shell-prefetch"
 import {
   SidebarMenu,
   SidebarMenuButton,
@@ -10,14 +11,15 @@ import {
 interface SidebarBrandProps {
   href: string
   subtitle: string
+  linkProps?: Partial<ShellLinkPrefetchProps>
 }
 
-export function SidebarBrand({ href, subtitle }: SidebarBrandProps) {
+export function SidebarBrand({ href, subtitle, linkProps }: SidebarBrandProps) {
   return (
     <SidebarMenu>
       <SidebarMenuItem>
         <SidebarMenuButton
-          render={<Link href={href} />}
+          render={<Link href={href} {...(linkProps ?? {})} />}
           size="lg"
           className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
         >

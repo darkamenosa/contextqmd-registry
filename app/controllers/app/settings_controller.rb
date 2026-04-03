@@ -3,6 +3,23 @@
 module App
   class SettingsController < BaseController
     def show
+      last_modified = [
+        Current.account.updated_at,
+        Current.identity.updated_at,
+        Current.user.updated_at
+      ].compact.max
+
+      return unless stale_private_inertia_page?(
+        etag: [
+          "app-settings",
+          Current.account.cache_key_with_version,
+          Current.identity.cache_key_with_version,
+          Current.user.cache_key_with_version,
+          Current.identity.password_set_by_user?
+        ],
+        last_modified: last_modified
+      )
+
       render inertia: "app/settings/show", props: {
         name: Current.user.name,
         email: Current.identity.email,

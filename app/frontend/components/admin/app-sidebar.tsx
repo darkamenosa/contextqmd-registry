@@ -11,6 +11,7 @@ import {
   Zap,
 } from "lucide-react"
 
+import { adminShellPrefetchProps } from "@/lib/admin-shell-prefetch"
 import {
   Sidebar,
   SidebarContent,
@@ -94,9 +95,20 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
         <TeamSwitcher />
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={navOverview} />
-        <NavMain label="Analytics" items={navAnalytics} />
-        <NavMain label="System" items={navSystem} />
+        <NavMain
+          items={navOverview}
+          linkPropsForUrl={adminShellPrefetchProps}
+        />
+        <NavMain
+          label="Analytics"
+          items={navAnalytics}
+          linkPropsForUrl={adminShellPrefetchProps}
+        />
+        <NavMain
+          label="System"
+          items={navSystem}
+          linkPropsForUrl={adminShellPrefetchProps}
+        />
       </SidebarContent>
       <SidebarFooter>
         <NavUser />

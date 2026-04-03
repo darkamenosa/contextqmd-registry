@@ -3,6 +3,7 @@ import type { SharedProps } from "@/types"
 import { ArrowLeft, EllipsisVertical, LogOut, UserCircle } from "lucide-react"
 
 import { withAccountScope } from "@/lib/account-scope"
+import { prefetchAppShellPage } from "@/lib/app-shell-prefetch"
 import { currentUserSummary } from "@/lib/current-user"
 import {
   DropdownMenu,
@@ -27,11 +28,20 @@ export function NavUser() {
   const { isMobile } = useSidebar()
   const appPath = (path: string) =>
     withAccountScope(page.url, path, summary.accountId)
+  const appSettingsPath = appPath("/app/settings")
+  const appDashboardPath = appPath("/app/dashboard")
+
+  function handleMenuOpenChange(open: boolean) {
+    if (!open || !summary.hasAccount) return
+
+    prefetchAppShellPage(appSettingsPath)
+    prefetchAppShellPage(appDashboardPath)
+  }
 
   return (
     <SidebarMenu>
       <SidebarMenuItem>
-        <DropdownMenu>
+        <DropdownMenu onOpenChange={handleMenuOpenChange}>
           <DropdownMenuTrigger
             render={
               <SidebarMenuButton
@@ -70,13 +80,13 @@ export function NavUser() {
               <>
                 <DropdownMenuGroup>
                   <DropdownMenuItem
-                    onClick={() => router.visit(appPath("/app/settings"))}
+                    onClick={() => router.visit(appSettingsPath)}
                   >
                     <UserCircle />
                     Settings
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    onClick={() => router.visit(appPath("/app"))}
+                    onClick={() => router.visit(appDashboardPath)}
                   >
                     <ArrowLeft />
                     Back to App

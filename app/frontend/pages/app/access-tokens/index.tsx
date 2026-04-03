@@ -4,6 +4,7 @@ import type { AccessToken, PaginationData } from "@/types"
 import { Check, Copy, KeyRound, Plus, Trash2 } from "lucide-react"
 
 import { withCurrentAccountScope } from "@/lib/account-scope"
+import { appShellCacheTags } from "@/lib/app-shell-prefetch"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -115,6 +116,9 @@ function CreateTokenDialog({ className = "" }: { className?: string }) {
     e.preventDefault()
     transform((data) => ({ access_token: data }))
     post(withCurrentAccountScope(url, "/app/access_tokens"), {
+      invalidateCacheTags: appShellCacheTags(
+        withCurrentAccountScope(url, "/app/access_tokens")
+      ),
       onSuccess: () => {
         reset()
         setOpen(false)
@@ -199,6 +203,9 @@ function RevokeTokenDialog({
 
   function handleRevoke() {
     destroy(withCurrentAccountScope(url, `/app/access_tokens/${token.id}`), {
+      invalidateCacheTags: appShellCacheTags(
+        withCurrentAccountScope(url, "/app/access_tokens")
+      ),
       onSuccess: () => onOpenChange(false),
     })
   }

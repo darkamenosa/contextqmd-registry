@@ -3,6 +3,7 @@ import type { SharedProps } from "@/types"
 import { LayoutDashboard, Plus } from "lucide-react"
 
 import { withAccountScope } from "@/lib/account-scope"
+import { appShellPrefetchProps } from "@/lib/app-shell-prefetch"
 import {
   Sidebar,
   SidebarContent,
@@ -40,7 +41,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
         <TeamSwitcher />
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={navMain} />
+        <NavMain items={navMain} linkPropsForUrl={appShellPrefetchProps} />
       </SidebarContent>
       <SidebarFooter>
         <NavUser />
