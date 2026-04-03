@@ -17,6 +17,7 @@ module Admin
         DEFAULT_LIMIT = 100
         MAX_LIMIT = 500
         MAX_SEARCH_LEN = 100
+        DASHBOARD_CARD_LIMIT = 9
         ALLOWED_PERIODS = %w[realtime 24h day 7d 28d 91d month 6mo 12mo year all custom].freeze
 
         # Pagination and search helpers
@@ -88,10 +89,10 @@ module Admin
           payload = {
             top_stats: top_stats,
             main_graph: main_graph_payload(query.with_options(metric: graph_metric, interval: graph_interval)),
-            sources: sources_payload(query.with_option(:mode, sources_mode)),
-            pages: pages_payload(query.with_option(:mode, pages_mode)),
-            locations: locations_payload(query.with_option(:mode, locations_mode)),
-            devices: devices_payload(query.with_option(:mode, devices_mode)),
+            sources: sources_payload(query.with_option(:mode, sources_mode), limit: DASHBOARD_CARD_LIMIT, page: 1),
+            pages: pages_payload(query.with_option(:mode, pages_mode), limit: DASHBOARD_CARD_LIMIT, page: 1),
+            locations: locations_payload(query.with_option(:mode, locations_mode), limit: DASHBOARD_CARD_LIMIT, page: 1),
+            devices: devices_payload(query.with_option(:mode, devices_mode), limit: DASHBOARD_CARD_LIMIT, page: 1),
             ui: {
               graph_metric: graph_metric,
               graph_interval: graph_interval,
@@ -109,14 +110,16 @@ module Admin
           if behaviors_mode.present?
             payload[:behaviors] =
               if behaviors_mode == "visitors"
-                profiles_payload(query)
+                profiles_payload(query, limit: DASHBOARD_CARD_LIMIT, page: 1)
               else
                 behaviors_payload(
                   query.with_options(
                     mode: behaviors_mode,
                     funnel: requested_behaviors_funnel,
                     property: behaviors_mode == "props" ? requested_behaviors_property : nil
-                  ).compact
+                  ).compact,
+                  limit: DASHBOARD_CARD_LIMIT,
+                  page: 1
                 )
               end
           else

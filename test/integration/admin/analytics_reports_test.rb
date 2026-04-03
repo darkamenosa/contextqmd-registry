@@ -512,6 +512,53 @@ class Admin::AnalyticsReportsTest < ActionDispatch::IntegrationTest
     Current.reset
   end
 
+  test "reports shell limits booted panel payloads to card-sized result sets" do
+    staff_identity, = create_tenant(
+      email: "staff-reports-card-limit-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Reports Card Limit"
+    )
+    staff_identity.update!(staff: true)
+    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+
+    12.times do |index|
+      visit = Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: SecureRandom.hex(16),
+        analytics_site: site,
+        browser: "Browser #{index}",
+        browser_version: "1.#{index}",
+        utm_source: "source-#{index}",
+        utm_medium: "social",
+        started_at: (index + 1).minutes.ago.change(usec: 0)
+      )
+
+      Ahoy::Event.create!(
+        visit: visit,
+        analytics_site: site,
+        name: "pageview",
+        properties: { page: "/page-#{index}" },
+        time: index.minutes.ago.change(usec: 0)
+      )
+    end
+
+    sign_in(staff_identity)
+
+    get reports_path_for(site), headers: INERTIA_HEADERS
+
+    assert_response :success
+
+    boot = JSON.parse(response.body).fetch("props").fetch("boot")
+
+    assert_equal 9, boot.fetch("sources").fetch("results").length
+    assert_equal true, boot.fetch("sources").fetch("meta").fetch("hasMore")
+    assert_equal 9, boot.fetch("pages").fetch("results").length
+    assert_equal true, boot.fetch("pages").fetch("meta").fetch("hasMore")
+    assert_equal 9, boot.fetch("devices").fetch("results").length
+    assert_equal true, boot.fetch("devices").fetch("meta").fetch("hasMore")
+  ensure
+    Current.reset
+  end
+
   test "reports shell infers device version mode from browser version filters" do
     staff_identity, = create_tenant(
       email: "staff-reports-device-versions-#{SecureRandom.hex(4)}@example.com",
