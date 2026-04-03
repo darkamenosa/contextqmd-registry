@@ -26,14 +26,39 @@ export interface NavItem {
   items?: { title: string; url: string }[]
 }
 
-function isActive(currentUrl: string, url: string): boolean {
-  const path = currentUrl.split("?")[0].split("#")[0]
+function normalizePath(currentUrl: string): string {
+  return currentUrl.split("?")[0].split("#")[0]
+}
+
+function isPathMatch(path: string, url: string): boolean {
   return path === url || path.startsWith(url + "/")
 }
 
-function isGroupActive(currentUrl: string, item: NavItem): boolean {
-  if (item.url !== "#" && isActive(currentUrl, item.url)) return true
-  return item.items?.some((sub) => isActive(currentUrl, sub.url)) ?? false
+function mostSpecificMatch<T extends { url: string }>(
+  path: string,
+  items: T[]
+): string | null {
+  const matches = items
+    .map((item) => item.url)
+    .filter((url) => url !== "#" && isPathMatch(path, url))
+
+  if (matches.length === 0) return null
+
+  return matches.sort((left, right) => right.length - left.length)[0]
+}
+
+function isActive(url: string, activeUrl: string | null): boolean {
+  return activeUrl === url
+}
+
+function isGroupActive(path: string, item: NavItem): boolean {
+  if (item.url !== "#" && isPathMatch(path, item.url)) return true
+
+  if (item.items?.length) {
+    return mostSpecificMatch(path, item.items) !== null
+  }
+
+  return false
 }
 
 export function NavMain({
@@ -44,6 +69,11 @@ export function NavMain({
   items: NavItem[]
 }) {
   const { url: currentUrl } = usePage()
+  const path = normalizePath(currentUrl)
+  const activeItemUrl = mostSpecificMatch(
+    path,
+    items.filter((item) => !item.items?.length)
+  )
 
   return (
     <SidebarGroup>
@@ -53,7 +83,7 @@ export function NavMain({
           item.items && item.items.length > 0 ? (
             <Collapsible
               key={item.title}
-              defaultOpen={item.isActive || isGroupActive(currentUrl, item)}
+              defaultOpen={item.isActive || isGroupActive(path, item)}
               className="group/collapsible"
             >
               <SidebarMenuItem>
@@ -66,16 +96,23 @@ export function NavMain({
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <SidebarMenuSub>
-                    {item.items.map((subItem) => (
-                      <SidebarMenuSubItem key={subItem.title}>
-                        <SidebarMenuSubButton
-                          render={<Link href={subItem.url} />}
-                          isActive={isActive(currentUrl, subItem.url)}
-                        >
-                          <span>{subItem.title}</span>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                    ))}
+                    {(() => {
+                      const activeSubItemUrl = mostSpecificMatch(
+                        path,
+                        item.items
+                      )
+
+                      return item.items.map((subItem) => (
+                        <SidebarMenuSubItem key={subItem.title}>
+                          <SidebarMenuSubButton
+                            render={<Link href={subItem.url} />}
+                            isActive={isActive(subItem.url, activeSubItemUrl)}
+                          >
+                            <span>{subItem.title}</span>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))
+                    })()}
                   </SidebarMenuSub>
                 </CollapsibleContent>
               </SidebarMenuItem>
@@ -95,7 +132,7 @@ export function NavMain({
                   )
                 }
                 tooltip={item.title}
-                isActive={isActive(currentUrl, item.url)}
+                isActive={item.isActive || isActive(item.url, activeItemUrl)}
               >
                 {item.icon && <item.icon />}
                 <span>{item.title}</span>
