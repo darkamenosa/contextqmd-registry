@@ -16,9 +16,19 @@ module Analytics::Pages
       all_visit_ids = grouped_visit_ids.values.flatten.uniq
       return {} if all_visit_ids.empty?
 
-      events_scope = Analytics::VisitScope.pageviews(range, query)
-      event_rows = events_scope.where(visit_id: all_visit_ids)
-        .pluck(Arel.sql("visit_id, time, COALESCE(NULLIF(split_part(ahoy_events.properties->>'page', '?', 1), ''), '(unknown)')"))
+      projected_metrics = Analytics::VisitPageEngagement.metrics_for_grouped_visits(grouped_visit_ids)
+      return projected_metrics if projected_metrics.any?
+
+      event_rows = Analytics::FactStore.events(
+        site: ::Analytics::Current.site_or_default,
+        range: range,
+        visit_ids: all_visit_ids,
+        names: [ "pageview" ],
+        order: :asc
+      ).map do |event|
+        page = Analytics::Urls.normalized_path_only(event.properties.to_h["page"]).presence || "(unknown)"
+        [ event.visit_id, event.time, page ]
+      end
 
       by_visit = Hash.new { |hash, key| hash[key] = [] }
       event_rows.each { |visit_id, time, page| by_visit[visit_id] << [ (time.respond_to?(:to_time) ? time.to_time : time), page ] }
@@ -26,9 +36,17 @@ module Analytics::Pages
 
       legacy_sum = Hash.new(0.0)
       legacy_count = Hash.new(0)
-      engagement_rows = Ahoy::Event
-        .where(name: "engagement", time: range, visit_id: all_visit_ids)
-        .pluck(Arel.sql("visit_id, time, COALESCE(NULLIF(split_part(ahoy_events.properties->>'page', '?', 1), ''), '(unknown)'), (ahoy_events.properties->>'engaged_ms'), (ahoy_events.properties->>'scroll_depth')"))
+      engagement_rows = Analytics::FactStore.events(
+        site: ::Analytics::Current.site_or_default,
+        range: range,
+        visit_ids: all_visit_ids,
+        names: [ "engagement" ],
+        order: :asc
+      ).map do |event|
+        properties = event.properties.to_h
+        page = Analytics::Urls.normalized_path_only(properties["page"]).presence || "(unknown)"
+        [ event.visit_id, event.time, page, properties["engaged_ms"], properties["scroll_depth"] ]
+      end
 
       engaged_pages_by_visit = Hash.new { |hash, key| hash[key] = Set.new }
       engagement_rows.each do |visit_id, _time, page, _engaged_ms, _scroll|

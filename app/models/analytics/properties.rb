@@ -28,6 +28,22 @@ module Analytics::Properties
       configured + (discovered - configured)
     end
 
+    def available_keys_for_visits(visit_ids:, range:, goal: nil, names: nil, exclude_names: nil, site: ::Analytics::Current.site_or_default)
+      configured = configured_keys(site)
+      discovered = normalized_keys(
+        Analytics::FactStore.property_keys(
+          site:,
+          visit_ids: visit_ids,
+          range: range,
+          goal: goal,
+          names: names,
+          exclude_names: exclude_names
+        )
+      )
+
+      configured + (discovered - configured)
+    end
+
     def available?(site: ::Analytics::Current.site_or_default)
       configured_keys(site).any? || discovered?(site:)
     end
@@ -37,38 +53,27 @@ module Analytics::Properties
     end
 
     def event_keys(events)
-      rows = Ahoy::Event.connection.select_values(<<~SQL.squish)
-        SELECT DISTINCT key
-        FROM (#{events.select("jsonb_object_keys(ahoy_events.properties) AS key").to_sql}) property_keys
-      SQL
-
-      rows
+      Array(events)
+        .flat_map { |event| event.properties.to_h.keys }
         .map(&:to_s)
         .reject(&:blank?)
         .reject { |key| RESERVED_KEYS.include?(key) }
+        .uniq
         .sort
     end
 
     def discovered_keys(site: ::Analytics::Current.site_or_default)
       return [] unless site.present?
-      return [] unless Ahoy::Event.table_exists?
 
-      event_keys(discoverable_events_for_site(site))
+      normalized_keys(Analytics::FactStore.property_keys(site:))
     rescue ActiveRecord::NoDatabaseError, ActiveRecord::StatementInvalid
       []
     end
 
     def discovered?(site: ::Analytics::Current.site_or_default)
       return false unless site.present?
-      return false unless Ahoy::Event.table_exists?
 
-      rows = Ahoy::Event.connection.select_values(<<~SQL.squish)
-        SELECT DISTINCT key
-        FROM (#{discoverable_events_for_site(site).select("jsonb_object_keys(ahoy_events.properties) AS key").to_sql}) property_keys
-        LIMIT 20
-      SQL
-
-      rows.any? { |key| key.present? && !RESERVED_KEYS.include?(key.to_s) }
+      Analytics::FactStore.property_keys(site:, limit: 20).any?
     rescue ActiveRecord::NoDatabaseError, ActiveRecord::StatementInvalid
       false
     end
@@ -129,10 +134,13 @@ module Analytics::Properties
         []
       end
 
-      def discoverable_events_for_site(site)
-        Ahoy::Event
-          .for_analytics_site(site)
-          .where.not(properties: [ nil, {} ])
+      def normalized_keys(keys)
+        Array(keys)
+          .map(&:to_s)
+          .reject(&:blank?)
+          .reject { |key| RESERVED_KEYS.include?(key) }
+          .uniq
+          .sort
       end
 
       def properties_column

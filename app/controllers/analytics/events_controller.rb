@@ -48,7 +48,7 @@ module Analytics
         time ||= Time.zone.at(event["time"].to_f) rescue nil
 
         options = {
-          id: event["id"],
+          id: event["id"].presence || event["event_id"].presence,
           time: time
         }
         ahoy.track event["name"], event["properties"], options

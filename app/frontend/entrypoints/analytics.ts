@@ -26,6 +26,21 @@ interface AnalyticsConfig {
   debug?: boolean
 }
 
+type QueuedAnalyticsEvent = {
+  id: string
+  name: string
+  site_token?: string
+  properties: {
+    page: string
+    url: string
+    title: string
+    referrer: string
+    screen_size: string
+    [key: string]: unknown
+  }
+  time: number
+}
+
 type EventContext = {
   page: string
   url: string
@@ -65,10 +80,15 @@ declare global {
 }
 
 class StandaloneAnalytics {
+  private static readonly EVENT_BATCH_SIZE = 20
+  private static readonly EVENT_FLUSH_DELAY_MS = 1000
+
   private lastTrackedHref: string | null = null
   // Dedup key for pageviews: pathname + search (or + hash if hashBasedRouting)
   private lastTrackedPageKey: string | null = null
   private config: AnalyticsConfig
+  private pendingEvents: QueuedAnalyticsEvent[] = []
+  private flushTimer: ReturnType<typeof setTimeout> | null = null
 
   // Engagement tracking state (plausible-like)
   private listeningOnEngagement = false
@@ -172,6 +192,7 @@ class StandaloneAnalytics {
 
     // Listen for navigation events (works with both regular links and Inertia)
     this.setupNavigationListener()
+    this.setupFlushListeners()
 
     // Engagement and auto-capture listeners
     this.initEngagement()
@@ -349,7 +370,8 @@ class StandaloneAnalytics {
     if (typeof window === "undefined") return
     if (this.shouldExcludeEventPage(properties.page)) return
 
-    const event = {
+    const event: QueuedAnalyticsEvent = {
+      id: this.generateEventId(),
       name: properties.name,
       site_token: this.config.siteToken,
       properties: {
@@ -375,25 +397,13 @@ class StandaloneAnalytics {
       }
     }
 
-    // Prefer JSON + CSRF header via fetch keepalive for predictable browser
-    // behavior across Safari/WebKit and easier end-to-end testing.
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    }
-    const csrfToken = this.getCSRFToken()
-    if (csrfToken) headers["X-CSRF-Token"] = csrfToken
+    this.pendingEvents.push(event)
 
-    fetch(this.config.eventsEndpoint, {
-      method: "POST",
-      headers,
-      // Privacy-first mode: the browser does not own analytics identity.
-      // Ahoy resolves cookieless visitor identity server-side from the request.
-      body: JSON.stringify({ events: [event] }),
-      credentials: "same-origin",
-      keepalive: true,
-    }).catch(() => {
-      /* never block app */
-    })
+    if (this.pendingEvents.length >= StandaloneAnalytics.EVENT_BATCH_SIZE) {
+      void this.flushEventQueue()
+    } else {
+      this.scheduleEventFlush()
+    }
   }
 
   private getCSRFToken(): string | null {
@@ -459,7 +469,17 @@ class StandaloneAnalytics {
       this.currentEngagementTime = this.getEngagementTime()
       this.runningEngagementStart = 0
       this.triggerEngagement()
+      if (document.visibilityState === "hidden") {
+        void this.flushEventQueue({ keepalive: true, drain: true })
+      }
     }
+  }
+
+  private onPageHide = (): void => {
+    this.currentEngagementTime = this.getEngagementTime()
+    this.runningEngagementStart = 0
+    this.triggerEngagement()
+    void this.flushEventQueue({ keepalive: true, drain: true })
   }
 
   private registerEngagementListeners(): void {
@@ -469,6 +489,10 @@ class StandaloneAnalytics {
       window.addEventListener("focus", this.onVisibilityChange)
       this.listeningOnEngagement = true
     }
+  }
+
+  private setupFlushListeners(): void {
+    window.addEventListener("pagehide", this.onPageHide)
   }
 
   private getEngagementTime(): number {
@@ -619,6 +643,87 @@ class StandaloneAnalytics {
     if (!normalizedName) return
 
     this.sendEvent(this.currentEventContext({ name: normalizedName }), props)
+  }
+
+  private scheduleEventFlush(): void {
+    if (this.flushTimer) return
+
+    this.flushTimer = setTimeout(() => {
+      this.flushTimer = null
+      void this.flushEventQueue()
+    }, StandaloneAnalytics.EVENT_FLUSH_DELAY_MS)
+  }
+
+  private clearScheduledFlush(): void {
+    if (!this.flushTimer) return
+
+    clearTimeout(this.flushTimer)
+    this.flushTimer = null
+  }
+
+  private async flushEventQueue(options?: {
+    keepalive?: boolean
+    drain?: boolean
+  }): Promise<void> {
+    if (this.pendingEvents.length === 0) return
+
+    this.clearScheduledFlush()
+    const keepalive = options?.keepalive ?? true
+
+    if (options?.drain) {
+      while (this.pendingEvents.length > 0) {
+        const events = this.pendingEvents.splice(
+          0,
+          StandaloneAnalytics.EVENT_BATCH_SIZE
+        )
+        await this.postEvents(events, { keepalive })
+      }
+    } else {
+      const events = this.pendingEvents.splice(
+        0,
+        StandaloneAnalytics.EVENT_BATCH_SIZE
+      )
+      await this.postEvents(events, { keepalive })
+    }
+
+    if (!options?.drain && this.pendingEvents.length > 0) {
+      this.scheduleEventFlush()
+    }
+  }
+
+  private async postEvents(
+    events: QueuedAnalyticsEvent[],
+    options?: { keepalive?: boolean }
+  ): Promise<void> {
+    // Prefer JSON + CSRF header via fetch keepalive for predictable browser
+    // behavior across Safari/WebKit and easier end-to-end testing.
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    }
+    const csrfToken = this.getCSRFToken()
+    if (csrfToken) headers["X-CSRF-Token"] = csrfToken
+
+    await fetch(this.config.eventsEndpoint, {
+      method: "POST",
+      headers,
+      // Privacy-first mode: the browser does not own analytics identity.
+      // Ahoy resolves cookieless visitor identity server-side from the request.
+      body: JSON.stringify({ events }),
+      credentials: "same-origin",
+      keepalive: options?.keepalive ?? true,
+    }).catch(() => {
+      /* never block app */
+    })
+  }
+
+  private generateEventId(): string {
+    if (typeof globalThis.crypto?.randomUUID === "function") {
+      return globalThis.crypto.randomUUID()
+    }
+
+    const now = Date.now().toString(36)
+    const random = Math.random().toString(36).slice(2, 12)
+    return `evt_${now}_${random}`
   }
 
   private getDeclarativeGoalEl(element: Element | null): Element | null {

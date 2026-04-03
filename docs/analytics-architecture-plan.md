@@ -198,11 +198,18 @@ The high-volume analytics facts should be treated as adapter-backed:
 Today they can stay in Postgres.
 Later they can move to ClickHouse behind `*::Postgres` and `*::Clickhouse` adapters.
 
+Recommended implementation split:
+
+- `Analytics::FactStore` for raw fact append + read operations needed by ingest, projections, live state, replay, specialized payloads, and visit/property filter evaluation
+- `Analytics::Storage` for adapter-backed reporting query objects
+- Postgres-backed read models such as visit summaries, page engagement, and rollups remain disposable derivatives
+
 Important: this is not a full-database swap. Postgres remains the control plane even if ClickHouse becomes the fact store.
 
 Recommended write-path rule:
 
 - facts are appended synchronously
+- browser-originated events should carry stable event ids so repeated deliveries are idempotent at the raw-fact layer
 - projections are derived asynchronously
 - live/dashboard tables are disposable read models
 - replay and rebuild must be safe
@@ -304,7 +311,7 @@ Add `analytics_site_id` to:
 - `ahoy_events`
 - `analytics_profiles`
 - `analytics_profile_keys`
-- `analytics_profile_sessions`
+- `analytics_visit_summaries`
 - `analytics_profile_summaries`
 - `analytics_goals`
 - `analytics_funnels`

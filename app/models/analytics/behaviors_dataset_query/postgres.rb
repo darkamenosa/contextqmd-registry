@@ -47,8 +47,13 @@ class Analytics::BehaviorsDatasetQuery::Postgres
         end
 
       visits = Analytics::VisitScope.visits(range, base_query)
-      events = property_events_scope(visits)
-      property_keys = Analytics::Properties.available_keys(events)
+      property_keys = Analytics::Properties.available_keys_for_visits(
+        visit_ids: visits.select(:id),
+        range: range,
+        goal: active_goal,
+        names: goal_event_names,
+        exclude_names: default_excluded_event_names
+      )
       active_property = query.property.presence
       active_property = property_keys.first unless property_keys.include?(active_property)
 
@@ -69,23 +74,23 @@ class Analytics::BehaviorsDatasetQuery::Postgres
         }
       end
 
-      value_expr = Analytics::Properties.event_property_value(active_property)
-      property_events = events.where(Analytics::Properties.event_property_exists(active_property))
-      unless query.goal_filter_applied?
-        property_events = Analytics::Properties.apply_event_filters(property_events, query.filter_clauses)
-      end
-      if search.present?
-        property_events = property_events.where(
-          Analytics::Properties.event_property_value_lower(active_property).matches(Analytics::Search.contains_pattern(search))
-        )
+      rows = Analytics::FactStore.property_breakdown(
+        site: ::Analytics::Current.site_or_default,
+        range: range,
+        visit_ids: visits.select(:id),
+        property: active_property,
+        goal: active_goal,
+        names: goal_event_names,
+        exclude_names: default_excluded_event_names,
+        property_filters: (query.goal_filter_applied? ? [] : query.filter_clauses),
+        search: search
+      )
+      if comparison_names.any?
+        rows.select! { |row| comparison_names.include?(row.value.to_s) }
       end
 
-      visitor_counts = property_events.group(value_expr).count("DISTINCT ahoy_visits.visitor_token")
-      total_counts = property_events.group(value_expr).count
-      if comparison_names.any?
-        visitor_counts.select! { |name, _| comparison_names.include?(name.to_s) }
-        total_counts.select! { |name, _| comparison_names.include?(name.to_s) }
-      end
+      visitor_counts = rows.each_with_object({}) { |row, counts| counts[row.value.to_s] = row.visitors.to_i }
+      total_counts = rows.each_with_object({}) { |row, counts| counts[row.value.to_s] = row.events.to_i }
 
       metrics_map =
         if query.goal_filter_applied?
@@ -101,7 +106,14 @@ class Analytics::BehaviorsDatasetQuery::Postgres
             }
           end
         else
-          total_visitors = property_events.distinct.count("ahoy_visits.visitor_token")
+          total_visitors = Analytics::FactStore.distinct_property_visitor_count(
+            site: ::Analytics::Current.site_or_default,
+            range: range,
+            visit_ids: visits.select(:id),
+            property: active_property,
+            exclude_names: default_excluded_event_names,
+            property_filters: query.filter_clauses
+          )
           total_visitors = 1 if total_visitors <= 0
           visitor_counts.keys.index_with do |name|
             {
@@ -169,24 +181,6 @@ class Analytics::BehaviorsDatasetQuery::Postgres
       end
     end
 
-    def property_events_scope(visits)
-      events = Ahoy::Event
-        .joins(:visit)
-        .merge(visits)
-        .where(time: range)
-        .where.not(properties: [ nil, {} ])
-
-      if query.goal_filter_applied?
-        if (goal = Analytics::Goals.configured(query.filter_value(:goal)))
-          Analytics::Goals.apply(events, goal)
-        else
-          events.where(name: query.filter_value(:goal))
-        end
-      else
-        events.where.not(name: [ "pageview", "engagement" ])
-      end
-    end
-
     def query_without_goal_or_properties
       @query_without_goal_or_properties ||= query.without_goal_or_properties(
         property_filter: ->(key) { Analytics::Properties.filter_key?(key) }
@@ -204,15 +198,17 @@ class Analytics::BehaviorsDatasetQuery::Postgres
       steps = funnel.normalized_steps
       return { funnels: names, active: { name: funnel.name, steps: [] } } if steps.empty?
 
-      event_rows = Ahoy::Event
-        .joins(:visit)
-        .merge(visits)
-        .where(time: range)
-        .pluck(Arel.sql("ahoy_events.visit_id, ahoy_events.time, ahoy_events.name, COALESCE(ahoy_events.properties->>'page', '')"))
+      event_rows = Analytics::FactStore.events(
+        site: ::Analytics::Current.site_or_default,
+        range: range,
+        visit_ids: visits.select(:id),
+        order: :asc
+      )
 
       by_visit = Hash.new { |hash, key| hash[key] = [] }
-      event_rows.each do |visit_id, time, name, page|
-        by_visit[visit_id] << [ (time.respond_to?(:to_time) ? time.to_time : time), name.to_s, page.to_s ]
+      event_rows.each do |event|
+        page = event.properties.to_h["page"].to_s
+        by_visit[event.visit_id] << [ (event.time.respond_to?(:to_time) ? event.time.to_time : event.time), event.name.to_s, page ]
       end
       by_visit.each_value { |events| events.sort_by!(&:first) }
 
@@ -413,6 +409,27 @@ class Analytics::BehaviorsDatasetQuery::Postgres
           metrics: %i[uniques total conversion_rate],
           meta: { has_more: false, skip_imported_reason: Analytics::Imports.skip_reason(query) }
         }
+      end
+    end
+
+    def active_goal
+      return unless query.goal_filter_applied?
+
+      @active_goal ||= Analytics::Goals.configured(query.filter_value(:goal))
+    end
+
+    def goal_event_names
+      return nil if active_goal.present?
+      return nil unless query.goal_filter_applied?
+
+      [ query.filter_value(:goal).to_s ]
+    end
+
+    def default_excluded_event_names
+      if query.goal_filter_applied?
+        nil
+      else
+        %w[pageview engagement]
       end
     end
 end

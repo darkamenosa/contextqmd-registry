@@ -79,17 +79,21 @@ class Analytics::PagesDatasetQuery::Postgres
     end
 
     def paginated_pages_payload
-      expression = "COALESCE(NULLIF(split_part(ahoy_events.properties->>'page', CHR(63), 1), ''), '(unknown)')"
-      relation = events
-      if pattern.present?
-        search_clause = "LOWER(COALESCE(NULLIF(split_part(ahoy_events.properties->>'page', CHR(63), 1), ''), '(unknown)')) LIKE ?"
-        relation = relation.where(search_clause, pattern)
+      return paginated_pages_rollup_payload if page_rollup_eligible?
+
+      relation = filtered_pages_relation
+      pageviews_by_page = relation.group(Arel.sql(page_expression)).count
+      grouped_visit_ids = nil
+
+      if pages_count_first_path?
+        counts = relation.group(Arel.sql(page_expression)).distinct.count("ahoy_visits.visitor_token")
+        Analytics::Pages.filter_groups!({}, counts, comparison_names, pageviews_by_page)
+      else
+        grouped_visit_ids = grouped_page_visit_ids(relation)
+        counts = Analytics::ReportMetrics.unique_counts_from_grouped_visit_ids(grouped_visit_ids, visits)
+        Analytics::Pages.filter_groups!(grouped_visit_ids, counts, comparison_names, pageviews_by_page)
       end
 
-      grouped_visit_ids = relation.group(Arel.sql(expression)).pluck(Arel.sql("#{expression}, ARRAY_AGG(DISTINCT ahoy_events.visit_id)")).to_h
-      counts = Analytics::ReportMetrics.unique_counts_from_grouped_visit_ids(grouped_visit_ids, visits)
-      pageviews_by_page = events.group(Arel.sql(expression)).count
-      Analytics::Pages.filter_groups!(grouped_visit_ids, counts, comparison_names, pageviews_by_page)
       total = Analytics::ReportMetrics.percentage_total_visitors(visits)
 
       sorted_names =
@@ -150,7 +154,7 @@ class Analytics::PagesDatasetQuery::Postgres
         }
       else
         paged_names, has_more = Analytics::Pagination.paginate_names(sorted_names, limit: limit, page: page)
-        page_visit_ids = grouped_visit_ids.slice(*paged_names)
+        page_visit_ids = grouped_visit_ids || grouped_page_visit_ids(relation, names: paged_names)
         entry_map = Analytics::Pages.entry_page_label_by_visit(visits, page_visit_ids)
         restricted = Analytics::Pages.restrict_visits_to_entry_page(page_visit_ids, entry_map)
         group_metrics = Analytics::ReportMetrics.calculate_group_metrics(restricted, range, query)
@@ -192,6 +196,100 @@ class Analytics::PagesDatasetQuery::Postgres
       end
     end
 
+    def paginated_pages_rollup_payload
+      counts = Analytics::SitePageHourlyRollup.counts_for(range: range, site: current_site, search: search)
+      pageviews_by_page = Analytics::SitePageHourlyRollup.pageviews_for(range: range, site: current_site, search: search)
+      Analytics::Pages.filter_groups!({}, counts, comparison_names, pageviews_by_page)
+
+      total = Analytics::ReportMetrics.percentage_total_visitors(visits)
+      sorted_names =
+        if order_by
+          metric, = order_by
+          case metric
+          when "percentage"
+            Analytics::Ordering.order_names(
+              counts: counts,
+              metrics_map: counts.keys.index_with { |name| { percentage: counts[name].to_f / total } },
+              order_by: order_by
+            )
+          when "pageviews"
+            Analytics::Ordering.order_names(counts: pageviews_by_page, metrics_map: {}, order_by: order_by)
+          else
+            Analytics::Ordering.order_names(counts: counts, metrics_map: {}, order_by: order_by)
+          end
+        else
+          Analytics::Ordering.order_names(counts: counts, metrics_map: {}, order_by: nil)
+        end
+
+      paged_names, has_more = Analytics::Pagination.paginate_names(sorted_names, limit: limit, page: page)
+      page_visit_ids = grouped_page_visit_ids(filtered_pages_relation, names: paged_names)
+      entry_map = Analytics::Pages.entry_page_label_by_visit(visits, page_visit_ids)
+      restricted = Analytics::Pages.restrict_visits_to_entry_page(page_visit_ids, entry_map)
+      group_metrics = Analytics::ReportMetrics.calculate_group_metrics(restricted, range, query)
+      tops = Analytics::Pages.time_on_page_and_scroll(range, query, page_visit_ids)
+
+      results = paged_names.map do |name|
+        visitors = counts[name]
+        {
+          name: name.to_s.presence || "(none)",
+          visitors: visitors,
+          percentage: (visitors.to_f / total).round(3),
+          pageviews: pageviews_by_page[name] || 0,
+          bounce_rate: group_metrics.dig(name, :bounce_rate),
+          visit_duration: group_metrics.dig(name, :visit_duration),
+          time_on_page: tops.dig(name, :time_on_page),
+          scroll_depth: tops.dig(name, :scroll_depth)
+        }
+      end
+
+      if query.with_imported?
+        imported = Analytics::Imports.pages_aggregates(range)
+        results.each do |row|
+          next unless (counts_row = imported[row[:name]])
+
+          row[:visitors] = row[:visitors].to_i + counts_row[:visitors].to_i
+          row[:pageviews] = row[:pageviews].to_i + counts_row[:pageviews].to_i
+        end
+      end
+
+      {
+        results: results,
+        metrics: %i[visitors percentage pageviews bounce_rate time_on_page scroll_depth],
+        meta: {
+          has_more: has_more,
+          skip_imported_reason: Analytics::Imports.skip_reason(query),
+          metric_labels: { percentage: "Percentage" }
+        }
+      }
+    end
+
+    def filtered_pages_relation
+      relation = events
+      if pattern.present?
+        relation = relation.where(Analytics::SqlExpression.lower_matches(page_expression, pattern))
+      end
+      relation
+    end
+
+    def page_expression
+      "COALESCE(NULLIF(split_part(ahoy_events.properties->>'page', CHR(63), 1), ''), '(unknown)')"
+    end
+
+    def grouped_page_visit_ids(relation, names: nil)
+      return {} if names == []
+
+      scoped = relation
+      scoped = scoped.where(Analytics::SqlExpression.in_list(page_expression, names)) unless names.nil?
+      scoped.group(Arel.sql(page_expression)).pluck(Arel.sql("#{page_expression}, ARRAY_AGG(DISTINCT ahoy_events.visit_id)")).to_h
+    end
+
+    def pages_count_first_path?
+      return false if goal.present?
+
+      metric = order_by&.first
+      !metric.in?(%w[bounce_rate visit_duration time_on_page scroll_depth])
+    end
+
     def seo_payload(paginated:)
       return seo_empty_payload if unsupported_seo_filters?
 
@@ -213,6 +311,8 @@ class Analytics::PagesDatasetQuery::Postgres
     end
 
     def paginated_entry_payload
+      return paginated_entry_summary_payload if visit_summary_eligible?
+
       base = visits
       present_scope = base.where.not(landing_page: nil).where.not(landing_page: "")
       raw_groups = present_scope.group(:landing_page).pluck(:landing_page, Arel.sql("ARRAY_AGG(ahoy_visits.id)"))
@@ -232,16 +332,20 @@ class Analytics::PagesDatasetQuery::Postgres
       missing_ids = base.where("landing_page IS NULL OR landing_page = ''").pluck(:id)
       missing_ids.concat(needs_derivation_ids)
       if missing_ids.any?
-        event_rows = Ahoy::Event
-          .where(name: "pageview", visit_id: missing_ids, time: range)
-          .pluck(Arel.sql("visit_id, time, COALESCE(NULLIF(split_part(ahoy_events.properties->>'page', '?', 1), ''), '(unknown)')"))
+        event_rows = Analytics::FactStore.pageviews(
+          site: current_site,
+          range: range,
+          visit_ids: missing_ids,
+          order: :asc
+        )
 
         first_page_by_visit = {}
-        event_rows.each do |visit_id, time, page_name|
-          previous = first_page_by_visit[visit_id]
-          time_value = time.respond_to?(:to_time) ? time.to_time : time
+        event_rows.each do |pageview|
+          page_name = pageview.page.to_s.split("?").first.presence || "(unknown)"
+          previous = first_page_by_visit[pageview.visit_id]
+          time_value = pageview.time.respond_to?(:to_time) ? pageview.time.to_time : pageview.time
           if previous.nil? || time_value < previous[0]
-            first_page_by_visit[visit_id] = [ time_value, page_name.to_s ]
+            first_page_by_visit[pageview.visit_id] = [ time_value, page_name.to_s ]
           end
         end
 
@@ -359,7 +463,121 @@ class Analytics::PagesDatasetQuery::Postgres
       end
     end
 
+    def paginated_entry_summary_payload
+      relation = filtered_visit_summaries(:entry_page)
+      visits_by_page = relation.group(:entry_page).count
+      grouped_visit_ids = nil
+
+      if goal.present?
+        grouped_visit_ids = grouped_summary_visit_ids(relation, :entry_page)
+        unique_visitors_by_page = Analytics::ReportMetrics.unique_counts_from_grouped_visit_ids(grouped_visit_ids, visits)
+        Analytics::Pages.filter_groups!(grouped_visit_ids, unique_visitors_by_page, comparison_names, visits_by_page)
+      else
+        unique_visitors_by_page = relation.group(:entry_page).distinct.count(:visitor_token)
+        Analytics::Pages.filter_groups!({}, unique_visitors_by_page, comparison_names, visits_by_page)
+      end
+
+      total = Analytics::ReportMetrics.percentage_total_visitors(visits)
+
+      if goal.present?
+        denominator_counts = Analytics::Pages.goal_denominator_counts(query, mode: mode, search: search)
+        conversions, conversion_rates = Analytics::ReportMetrics.conversions_and_rates(
+          grouped_visit_ids,
+          visits,
+          range,
+          query,
+          goal,
+          denominator_counts: denominator_counts
+        )
+        sorted_names = Analytics::Ordering.order_names_with_conversions(conversions: conversions, cr: conversion_rates, order_by: order_by)
+        paged_names, has_more = Analytics::Pagination.paginate_names(sorted_names, limit: limit, page: page)
+
+        results = paged_names.map do |name|
+          label = name.to_s.presence || "(none)"
+          {
+            name: label,
+            visitors: conversions[name] || 0,
+            conversion_rate: Analytics::ReportMetrics.goal_conversion_rate(conversions[name] || 0, denominator_counts[label])
+          }
+        end
+
+        {
+          results: results,
+          metrics: %i[visitors conversion_rate],
+          meta: {
+            has_more: has_more,
+            skip_imported_reason: Analytics::Imports.skip_reason(query),
+            metric_labels: { visitors: "Conversions", conversionRate: "Conversion Rate" }
+          }
+        }
+      else
+        sorted_names =
+          if order_by
+            metric, = order_by
+            case metric
+            when "percentage"
+              Analytics::Ordering.order_names(
+                counts: unique_visitors_by_page,
+                metrics_map: unique_visitors_by_page.keys.index_with { |name| { percentage: (unique_visitors_by_page[name].to_f / total) } },
+                order_by: order_by
+              )
+            when "visits"
+              Analytics::Ordering.order_names(counts: visits_by_page, metrics_map: {}, order_by: order_by)
+            when "bounce_rate", "visit_duration"
+              grouped_visit_ids ||= grouped_summary_visit_ids(relation, :entry_page)
+              metrics_all = Analytics::ReportMetrics.calculate_group_metrics(grouped_visit_ids, range, query)
+              Analytics::Ordering.order_names(
+                counts: unique_visitors_by_page,
+                metrics_map: unique_visitors_by_page.keys.index_with { |name| metrics_all[name] || {} },
+                order_by: order_by
+              )
+            else
+              Analytics::Ordering.order_names(counts: unique_visitors_by_page, metrics_map: {}, order_by: order_by)
+            end
+          else
+            Analytics::Ordering.order_names(counts: unique_visitors_by_page, metrics_map: {}, order_by: nil)
+          end
+
+        paged_names, has_more = Analytics::Pagination.paginate_names(sorted_names, limit: limit, page: page)
+        page_visit_ids = grouped_visit_ids ? grouped_visit_ids.slice(*paged_names) : grouped_summary_visit_ids(relation, :entry_page, names: paged_names)
+        group_metrics = Analytics::ReportMetrics.calculate_group_metrics(page_visit_ids, range, query)
+
+        results = paged_names.map do |name|
+          {
+            name: name.to_s.presence || "(none)",
+            visitors: unique_visitors_by_page[name] || 0,
+            percentage: ((unique_visitors_by_page[name] || 0).to_f / total).round(3),
+            visits: visits_by_page[name] || 0,
+            bounce_rate: group_metrics.dig(name, :bounce_rate),
+            visit_duration: group_metrics.dig(name, :visit_duration)
+          }
+        end
+
+        if query.with_imported?
+          imported = Analytics::Imports.entry_aggregates(range)
+          results.each do |row|
+            next unless (counts_row = imported[row[:name]])
+
+            row[:visitors] = row[:visitors].to_i + counts_row[:visitors].to_i
+            row[:visits] = row[:visits].to_i + counts_row[:entrances].to_i
+          end
+        end
+
+        {
+          results: results,
+          metrics: %i[visitors percentage visits bounce_rate visit_duration],
+          meta: {
+            has_more: has_more,
+            skip_imported_reason: Analytics::Imports.skip_reason(query),
+            metric_labels: { visits: "Total Entrances", percentage: "Percentage" }
+          }
+        }
+      end
+    end
+
     def paginated_exit_payload
+      return paginated_exit_summary_payload if visit_summary_eligible?
+
       expression = "COALESCE(NULLIF(split_part(ahoy_events.properties->>'page', '?', 1), ''), '(unknown)')"
       event_rows = events.pluck(Arel.sql("visit_id, time, #{expression}"))
       last_page_by_visit = {}
@@ -490,7 +708,126 @@ class Analytics::PagesDatasetQuery::Postgres
       end
     end
 
+    def paginated_exit_summary_payload
+      relation = filtered_visit_summaries(:exit_page, require_pageviews: true)
+      grouped_visit_ids = nil
+
+      if goal.present?
+        grouped_visit_ids = grouped_summary_visit_ids(relation, :exit_page)
+        unique_visitors_by_page = Analytics::ReportMetrics.unique_counts_from_grouped_visit_ids(grouped_visit_ids, visits)
+        exits_by_page = grouped_visit_ids.transform_values(&:size)
+        Analytics::Pages.filter_groups!(grouped_visit_ids, unique_visitors_by_page, comparison_names, exits_by_page)
+      else
+        unique_visitors_by_page = relation.group(:exit_page).distinct.count(:visitor_token)
+        exits_by_page = relation.group(:exit_page).count
+        Analytics::Pages.filter_groups!({}, unique_visitors_by_page, comparison_names, exits_by_page)
+      end
+
+      total = Analytics::ReportMetrics.percentage_total_visitors(visits)
+      pageviews_by_page = events.group(Arel.sql(page_expression)).count
+      exit_rate_by_page = {}
+      exits_by_page.each do |name, exits|
+        pageviews = pageviews_by_page[name] || 0
+        exit_rate_by_page[name] = pageviews > 0 ? (exits.to_f / pageviews.to_f * 100.0).round(2) : 0.0
+      end
+      exit_rate_by_page.select! { |name, _| comparison_names.include?(Analytics::Pages.formatted_name(name)) } if comparison_names.any?
+
+      if goal.present?
+        denominator_counts = Analytics::Pages.goal_denominator_counts(query, mode: mode, search: search)
+        conversions, conversion_rates = Analytics::ReportMetrics.conversions_and_rates(
+          grouped_visit_ids,
+          visits,
+          range,
+          query,
+          goal,
+          denominator_counts: denominator_counts
+        )
+        sorted_names = Analytics::Ordering.order_names_with_conversions(conversions: conversions, cr: conversion_rates, order_by: order_by)
+        paged_names, has_more = Analytics::Pagination.paginate_names(sorted_names, limit: limit, page: page)
+
+        results = paged_names.map do |name|
+          label = name.to_s.presence || "(none)"
+          {
+            name: label,
+            visitors: conversions[name] || 0,
+            conversion_rate: Analytics::ReportMetrics.goal_conversion_rate(conversions[name] || 0, denominator_counts[label])
+          }
+        end
+
+        {
+          results: results,
+          metrics: %i[visitors conversion_rate],
+          meta: {
+            has_more: has_more,
+            skip_imported_reason: Analytics::Imports.skip_reason(query),
+            metric_labels: { visitors: "Conversions", conversionRate: "Conversion Rate" }
+          }
+        }
+      else
+        sorted_names =
+          if order_by
+            metric, = order_by
+            case metric
+            when "percentage"
+              Analytics::Ordering.order_names(
+                counts: unique_visitors_by_page,
+                metrics_map: unique_visitors_by_page.keys.index_with { |name| { percentage: (unique_visitors_by_page[name].to_f / total) } },
+                order_by: order_by
+              )
+            when "visits"
+              Analytics::Ordering.order_names(counts: exits_by_page, metrics_map: {}, order_by: order_by)
+            when "exit_rate"
+              Analytics::Ordering.order_names(
+                counts: unique_visitors_by_page,
+                metrics_map: exit_rate_by_page.transform_values { |value| { exit_rate: value } },
+                order_by: order_by
+              )
+            else
+              Analytics::Ordering.order_names(counts: unique_visitors_by_page, metrics_map: {}, order_by: order_by)
+            end
+          else
+            Analytics::Ordering.order_names(counts: unique_visitors_by_page, metrics_map: {}, order_by: nil)
+          end
+
+        paged_names, has_more = Analytics::Pagination.paginate_names(sorted_names, limit: limit, page: page)
+        results = paged_names.map do |name|
+          {
+            name: name.to_s.presence || "(none)",
+            visitors: unique_visitors_by_page[name] || 0,
+            percentage: ((unique_visitors_by_page[name] || 0).to_f / total).round(3),
+            visits: exits_by_page[name] || 0,
+            exit_rate: exit_rate_by_page[name] || 0.0
+          }
+        end
+
+        if query.with_imported?
+          imported = Analytics::Imports.exit_aggregates(range)
+          results.each do |row|
+            next unless (counts_row = imported[row[:name]])
+
+            total_exits = row[:visits].to_i + counts_row[:exits].to_i
+            total_pageviews = (pageviews_by_page[row[:name]] || 0) + counts_row[:pageviews].to_i
+            row[:visitors] = row[:visitors].to_i + counts_row[:visitors].to_i
+            row[:visits] = total_exits
+            row[:exit_rate] = total_pageviews.positive? ? (total_exits.to_f / total_pageviews.to_f * 100.0).round(2) : row[:exit_rate]
+          end
+        end
+
+        {
+          results: results,
+          metrics: %i[visitors percentage visits exit_rate],
+          meta: {
+            has_more: has_more,
+            skip_imported_reason: Analytics::Imports.skip_reason(query),
+            metric_labels: { visits: "Total Exits", exitRate: "Exit Rate", percentage: "Percentage" }
+          }
+        }
+      end
+    end
+
     def full_pages_payload
+      return full_pages_rollup_payload if page_rollup_eligible?
+
       expression = "COALESCE(NULLIF(split_part(ahoy_events.properties->>'page', '?', 1), ''), '(unknown)')"
       counts = events.group(Arel.sql(expression)).distinct.count(:visitor_token)
       if counts.empty?
@@ -531,7 +868,38 @@ class Analytics::PagesDatasetQuery::Postgres
       }
     end
 
+    def full_pages_rollup_payload
+      counts = Analytics::SitePageHourlyRollup.counts_for(range: range, site: current_site, search: search)
+
+      if query.with_imported?
+        Analytics::Imports.pages_aggregates(range).each do |name, counts_row|
+          counts[name] = counts[name].to_i + counts_row[:visitors].to_i
+        end
+      end
+
+      total = Analytics::ReportMetrics.percentage_total_visitors(visits)
+      rows = counts.sort_by { |_, visitors_count| -visitors_count }.map do |name, visitors_count|
+        {
+          name: name.to_s.presence || "(none)",
+          visitors: visitors_count,
+          percentage: (visitors_count.to_f / total).round(3)
+        }
+      end
+
+      {
+        results: rows,
+        metrics: %i[visitors percentage],
+        meta: {
+          has_more: false,
+          skip_imported_reason: Analytics::Imports.skip_reason(query),
+          metric_labels: { percentage: "Percentage" }
+        }
+      }
+    end
+
     def full_entry_payload
+      return full_entry_summary_payload if visit_summary_eligible?
+
       counts = Hash.new(0)
       present_scope = visits.where.not(landing_page: nil).where.not(landing_page: "")
       present = present_scope.group(:landing_page).distinct.count(:visitor_token)
@@ -554,16 +922,19 @@ class Analytics::PagesDatasetQuery::Postgres
       missing_ids = visits.where("landing_page IS NULL OR landing_page = ''").pluck(:id)
       missing_ids.concat(needs_derivation_ids)
       if missing_ids.any?
-        event_rows = Ahoy::Event
-          .where(name: "pageview", visit_id: missing_ids, time: range)
-          .pluck(Arel.sql("visit_id, time, COALESCE(ahoy_events.properties->>'page', '(unknown)')"))
+        event_rows = Analytics::FactStore.pageviews(
+          site: current_site,
+          range: range,
+          visit_ids: missing_ids,
+          order: :asc
+        )
 
         first_page_by_visit = {}
-        event_rows.each do |visit_id, time, page_name|
-          previous = first_page_by_visit[visit_id]
-          time_value = time.respond_to?(:to_time) ? time.to_time : time
+        event_rows.each do |pageview|
+          previous = first_page_by_visit[pageview.visit_id]
+          time_value = pageview.time.respond_to?(:to_time) ? pageview.time.to_time : pageview.time
           if previous.nil? || time_value < previous[0]
-            first_page_by_visit[visit_id] = [ time_value, page_name.to_s ]
+            first_page_by_visit[pageview.visit_id] = [ time_value, pageview.page.to_s.presence || "(unknown)" ]
           end
         end
 
@@ -579,6 +950,35 @@ class Analytics::PagesDatasetQuery::Postgres
         end
         per_label_visitors.each { |label, tokens| counts[label] += tokens.size }
       end
+
+      if query.with_imported?
+        Analytics::Imports.entry_aggregates(range).each do |name, counts_row|
+          counts[name] = counts[name].to_i + counts_row[:visitors].to_i
+        end
+      end
+
+      total = Analytics::ReportMetrics.percentage_total_visitors(visits)
+      rows = counts.sort_by { |_, visitors_count| -visitors_count }.map do |name, visitors_count|
+        {
+          name: name.to_s.presence || "(none)",
+          visitors: visitors_count,
+          percentage: (visitors_count.to_f / total).round(3)
+        }
+      end
+
+      {
+        results: rows,
+        metrics: %i[visitors percentage],
+        meta: {
+          has_more: false,
+          skip_imported_reason: Analytics::Imports.skip_reason(query),
+          metric_labels: { percentage: "Percentage" }
+        }
+      }
+    end
+
+    def full_entry_summary_payload
+      counts = filtered_visit_summaries(:entry_page).group(:entry_page).distinct.count(:visitor_token)
 
       if query.with_imported?
         Analytics::Imports.entry_aggregates(range).each do |name, counts_row|
@@ -636,47 +1036,61 @@ class Analytics::PagesDatasetQuery::Postgres
     end
 
     def seo_analytics_rows
-      expression = "COALESCE(NULLIF(split_part(ahoy_events.properties->>'page', CHR(63), 1), ''), '(unknown)')"
-      relation = events
+      if seo_page_rollup_eligible?
+        counts = Analytics::SitePageHourlyRollup.counts_for(range: range, site: current_site, search: search)
+        pageviews_by_page = Analytics::SitePageHourlyRollup.pageviews_for(range: range, site: current_site, search: search)
+        Analytics::Pages.filter_groups!({}, counts, comparison_names, pageviews_by_page)
 
-      if pattern.present?
-        search_clause = "LOWER(COALESCE(NULLIF(split_part(ahoy_events.properties->>'page', CHR(63), 1), ''), '(unknown)')) LIKE ?"
-        relation = relation.where(search_clause, pattern)
-      end
-
-      grouped_visit_ids = relation.group(Arel.sql(expression)).pluck(Arel.sql("#{expression}, ARRAY_AGG(DISTINCT ahoy_events.visit_id)")).to_h
-      counts = Analytics::ReportMetrics.unique_counts_from_grouped_visit_ids(grouped_visit_ids, visits)
-      pageviews_by_page = relation.group(Arel.sql(expression)).count
-      Analytics::Pages.filter_groups!(grouped_visit_ids, counts, comparison_names, pageviews_by_page)
-
-      if goal.present?
-        denominator_counts = Analytics::Pages.goal_denominator_counts(query, mode: "pages", search: search)
-        conversions, = Analytics::ReportMetrics.conversions_and_rates(
-          grouped_visit_ids,
-          visits,
-          range,
-          query,
-          goal,
-          denominator_counts: denominator_counts
-        )
-
-        grouped_visit_ids.each_with_object({}) do |(name, _ids), result|
+        counts.each_with_object({}) do |(name, visitors), result|
           label = name.to_s.presence || "(none)"
           result[label] = {
-            visitors: conversions[name] || 0,
-            conversion_rate: Analytics::ReportMetrics.goal_conversion_rate(
-              conversions[name] || 0,
-              denominator_counts[label]
-            )
+            visitors: visitors.to_i,
+            pageviews: pageviews_by_page[name].to_i
           }
         end
       else
-        grouped_visit_ids.each_with_object({}) do |(name, _ids), result|
-          label = name.to_s.presence || "(none)"
-          result[label] = {
-            visitors: counts[name] || 0,
-            pageviews: pageviews_by_page[name] || 0
-          }
+        expression = "COALESCE(NULLIF(split_part(ahoy_events.properties->>'page', CHR(63), 1), ''), '(unknown)')"
+        relation = events
+
+        if pattern.present?
+          search_clause = "LOWER(COALESCE(NULLIF(split_part(ahoy_events.properties->>'page', CHR(63), 1), ''), '(unknown)')) LIKE ?"
+          relation = relation.where(search_clause, pattern)
+        end
+
+        grouped_visit_ids = relation.group(Arel.sql(expression)).pluck(Arel.sql("#{expression}, ARRAY_AGG(DISTINCT ahoy_events.visit_id)")).to_h
+        counts = Analytics::ReportMetrics.unique_counts_from_grouped_visit_ids(grouped_visit_ids, visits)
+        pageviews_by_page = relation.group(Arel.sql(expression)).count
+        Analytics::Pages.filter_groups!(grouped_visit_ids, counts, comparison_names, pageviews_by_page)
+
+        if goal.present?
+          denominator_counts = Analytics::Pages.goal_denominator_counts(query, mode: "pages", search: search)
+          conversions, = Analytics::ReportMetrics.conversions_and_rates(
+            grouped_visit_ids,
+            visits,
+            range,
+            query,
+            goal,
+            denominator_counts: denominator_counts
+          )
+
+          grouped_visit_ids.each_with_object({}) do |(name, _ids), result|
+            label = name.to_s.presence || "(none)"
+            result[label] = {
+              visitors: conversions[name] || 0,
+              conversion_rate: Analytics::ReportMetrics.goal_conversion_rate(
+                conversions[name] || 0,
+                denominator_counts[label]
+              )
+            }
+          end
+        else
+          grouped_visit_ids.each_with_object({}) do |(name, _ids), result|
+            label = name.to_s.presence || "(none)"
+            result[label] = {
+              visitors: counts[name] || 0,
+              pageviews: pageviews_by_page[name] || 0
+            }
+          end
         end
       end
     end
@@ -805,6 +1219,8 @@ class Analytics::PagesDatasetQuery::Postgres
     end
 
     def full_exit_payload
+      return full_exit_summary_payload if visit_summary_eligible?
+
       expression = "COALESCE(ahoy_events.properties->>'page', '(unknown)')"
       event_rows = Analytics::VisitScope.pageviews(range, query).pluck(Arel.sql("visit_id, time, #{expression}"))
       last_page_by_visit = {}
@@ -844,5 +1260,88 @@ class Analytics::PagesDatasetQuery::Postgres
           metric_labels: { percentage: "Percentage" }
         }
       }
+    end
+
+    def full_exit_summary_payload
+      counts = filtered_visit_summaries(:exit_page, require_pageviews: true).group(:exit_page).distinct.count(:visitor_token)
+      total = Analytics::ReportMetrics.percentage_total_visitors(visits)
+      rows = counts.sort_by { |_, visitors_count| -visitors_count }.map do |name, visitors_count|
+        {
+          name: name.to_s.presence || "(none)",
+          visitors: visitors_count,
+          percentage: (visitors_count.to_f / total).round(3)
+        }
+      end
+
+      {
+        results: rows,
+        metrics: %i[visitors percentage],
+        meta: {
+          has_more: false,
+          skip_imported_reason: Analytics::Imports.skip_reason(query),
+          metric_labels: { percentage: "Percentage" }
+        }
+      }
+    end
+
+    def current_site
+      Analytics::Current.site_or_default
+    end
+
+    def page_rollup_eligible?
+      return false unless mode == "pages"
+      return false unless site_page_rollup_eligible?
+
+      metric = order_by&.first
+      return false if metric.in?(%w[bounce_rate visit_duration time_on_page scroll_depth])
+
+      true
+    end
+
+    def seo_page_rollup_eligible?
+      return false unless mode == "seo"
+      return false unless site_page_rollup_eligible?
+
+      true
+    end
+
+    def site_page_rollup_eligible?
+      return false if goal.present?
+      return false unless query.filter_dimensions.empty?
+      return false unless query.advanced_filters.empty?
+      return false unless Analytics::SitePageHourlyRollup.available?
+
+      Analytics::SitePageHourlyRollup.usable_for?(range: range, site: current_site)
+    end
+
+    def visit_summary_eligible?
+      return false unless Analytics::VisitSummary.available?
+
+      total_visits = visits.count
+      return false if total_visits.zero?
+
+      Analytics::VisitSummary.where(visit_id: visits.select(:id)).count == total_visits
+    rescue StandardError
+      false
+    end
+
+    def filtered_visit_summaries(column, require_pageviews: false)
+      relation = Analytics::VisitSummary.where(visit_id: visits.select(:id))
+      relation = relation.where.not(column => "")
+      relation = relation.where(summary_column_matches(column, pattern)) if pattern.present?
+      relation = relation.where("pageviews_count > 0") if require_pageviews
+      relation
+    end
+
+    def grouped_summary_visit_ids(relation, column, names: nil)
+      return {} if names == []
+
+      scoped = relation
+      scoped = scoped.where(column => names) unless names.nil?
+      scoped.group(column).pluck(Arel.sql("#{column}, ARRAY_AGG(visit_id)")).to_h
+    end
+
+    def summary_column_matches(column, pattern)
+      Arel::Nodes::NamedFunction.new("LOWER", [ Analytics::VisitSummary.arel_table[column.to_sym] ]).matches(pattern)
     end
 end

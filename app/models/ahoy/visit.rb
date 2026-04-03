@@ -32,8 +32,12 @@ class Ahoy::Visit < AnalyticsRecord
     end
   end
 
-  def project_now(previous_profile_id: nil)
-    AnalyticsProfile::Projection.project_visit(self, previous_profile_id: previous_profile_id)
+  def project_now(previous_profile_id: nil, async_summary: false)
+    AnalyticsProfile::Projection.project_visit(
+      self,
+      previous_profile_id: previous_profile_id,
+      async_summary: async_summary
+    )
   end
 
   def resolve_profile_later(browser_id:, strong_keys:, occurred_at: nil)

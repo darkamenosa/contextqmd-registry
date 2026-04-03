@@ -9,6 +9,7 @@ class Analytics::LiveStateTest < ActiveSupport::TestCase
   setup do
     Ahoy::Event.delete_all
     Ahoy::Visit.delete_all
+    Rails.cache.clear
   end
 
   test "yesterday session comparison excludes today's midnight boundary" do
@@ -29,6 +30,39 @@ class Analytics::LiveStateTest < ActiveSupport::TestCase
 
         assert_equal 1, stats.dig(:today_sessions, :count)
         assert_equal 0, stats.dig(:today_sessions, :change)
+      end
+    end
+  end
+
+  test "live state uses visit hourly rollups for today sessions when available" do
+    travel_to Time.utc(2026, 3, 24, 10, 0, 0) do
+      Time.use_zone("UTC") do
+        rolled_sparkline = {
+          today: [ 1, 2, 3 ],
+          yesterday: [ 4, 5, 6 ]
+        }
+
+        with_stubbed_singleton_method(Analytics::SiteVisitHourlyRollup, :usable_for?, true) do
+          with_stubbed_singleton_method(
+            Analytics::SiteVisitHourlyRollup,
+            :sum_for,
+            ->(range:, **_) { range.begin.to_date == Date.new(2026, 3, 24) ? 6 : 3 }
+          ) do
+            with_stubbed_singleton_method(Analytics::SiteVisitHourlyRollup, :sparkline_today_vs_yesterday, rolled_sparkline) do
+              with_stubbed_singleton_method(
+                Analytics::Realtime,
+                :sparkline_today_vs_yesterday,
+                ->(**) { raise "raw sparkline should not be queried" }
+              ) do
+                stats = Analytics::LiveState.build(now: Time.zone.parse("2026-03-24 10:00:00"), camelize: false)
+
+                assert_equal 6, stats.dig(:today_sessions, :count)
+                assert_equal 100, stats.dig(:today_sessions, :change)
+                assert_equal rolled_sparkline, stats.dig(:today_sessions, :sparkline)
+              end
+            end
+          end
+        end
       end
     end
   end
@@ -261,6 +295,62 @@ class Analytics::LiveStateTest < ActiveSupport::TestCase
 
   test "live subscription stream resolution rejects invalid tokens" do
     assert_nil Analytics::LiveState.resolve_subscription_stream("invalid-token")
+  end
+
+  test "broadcast_later only enqueues when the scoped live stream has subscribers" do
+    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test", time_zone: "UTC")
+    stream = Analytics::LiveState.broadcast_stream(site: site)
+    cache = ActiveSupport::Cache::MemoryStore.new
+    original_cache = Rails.method(:cache)
+    subscription_id = nil
+
+    Rails.define_singleton_method(:cache) { cache }
+
+    begin
+      assert_no_enqueued_jobs only: Analytics::LiveBroadcastJob do
+        Analytics::LiveState.broadcast_later(site: site)
+      end
+
+      subscription_id = Analytics::LiveState.register_subscription(stream)
+
+      assert_enqueued_jobs 1, only: Analytics::LiveBroadcastJob do
+        Analytics::LiveState.broadcast_later(site: site)
+        Analytics::LiveState.broadcast_later(site: site)
+      end
+    ensure
+      Rails.define_singleton_method(:cache, original_cache)
+      if stream.present? && subscription_id.present?
+        Analytics::LiveState.unregister_subscription(stream, subscription_id:)
+      end
+    end
+  end
+
+  test "live subscriptions stay active until the last subscription unregisters" do
+    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test", time_zone: "UTC")
+    stream = Analytics::LiveState.broadcast_stream(site: site)
+    cache = ActiveSupport::Cache::MemoryStore.new
+    original_cache = Rails.method(:cache)
+
+    Rails.define_singleton_method(:cache) { cache }
+
+    begin
+      first_subscription_id = Analytics::LiveState.register_subscription(stream)
+      second_subscription_id = Analytics::LiveState.register_subscription(stream)
+
+      Analytics::LiveState.unregister_subscription(stream, subscription_id: first_subscription_id)
+
+      assert_enqueued_with job: Analytics::LiveBroadcastJob, args: [ site.public_id ] do
+        Analytics::LiveState.broadcast_later(site: site)
+      end
+
+      Analytics::LiveState.unregister_subscription(stream, subscription_id: second_subscription_id)
+
+      assert_no_enqueued_jobs only: Analytics::LiveBroadcastJob do
+        Analytics::LiveState.broadcast_later(site: site)
+      end
+    ensure
+      Rails.define_singleton_method(:cache, original_cache)
+    end
   end
 
   test "live broadcast job resolves the scoped site before broadcasting" do

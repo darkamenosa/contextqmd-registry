@@ -7,7 +7,7 @@ module Analytics
     discard_on ActiveJob::DeserializationError
 
     def perform(visit, previous_profile_id: nil)
-      visit.project_now(previous_profile_id: previous_profile_id)
+      visit.project_now(previous_profile_id: previous_profile_id, async_summary: true)
     end
   end
 end

@@ -144,6 +144,11 @@ function cleanupBrowserStubs() {
   delete globalThis.document
 }
 
+async function flushTrackerQueue(analytics) {
+  await analytics["flushEventQueue"]()
+  await Promise.resolve()
+}
+
 test("analytics tracker posts pageviews only through the events endpoint", async () => {
   installBrowserStubs()
   const { StandaloneAnalytics } = await loadTrackerModule()
@@ -157,7 +162,8 @@ test("analytics tracker posts pageviews only through the events endpoint", async
 
   try {
     await analytics["trackPageview"]()
-    await Promise.resolve()
+    assert.equal(requests.length, 0)
+    await flushTrackerQueue(analytics)
 
     assert.equal(requests.length, 1)
     assert.equal(requests[0].url, "/a/e")
@@ -166,9 +172,53 @@ test("analytics tracker posts pageviews only through the events endpoint", async
     const body = JSON.parse(requests[0].options.body)
     assert.deepEqual(Object.keys(body), ["events"])
     assert.equal(body.events.length, 1)
+    assert.equal(typeof body.events[0].id, "string")
+    assert.ok(body.events[0].id.length > 0)
     assert.equal(body.events[0].name, "pageview")
     assert.ok(!("visit_token" in body))
     assert.ok(!("visitor_token" in body))
+  } finally {
+    cleanupBrowserStubs()
+  }
+})
+
+test("analytics tracker drains every queued batch during keepalive flushes", async () => {
+  installBrowserStubs()
+  const { StandaloneAnalytics } = await loadTrackerModule()
+  const analytics = new StandaloneAnalytics()
+
+  const requests = []
+  globalThis.fetch = async (url, options = {}) => {
+    requests.push({ url, options })
+    return { ok: true }
+  }
+
+  try {
+    analytics["pendingEvents"] = Array.from({ length: 45 }, (_, index) => ({
+      id: `evt-${index}`,
+      name: `custom-${index}`,
+      site_token: "signed-site-token",
+      properties: {
+        page: "/about",
+        url: "http://localhost/about",
+        title: "About",
+        referrer: "",
+        screen_size: "1440x900",
+      },
+      time: 1_000 + index,
+    }))
+
+    await analytics["flushEventQueue"]({ keepalive: true, drain: true })
+
+    assert.equal(requests.length, 3)
+    assert.deepEqual(
+      requests.map((request) => JSON.parse(request.options.body).events.length),
+      [20, 20, 5]
+    )
+    assert.deepEqual(
+      requests.map((request) => request.options.keepalive),
+      [true, true, true]
+    )
   } finally {
     cleanupBrowserStubs()
   }
@@ -206,7 +256,8 @@ test("analytics tracker posts engagement events with fetch keepalive even when s
       screenSize: "1440x900",
     })
 
-    await Promise.resolve()
+    assert.equal(requests.length, 0)
+    await flushTrackerQueue(analytics)
 
     assert.equal(beaconCalls, 0)
     const request = requests.find((entry) => entry.url === "/a/e")
@@ -230,7 +281,8 @@ test("analytics tracker still posts the pageview when the server has not pre-tra
 
   try {
     analytics.init()
-    await Promise.resolve()
+    assert.equal(requests.length, 0)
+    await flushTrackerQueue(analytics)
 
     assert.equal(requests.length, 1)
     assert.equal(requests[0].url, "/a/e")
@@ -292,7 +344,7 @@ test("analytics tracker includes the signed site token on client events", async 
 
   try {
     analytics.init()
-    await Promise.resolve()
+    await flushTrackerQueue(analytics)
 
     const body = JSON.parse(requests[0].options.body)
     assert.equal(body.events[0].site_token, "signed-site-token")
@@ -318,11 +370,12 @@ test("analytics tracker exposes a public custom event api", async () => {
 
   try {
     analytics.init()
-    await Promise.resolve()
+    await flushTrackerQueue(analytics)
     requests.length = 0
 
     globalThis.window.analytics("signup", { plan: "pro" })
-    await Promise.resolve()
+    assert.equal(requests.length, 0)
+    await flushTrackerQueue(analytics)
 
     assert.equal(requests.length, 1)
     const body = JSON.parse(requests[0].options.body)
@@ -369,17 +422,65 @@ test("analytics tracker supports declarative data-analytics-goal clicks", async 
 
   try {
     analytics.init()
-    await Promise.resolve()
+    await flushTrackerQueue(analytics)
     requests.length = 0
 
     browser.dispatchDocumentEvent("click", { target: childEl, type: "click" })
-    await Promise.resolve()
+    assert.equal(requests.length, 0)
+    await flushTrackerQueue(analytics)
 
     assert.equal(requests.length, 1)
     const body = JSON.parse(requests[0].options.body)
     assert.equal(body.events[0].name, "signup")
     assert.equal(body.events[0].properties.plan, "pro")
     assert.equal(body.events[0].properties.cta_label, "hero")
+  } finally {
+    cleanupBrowserStubs()
+  }
+})
+
+test("analytics tracker batches multiple queued events into one request", async () => {
+  installBrowserStubs()
+  const { StandaloneAnalytics } = await loadTrackerModule()
+  const analytics = new StandaloneAnalytics()
+
+  const requests = []
+  globalThis.fetch = async (url, options = {}) => {
+    requests.push({ url, options })
+    return { ok: true }
+  }
+
+  try {
+    analytics["sendEvent"]({
+      name: "pageview",
+      page: "/about",
+      url: "http://localhost/about",
+      title: "About",
+      referrer: "",
+      screenSize: "1440x900",
+    })
+    analytics["sendEvent"]({
+      name: "signup",
+      page: "/about",
+      url: "http://localhost/about",
+      title: "About",
+      referrer: "",
+      screenSize: "1440x900",
+    })
+
+    assert.equal(requests.length, 0)
+    await flushTrackerQueue(analytics)
+
+    assert.equal(requests.length, 1)
+    const body = JSON.parse(requests[0].options.body)
+    assert.equal(body.events.length, 2)
+    assert.equal(typeof body.events[0].id, "string")
+    assert.equal(typeof body.events[1].id, "string")
+    assert.notEqual(body.events[0].id, body.events[1].id)
+    assert.deepEqual(
+      body.events.map((event) => event.name),
+      ["pageview", "signup"]
+    )
   } finally {
     cleanupBrowserStubs()
   }

@@ -6,6 +6,7 @@ class Admin::AnalyticsProfilesTest < ActionDispatch::IntegrationTest
   include Devise::Test::IntegrationHelpers
 
   setup do
+    Analytics::VisitSummary.delete_all if Analytics::VisitSummary.available?
     Ahoy::Event.delete_all
     Ahoy::Visit.delete_all
     Analytics::GoogleSearchConsole::QueryRow.delete_all
@@ -13,7 +14,6 @@ class Admin::AnalyticsProfilesTest < ActionDispatch::IntegrationTest
     Analytics::GoogleSearchConsoleConnection.delete_all
     Analytics::SiteBoundary.delete_all
     Analytics::Site.delete_all
-    AnalyticsProfileSession.delete_all if defined?(AnalyticsProfileSession)
     AnalyticsProfileSummary.delete_all if defined?(AnalyticsProfileSummary)
     AnalyticsProfileKey.delete_all
     AnalyticsProfile.delete_all

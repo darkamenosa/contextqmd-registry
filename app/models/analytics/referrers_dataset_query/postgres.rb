@@ -117,17 +117,20 @@ class Analytics::ReferrersDatasetQuery::Postgres
     end
 
     def grouped_payload
-      expression = "COALESCE(referrer, '#{Analytics::SourceResolver::DIRECT_LABEL}')"
-      relation = visits
-      relation = relation.where("LOWER(referrer) LIKE ?", Analytics::Search.contains_pattern(search)) if search.present?
+      relation = grouped_relation
 
       return grouped_full_payload(relation, expression) unless paged?
 
-      grouped_visit_ids = relation.group(Arel.sql(expression)).pluck(Arel.sql("#{expression}, ARRAY_AGG(ahoy_visits.id)")).to_h
-      counts = Analytics::ReportMetrics.unique_counts_from_grouped_visit_ids(grouped_visit_ids, visits)
+      if grouped_count_first_path?
+        counts = relation.group(Arel.sql(expression)).distinct.count(:visitor_token)
+        grouped_visit_ids = nil
+      else
+        grouped_visit_ids = grouped_visit_ids_for(relation)
+        counts = Analytics::ReportMetrics.unique_counts_from_grouped_visit_ids(grouped_visit_ids, visits)
+      end
 
       if comparison_names.any?
-        grouped_visit_ids.select! { |name, _| comparison_names.include?(name.to_s) }
+        grouped_visit_ids&.select! { |name, _| comparison_names.include?(name.to_s) }
         counts.select! { |name, _| comparison_names.include?(name.to_s) }
       end
 
@@ -151,7 +154,12 @@ class Analytics::ReferrersDatasetQuery::Postgres
         end
 
       paged_names, has_more = Analytics::Pagination.paginate_names(sorted_names, limit: limit, page: page)
-      page_visit_ids = grouped_visit_ids.slice(*paged_names)
+      page_visit_ids =
+        if grouped_visit_ids
+          grouped_visit_ids.slice(*paged_names)
+        else
+          grouped_visit_ids_for(relation, names: paged_names)
+        end
 
       if goal.present?
         denominator_counts = Analytics::Sources.referrer_goal_denominator_counts(query, normalized_source, search: search)
@@ -210,5 +218,30 @@ class Analytics::ReferrersDatasetQuery::Postgres
         metrics: %i[visitors],
         meta: { has_more: false, skip_imported_reason: Analytics::Imports.skip_reason(query) }
       }
+    end
+
+    def grouped_relation
+      relation = visits
+      relation = relation.where("LOWER(referrer) LIKE ?", Analytics::Search.contains_pattern(search)) if search.present?
+      relation
+    end
+
+    def grouped_visit_ids_for(relation, names: nil)
+      return {} if names == []
+
+      scoped = relation
+      scoped = scoped.where(Analytics::SqlExpression.in_list(expression, names)) unless names.nil?
+      scoped.group(Arel.sql(expression)).pluck(Arel.sql("#{expression}, ARRAY_AGG(ahoy_visits.id)")).to_h
+    end
+
+    def grouped_count_first_path?
+      return false if goal.present?
+
+      metric = order_by&.first
+      !metric.in?(%w[bounce_rate visit_duration])
+    end
+
+    def expression
+      @expression ||= "COALESCE(referrer, '#{Analytics::SourceResolver::DIRECT_LABEL}')"
     end
 end

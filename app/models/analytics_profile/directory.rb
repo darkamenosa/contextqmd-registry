@@ -90,7 +90,10 @@ class AnalyticsProfile::Directory
         else
           {}
         end
-      total_visits = Ahoy::Visit.for_analytics_site.where(analytics_profile_id: profile_ids).group(:analytics_profile_id).count
+      total_visits = Analytics::FactStore.visit_counts_by_profile(
+        site: ::Analytics::Current.site_or_default,
+        profile_ids: profile_ids
+      )
       latest_visits = latest_visits_by_profile(visits).index_by(&:analytics_profile_id)
       recent_activity = recent_activity_by_profile(visits, profile_ids)
 
@@ -122,17 +125,18 @@ class AnalyticsProfile::Directory
 
     def recent_activity_by_profile_from_sessions(profile_ids)
       dates = recent_activity_dates
+      visit_summary_table = Analytics::VisitSummary.table_name
       activity_date_sql = AnalyticsProfile.sanitize_sql_array(
         [
-          "DATE((analytics_profile_sessions.started_at AT TIME ZONE 'UTC') AT TIME ZONE ?)",
+          "DATE((#{visit_summary_table}.started_at AT TIME ZONE 'UTC') AT TIME ZONE ?)",
           recent_activity_time_zone
         ]
       )
       counts =
-        AnalyticsProfileSession
+        Analytics::VisitSummary
           .for_analytics_site(::Analytics::Current.site)
           .where(analytics_profile_id: profile_ids)
-          .where("analytics_profile_sessions.started_at >= ?", dates.first.beginning_of_day)
+          .where("#{visit_summary_table}.started_at >= ?", dates.first.beginning_of_day)
           .group(:analytics_profile_id, Arel.sql(activity_date_sql))
           .count
 
@@ -171,10 +175,16 @@ class AnalyticsProfile::Directory
     end
 
     def latest_visits_by_profile(visits)
-      visits
-        .select("DISTINCT ON (analytics_profile_id) #{Ahoy::Visit.table_name}.*")
-        .order(Arel.sql("analytics_profile_id, started_at DESC, id DESC"))
-        .to_a
+      latest_visit_ids =
+        visits
+          .select("DISTINCT ON (analytics_profile_id) id")
+          .order(Arel.sql("analytics_profile_id, started_at DESC, id DESC"))
+          .pluck(:id)
+
+      Analytics::FactStore.visits(
+        site: ::Analytics::Current.site_or_default,
+        ids: latest_visit_ids
+      )
     end
 
     def filter_profile_rows(rows)

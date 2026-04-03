@@ -6,7 +6,7 @@ class Analytics::VisitScope
       query = normalize_query(query_or_filters, advanced_filters:)
       filters = query.filters
       advanced_filters = query.advanced_filters
-      scope = Ahoy::Visit.for_analytics_site
+      scope = Analytics::FactStore.visit_relation(site: current_site)
 
       if filters.present?
         if (source = filters["source"]).present?
@@ -124,53 +124,70 @@ class Analytics::VisitScope
         raw = Analytics::Urls.normalized_path_and_query(decoded) || decoded
         label = raw.to_s.split("?").first.presence || "/"
 
-        expr = "COALESCE(CASE WHEN strpos(regexp_replace(landing_page, '^(https://|http://)[^/]+', ''), chr(63)) > 0 THEN left(regexp_replace(landing_page, '^(https://|http://)[^/]+', ''), strpos(regexp_replace(landing_page, '^(https://|http://)[^/]+', ''), chr(63)) - 1) ELSE NULLIF(regexp_replace(landing_page, '^(https://|http://)[^/]+', ''), '') END, '/')"
-        by_landing = visits.where(Arel.sql("#{expr} = ?"), label)
-
-        candidate_ids = visits
-          .where(
-            "landing_page IS NULL OR landing_page = '' OR regexp_replace(landing_page, '^(https://|http://)[^/]+', '') SIMILAR TO ?",
-            Analytics::InternalPaths.report_internal_sql_similar_pattern
+        if visit_summary_usable_for_scope?(visits)
+          visits = visits.where(
+            id: Analytics::VisitSummary.where(visit_id: visits.select(:id), entry_page: label).select(:visit_id)
           )
-          .pluck(:id)
+        else
+          expr = "COALESCE(CASE WHEN strpos(regexp_replace(landing_page, '^(https://|http://)[^/]+', ''), chr(63)) > 0 THEN left(regexp_replace(landing_page, '^(https://|http://)[^/]+', ''), strpos(regexp_replace(landing_page, '^(https://|http://)[^/]+', ''), chr(63)) - 1) ELSE NULLIF(regexp_replace(landing_page, '^(https://|http://)[^/]+', ''), '') END, '/')"
+          by_landing = visits.where(Arel.sql("#{expr} = ?"), label)
 
-        derived_ids = []
-        if candidate_ids.any?
-          event_rows = Ahoy::Event
-            .where(name: "pageview", time: range, visit_id: candidate_ids)
-            .pluck(Arel.sql("visit_id, time, COALESCE(ahoy_events.properties->>'page', '')"))
-          first_page_by_visit = {}
-          event_rows.each do |visit_id, time, page|
-            previous = first_page_by_visit[visit_id]
-            time_value = time.respond_to?(:to_time) ? time.to_time : time
-            if previous.nil? || time_value < previous[0]
-              first_page_by_visit[visit_id] = [ time_value, page.to_s ]
+          candidate_ids = visits
+            .where(
+              "landing_page IS NULL OR landing_page = '' OR regexp_replace(landing_page, '^(https://|http://)[^/]+', '') SIMILAR TO ?",
+              Analytics::InternalPaths.report_internal_sql_similar_pattern
+            )
+            .pluck(:id)
+
+          derived_ids = []
+          if candidate_ids.any?
+            event_rows = Analytics::FactStore.pageviews(
+              site: current_site,
+              range: range,
+              visit_ids: candidate_ids,
+              order: :asc
+            )
+            first_page_by_visit = {}
+            event_rows.each do |pageview|
+              previous = first_page_by_visit[pageview.visit_id]
+              time_value = pageview.time.respond_to?(:to_time) ? pageview.time.to_time : pageview.time
+              if previous.nil? || time_value < previous[0]
+                first_page_by_visit[pageview.visit_id] = [ time_value, pageview.page.to_s ]
+              end
+            end
+            first_page_by_visit.each do |visit_id, (_time, page)|
+              next if page.to_s.strip.empty?
+
+              landing_page = Analytics::Urls.normalized_path_only(page)
+              derived_ids << visit_id if landing_page.to_s == label
             end
           end
-          first_page_by_visit.each do |visit_id, (_time, page)|
-            next if page.to_s.strip.empty?
 
-            landing_page = Analytics::Urls.normalized_path_only(page)
-            derived_ids << visit_id if landing_page.to_s == label
-          end
+          visits = by_landing.or(visits.where(id: derived_ids.presence || [ 0 ]))
         end
-
-        visits = by_landing.or(visits.where(id: derived_ids.presence || [ 0 ]))
       end
 
       if exit_page.present?
-        ids = visit_ids_with_exit_page(range, visits, exit_page)
+        ids =
+          if visit_summary_usable_for_scope?(visits)
+            needle = exit_page.to_s.split("?").first
+            Analytics::VisitSummary.where(visit_id: visits.select(:id), exit_page: needle)
+              .where("pageviews_count > 0")
+              .pluck(:visit_id)
+          else
+            visit_ids_with_exit_page(range, visits, exit_page)
+          end
         visits = visits.where(id: ids.presence || [ 0 ])
       end
 
       if page_eq.present?
-        matching_pageviews = Ahoy::Event
-          .where(name: "pageview")
-          .where(visit_id: visits.select(:id))
-          .where(Arel.sql("ahoy_events.properties->>'page' = ?"), page_eq)
-          .select(:visit_id)
-          .distinct
-        visits = visits.where(id: matching_pageviews)
+        matching_visit_ids = Analytics::FactStore.visit_ids_matching_page(
+          site: current_site,
+          visit_ids: visits.select(:id),
+          operator: "is",
+          value: page_eq
+        )
+        visits = visits.where(id: matching_visit_ids.presence || [ 0 ])
       end
 
       if size_eq.present?
@@ -184,21 +201,21 @@ class Analytics::VisitScope
 
         case operator
         when "contains"
-          matching_pageviews = Ahoy::Event
-            .where(name: "pageview")
-            .where(visit_id: visits.select(:id))
-            .where("LOWER(ahoy_events.properties->>'page') LIKE ?", Analytics::Search.contains_pattern(value))
-            .select(:visit_id)
-            .distinct
-          visits = visits.where(id: matching_pageviews)
+          matching_visit_ids = Analytics::FactStore.visit_ids_matching_page(
+            site: current_site,
+            visit_ids: visits.select(:id),
+            operator: "contains",
+            value: value
+          )
+          visits = visits.where(id: matching_visit_ids.presence || [ 0 ])
         when "is_not"
-          matching_pageviews = Ahoy::Event
-            .where(name: "pageview")
-            .where(visit_id: visits.select(:id))
-            .where(Arel.sql("ahoy_events.properties->>'page' = ?"), value)
-            .select(:visit_id)
-            .distinct
-          visits = visits.where.not(id: matching_pageviews)
+          matching_visit_ids = Analytics::FactStore.visit_ids_matching_page(
+            site: current_site,
+            visit_ids: visits.select(:id),
+            operator: "is",
+            value: value
+          )
+          visits = visits.where.not(id: matching_visit_ids.presence || [ 0 ])
         end
       end
 
@@ -229,14 +246,12 @@ class Analytics::VisitScope
       basic_filters = filters.to_h.dup
       exit_page = basic_filters.delete("exit_page")
 
-      pageviews = Ahoy::Event
-        .for_analytics_site
-        .where(name: "pageview", time: range)
+      pageviews = Analytics::FactStore.pageview_relation(site: current_site, range:)
         .joins(:visit)
         .merge(filtered(basic_filters, advanced_filters: advanced_filters))
 
       if exit_page.present?
-        visit_scope = Ahoy::Visit.where(id: pageviews.select(:visit_id).distinct)
+        visit_scope = Analytics::FactStore.visit_relation(site: current_site, ids: pageviews.select(:visit_id).distinct)
         ids = visit_ids_with_exit_page(range, visit_scope, exit_page)
         pageviews = pageviews.where(visit_id: ids.presence || [ 0 ])
       end
@@ -262,22 +277,21 @@ class Analytics::VisitScope
       property = Analytics::Properties.filter_name(filter_key)
       return scope if property.blank? || value.to_s.strip.empty?
 
-      quoted_property = Ahoy::Visit.connection.quote(property)
-      value_expr = "COALESCE(NULLIF(ahoy_events.properties->>#{quoted_property}, ''), '(none)')"
-      matched_visits = Ahoy::Event
-        .where(visit_id: scope.select(:id))
-        .where(Arel.sql("ahoy_events.properties ? #{quoted_property}"))
+      matched_visit_ids = Analytics::FactStore.visit_ids_matching_property(
+        site: current_site,
+        visit_ids: scope.select(:id),
+        property: property,
+        operator: operator,
+        value: value
+      )
 
       case operator
       when "contains"
-        matched_visits = matched_visits.where("LOWER(#{value_expr}) LIKE ?", Analytics::Search.contains_pattern(value))
-        scope.where(id: matched_visits.select(:visit_id).distinct)
+        scope.where(id: matched_visit_ids.presence || [ 0 ])
       when "is_not"
-        matched_visits = matched_visits.where(Arel.sql("#{value_expr} = ?"), value.to_s)
-        scope.where.not(id: matched_visits.select(:visit_id).distinct)
+        scope.where.not(id: matched_visit_ids.presence || [ 0 ])
       else
-        matched_visits = matched_visits.where(Arel.sql("#{value_expr} = ?"), value.to_s)
-        scope.where(id: matched_visits.select(:visit_id).distinct)
+        scope.where(id: matched_visit_ids.presence || [ 0 ])
       end
     end
 
@@ -302,19 +316,21 @@ class Analytics::VisitScope
       def visit_ids_with_exit_page(range, visits_scope, exit_page)
         return [] if visits_scope.none?
 
-        expr = "COALESCE(NULLIF(split_part(ahoy_events.properties->>'page', '?', 1), ''), '')"
-        rows = Ahoy::Event
-          .where(name: "pageview", time: range)
-          .where(visit_id: visits_scope.select(:id))
-          .pluck(Arel.sql("visit_id, time, #{expr}"))
+        rows = Analytics::FactStore.pageviews(
+          site: current_site,
+          range: range,
+          visit_ids: visits_scope.select(:id),
+          order: :asc
+        )
 
         last_page_by_visit = {}
-        rows.each do |visit_id, time, page_name|
-          previous = last_page_by_visit[visit_id]
-          time_value = time.respond_to?(:to_time) ? time.to_time : time
+        rows.each do |pageview|
+          page_name = pageview.page.to_s.split("?").first.to_s
+          previous = last_page_by_visit[pageview.visit_id]
+          time_value = pageview.time.respond_to?(:to_time) ? pageview.time.to_time : pageview.time
           previous_time = previous ? (previous.is_a?(Array) ? previous[0] : previous.first) : nil
           if previous.nil? || time_value > previous_time
-            last_page_by_visit[visit_id] = [ time_value, page_name.to_s ]
+            last_page_by_visit[pageview.visit_id] = [ time_value, page_name ]
           end
         end
 
@@ -325,18 +341,30 @@ class Analytics::VisitScope
       def visit_ids_for_screen_size_categories(visits_scope, categories)
         return [] if visits_scope.none?
 
-        raw = visits_scope.group(:screen_size).pluck(:screen_size, Arel.sql("ARRAY_AGG(id)"))
         category_names = categories.map(&:to_s)
-        selected = []
+        return [] if category_names.empty?
 
-        raw.each do |screen_size, visit_ids|
-          category = Analytics::Devices.categorize_screen_size(screen_size)
-          if category_names.any? { |name| name.to_s == category.to_s }
-            selected.concat(Array(visit_ids))
-          end
-        end
+        visits_scope.where(
+          Analytics::SqlExpression.in_list(
+            Analytics::Devices.screen_size_category_sql("screen_size"),
+            category_names
+          )
+        ).pluck(:id)
+      end
 
-        selected
+      def visit_summary_usable_for_scope?(visits_scope)
+        return false unless Analytics::VisitSummary.available?
+
+        total_visits = visits_scope.count
+        return false if total_visits.zero?
+
+        Analytics::VisitSummary.where(visit_id: visits_scope.select(:id)).count == total_visits
+      rescue StandardError
+        false
+      end
+
+      def current_site
+        ::Analytics::Current.site_or_default
       end
   end
 end

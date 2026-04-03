@@ -182,7 +182,7 @@ if Rails.env.development?
       visits = Ahoy::Visit.where("visit_token LIKE ?", "#{PREFIX}-%")
       visit_ids = visits.pluck(:id)
       if visit_ids.any?
-        AnalyticsProfileSession.where(visit_id: visit_ids).delete_all if defined?(AnalyticsProfileSession)
+        Analytics::VisitSummary.where(visit_id: visit_ids).delete_all if Analytics::VisitSummary.available?
         AnalyticsProfileSummary.where(latest_visit_id: visit_ids).delete_all if defined?(AnalyticsProfileSummary)
         Ahoy::Event.where(visit_id: visit_ids).delete_all
       end

@@ -16,16 +16,16 @@ class Analytics::AhoyStore < Ahoy::DatabaseStore
   def visit
     unless defined?(@visit)
       if ahoy.send(:existing_visit_token) || ahoy.instance_variable_get(:@visit_token)
-        @visit = visit_model.where(visit_token: ahoy.visit_token).take if ahoy.visit_token
+        @visit = Analytics::FactStore.visit_by_token(token: ahoy.visit_token, site: nil) if ahoy.visit_token
       elsif !Ahoy.cookies?
         @visit = if force_new_visit_boundary?
           nil
         else
-          visit_model
-            .where(visitor_token: anonymous_visitor_tokens)
-            .where(started_at: Ahoy.visit_duration.ago..)
-            .order(started_at: :desc)
-            .first
+          Analytics::FactStore.latest_visit_for_visitor_tokens(
+            visitor_tokens: anonymous_visitor_tokens,
+            started_after: Ahoy.visit_duration.ago,
+            site: nil
+          )
         end
       else
         @visit = nil
@@ -38,9 +38,23 @@ class Analytics::AhoyStore < Ahoy::DatabaseStore
   def track_visit(data)
     attrs = normalize_visit_attrs(data)
 
-    visit = super(attrs) || visit_for_token(attrs[:visit_token])
+    visit = Analytics::FactStore.append_visit(data: attrs).record || visit_for_token(attrs[:visit_token])
+    @visit = visit
     Analytics::VisitBoundary.consume_force_new_visit!(Current.request) if Current.request
     resolve_analytics_profile(visit, occurred_at: visit&.started_at)
+    Analytics::SiteVisitHourlyRollup.refresh_later(
+      site: Analytics::SiteLocator.from_record(visit),
+      bucket_start: visit&.started_at
+    )
+    Analytics::SiteSourceHourlyVisitorRollup.refresh_later(
+      site: Analytics::SiteLocator.from_record(visit),
+      bucket_start: visit&.started_at
+    )
+    Analytics::SiteLocationHourlyVisitorRollup.refresh_later(
+      site: Analytics::SiteLocator.from_record(visit),
+      bucket_start: visit&.started_at
+    )
+    Analytics::VisitSummary.refresh_later(visit:)
     Analytics::LiveState.broadcast_later(site: Analytics::SiteLocator.from_record(visit))
     visit
   rescue InvalidTrackedSiteClaim
@@ -58,20 +72,24 @@ class Analytics::AhoyStore < Ahoy::DatabaseStore
       return nil
     end
 
-    event = event_model.new(slice_data(event_model, data))
-    event.visit = resolved_visit
-    event.analytics_site_id ||= resolved_visit.analytics_site_id if event.respond_to?(:analytics_site_id)
-    event.analytics_site_boundary_id ||= resolved_visit.analytics_site_boundary_id if event.respond_to?(:analytics_site_boundary_id)
-    event.time = resolved_visit.started_at if event.time < resolved_visit.started_at
+    append_result = Analytics::FactStore.append_event(data:, visit: resolved_visit)
+    event = append_result.record
+    return event unless append_result.inserted?
 
-    begin
-      event.save!
-    rescue => e
-      raise e unless unique_exception?(e)
-      return nil
+    Analytics::VisitSummary.refresh_later(visit: resolved_visit)
+    Analytics::SiteEventHourlyRollup.refresh_later(
+      site: Analytics::SiteLocator.from_record(resolved_visit) || Analytics::SiteLocator.from_record(event),
+      bucket_start: event.time
+    )
+    if event.name.in?(%w[pageview engagement])
+      Analytics::VisitPageEngagement.refresh_later(visit: resolved_visit)
     end
-
-    sync_event_site_scope!(event, resolved_visit)
+    if event.name == "pageview"
+      Analytics::SitePageHourlyRollup.refresh_later(
+        site: Analytics::SiteLocator.from_record(resolved_visit) || Analytics::SiteLocator.from_record(event),
+        bucket_start: event.time
+      )
+    end
     resolved_visit.project_later
     resolve_analytics_profile(resolved_visit, occurred_at: event.time) if resolved_visit.should_resolve_profile_for_event?(strong_keys: strong_keys_for(resolved_visit))
     Analytics::LiveState.broadcast_later(
@@ -122,29 +140,7 @@ class Analytics::AhoyStore < Ahoy::DatabaseStore
     def visit_for_token(token)
       return nil if token.blank?
 
-      ::Ahoy::Visit.find_by(visit_token: token)
-    end
-
-    def anonymous_visitor_tokens
-      tokens = Analytics::AnonymousIdentity.tokens(request)
-      tokens.presence || [ ahoy.visitor_token ].compact
-    end
-
-    def sync_event_site_scope!(event, visit)
-      return unless event.respond_to?(:analytics_site_id)
-      return if event.analytics_site_id.present? && event.analytics_site_boundary_id.present?
-
-      updates = {}
-      updates[:analytics_site_id] = visit.analytics_site_id if event.analytics_site_id.blank? && visit.analytics_site_id.present?
-      if event.analytics_site_boundary_id.blank? && visit.analytics_site_boundary_id.present?
-        updates[:analytics_site_boundary_id] = visit.analytics_site_boundary_id
-      end
-      return if updates.empty?
-
-      event.update_columns(updates)
-      event.assign_attributes(updates)
-    rescue StandardError
-      nil
+      Analytics::FactStore.visit_by_token(token: token, site: nil)
     end
 
     def resolve_analytics_profile(visit, occurred_at:)
@@ -168,6 +164,11 @@ class Analytics::AhoyStore < Ahoy::DatabaseStore
 
     def strong_keys_for(visit)
       visit.analytics_strong_keys
+    end
+
+    def anonymous_visitor_tokens
+      tokens = Analytics::AnonymousIdentity.tokens(request)
+      tokens.presence || [ ahoy.visitor_token ].compact
     end
 
     def force_new_visit_boundary?

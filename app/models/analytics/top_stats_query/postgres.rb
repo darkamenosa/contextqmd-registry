@@ -165,9 +165,11 @@ class Analytics::TopStatsQuery::Postgres
       current_visits = Analytics::VisitScope.visits(range, query)
       current_events = Analytics::VisitScope.pageviews(range, query)
       current_metrics = Analytics::ReportMetrics.visit_metrics(current_visits, current_events)
+      current_totals = visit_metric_totals(range, fallback: current_metrics)
       previous_visits = Analytics::VisitScope.visits(previous_range, query)
       previous_events = Analytics::VisitScope.pageviews(previous_range, query)
       previous_metrics = Analytics::ReportMetrics.visit_metrics(previous_visits, previous_events)
+      previous_totals = visit_metric_totals(previous_range, fallback: previous_metrics)
       uniques = current_visits.select(:visitor_token).distinct.count
       previous_uniques = previous_visits.select(:visitor_token).distinct.count
 
@@ -181,24 +183,24 @@ class Analytics::TopStatsQuery::Postgres
         },
         {
           name: "Total visits",
-          value: current_metrics[:total_visits],
+          value: current_totals[:total_visits],
           graph_metric: :visits,
-          change: Analytics::ReportMetrics.top_stat_change(:visits, previous_metrics[:total_visits], current_metrics[:total_visits]),
-          comparison_value: previous_metrics[:total_visits]
+          change: Analytics::ReportMetrics.top_stat_change(:visits, previous_totals[:total_visits], current_totals[:total_visits]),
+          comparison_value: previous_totals[:total_visits]
         },
         {
           name: "Total pageviews",
-          value: current_metrics[:pageviews],
+          value: current_totals[:pageviews],
           graph_metric: :pageviews,
-          change: Analytics::ReportMetrics.top_stat_change(:pageviews, previous_metrics[:pageviews], current_metrics[:pageviews]),
-          comparison_value: previous_metrics[:pageviews]
+          change: Analytics::ReportMetrics.top_stat_change(:pageviews, previous_totals[:pageviews], current_totals[:pageviews]),
+          comparison_value: previous_totals[:pageviews]
         },
         {
           name: "Views per visit",
-          value: current_metrics[:pageviews_per_visit].round(2),
+          value: current_totals[:pageviews_per_visit].round(2),
           graph_metric: :views_per_visit,
-          change: Analytics::ReportMetrics.top_stat_change(:views_per_visit, previous_metrics[:pageviews_per_visit], current_metrics[:pageviews_per_visit]),
-          comparison_value: previous_metrics[:pageviews_per_visit]
+          change: Analytics::ReportMetrics.top_stat_change(:views_per_visit, previous_totals[:pageviews_per_visit], current_totals[:pageviews_per_visit]),
+          comparison_value: previous_totals[:pageviews_per_visit]
         },
         {
           name: "Bounce rate",
@@ -215,5 +217,50 @@ class Analytics::TopStatsQuery::Postgres
           comparison_value: previous_metrics[:average_duration]
         }
       ]
+    end
+
+    def visit_metric_totals(range, fallback:)
+      total_visits =
+        if visit_rollup_usable_for?(range)
+          Analytics::SiteVisitHourlyRollup.sum_for(range:, site: current_site, column: :visits_count)
+        else
+          fallback[:total_visits]
+        end
+
+      total_pageviews =
+        if event_rollup_usable_for?(range)
+          Analytics::SiteEventHourlyRollup.sum_for(range:, site: current_site, column: :pageviews_count)
+        else
+          fallback[:pageviews]
+        end
+
+      pageviews_per_visit =
+        if visit_rollup_usable_for?(range) && event_rollup_usable_for?(range)
+          total_visits.zero? ? 0.0 : (total_pageviews.to_f / total_visits.to_f)
+        else
+          fallback[:pageviews_per_visit]
+        end
+
+      {
+        total_visits: total_visits,
+        pageviews: total_pageviews,
+        pageviews_per_visit: pageviews_per_visit
+      }
+    end
+
+    def site_rollups_eligible?
+      query.filter_clauses.empty?
+    end
+
+    def visit_rollup_usable_for?(range)
+      site_rollups_eligible? && Analytics::SiteVisitHourlyRollup.usable_for?(range:, site: current_site)
+    end
+
+    def event_rollup_usable_for?(range)
+      site_rollups_eligible? && Analytics::SiteEventHourlyRollup.usable_for?(range:, site: current_site)
+    end
+
+    def current_site
+      @current_site ||= ::Analytics::Current.site_or_default
     end
 end

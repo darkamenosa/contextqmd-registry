@@ -48,29 +48,20 @@ class Analytics::DevicesDatasetQuery::Postgres
     end
 
     def screen_sizes_payload
-      raw_grouped = visits.group(:screen_size).pluck(:screen_size, Arel.sql("ARRAY_AGG(id)"))
-      categorized_visit_ids = Hash.new { |hash, key| hash[key] = [] }
-      raw_grouped.each do |screen_size, visit_ids|
-        category = Analytics::Devices.categorize_screen_size(screen_size)
-        categorized_visit_ids[category].concat(visit_ids)
-      end
+      relation = screen_sizes_relation
+      counts = relation.group(Arel.sql(screen_size_expression)).count("DISTINCT visitor_token")
+      counts.select! { |name, _| comparison_names.include?(name.to_s) } if comparison_names.any?
 
-      counts = Analytics::ReportMetrics.unique_counts_from_grouped_visit_ids(categorized_visit_ids, visits)
-      items = counts.map do |name, visitors_count|
-        { name: name.to_s.presence || Ahoy::Visit::Constants::UNKNOWN_LABEL, visitors: visitors_count }
-      end
-      items = items.select { |item| item[:name].to_s.downcase.include?(search.downcase) } if search.present?
+      return unpaged_screen_sizes_payload(counts) unless paged?
 
-      if comparison_names.any?
-        items = items.select { |item| comparison_names.include?(item[:name].to_s) }
-        categorized_visit_ids.select! { |name, _| comparison_names.include?(name.to_s) }
-      end
-
-      return unpaged_screen_sizes_payload(items) unless paged?
-
-      items_counts = items.each_with_object({}) { |item, result| result[item[:name]] = item[:visitors].to_i }
       total = Analytics::ReportMetrics.percentage_total_visitors(visits)
       denominator_counts = goal.present? ? Analytics::Devices.goal_denominator_counts(query, mode: mode, search: search) : nil
+      categorized_visit_ids = nil
+
+      unless screen_sizes_count_first_path?
+        categorized_visit_ids = grouped_screen_size_visit_ids(relation)
+        categorized_visit_ids.select! { |name, _| counts.key?(name) }
+      end
 
       sorted_names =
         if goal.present?
@@ -88,18 +79,19 @@ class Analytics::DevicesDatasetQuery::Postgres
           if order_by
             metric, = order_by
             if metric == "percentage"
-              metrics_map = items_counts.keys.index_with { |name| { percentage: (items_counts[name].to_f / total) } }
+              metrics_map = counts.keys.index_with { |name| { percentage: (counts[name].to_f / total) } }
             elsif %w[bounce_rate visit_duration].include?(metric)
               metrics_all = Analytics::ReportMetrics.calculate_group_metrics(categorized_visit_ids, range, query)
-              metrics_map = items_counts.keys.index_with { |name| metrics_all[name] || {} }
+              metrics_map = counts.keys.index_with { |name| metrics_all[name] || {} }
             end
           end
 
-          Analytics::Ordering.order_names(counts: items_counts, metrics_map: metrics_map, order_by: order_by)
+          Analytics::Ordering.order_names(counts: counts, metrics_map: metrics_map, order_by: order_by)
         end
 
       paged_names, has_more = Analytics::Pagination.paginate_names(sorted_names, limit: limit, page: page)
-      grouped_page_visit_ids = categorized_visit_ids.slice(*paged_names)
+      grouped_page_visit_ids = categorized_visit_ids || grouped_screen_size_visit_ids(relation, names: paged_names)
+      grouped_page_visit_ids = grouped_page_visit_ids.slice(*paged_names)
 
       if goal.present?
         conversions, = Analytics::ReportMetrics.conversions_and_rates(
@@ -129,7 +121,7 @@ class Analytics::DevicesDatasetQuery::Postgres
         }
       else
         page_items = paged_names.map do |name|
-          visitors_count = items_counts[name]
+          visitors_count = counts[name]
           { name: name, visitors: visitors_count, percentage: (visitors_count.to_f / total).round(3) }
         end
         group_metrics = Analytics::ReportMetrics.calculate_group_metrics(grouped_page_visit_ids, range, query)
@@ -146,9 +138,15 @@ class Analytics::DevicesDatasetQuery::Postgres
       end
     end
 
-    def unpaged_screen_sizes_payload(items)
+    def unpaged_screen_sizes_payload(counts)
       total = Analytics::ReportMetrics.percentage_total_visitors(visits)
-      results = items.map { |item| item.merge(percentage: (item[:visitors].to_f / total).round(3)) }
+      results = counts.map do |name, visitors_count|
+        {
+          name: name.to_s.presence || Ahoy::Visit::Constants::UNKNOWN_LABEL,
+          visitors: visitors_count,
+          percentage: (visitors_count.to_f / total).round(3)
+        }
+      end
       {
         results: results,
         metrics: %i[visitors percentage],
@@ -164,17 +162,30 @@ class Analytics::DevicesDatasetQuery::Postgres
 
       relation = visits
       relation = Analytics::Devices.apply_search(relation, grouping, pattern) if pattern.present?
-      grouped_visit_ids, group_metadata = Analytics::Devices.normalize_grouped_visit_ids(
-        Analytics::Devices.pluck_group_rows(relation, grouping),
-        meta_key: grouping[:meta_key],
-        disambiguate_by_meta: Analytics::Devices.disambiguate_versions?(grouping, query.filters)
-      )
-      counts = Analytics::ReportMetrics.unique_counts_from_grouped_visit_ids(grouped_visit_ids, visits)
+      disambiguate_by_meta = Analytics::Devices.disambiguate_versions?(grouping, query.filters)
+
+      if devices_count_first_path?
+        counts, group_metadata, group_keys = Analytics::Devices.normalize_group_counts(
+          Analytics::Devices.pluck_group_count_rows(relation, grouping),
+          meta_key: grouping[:meta_key],
+          disambiguate_by_meta: disambiguate_by_meta
+        )
+        grouped_visit_ids = nil
+      else
+        grouped_visit_ids, group_metadata = Analytics::Devices.normalize_grouped_visit_ids(
+          Analytics::Devices.pluck_group_rows(relation, grouping),
+          meta_key: grouping[:meta_key],
+          disambiguate_by_meta: disambiguate_by_meta
+        )
+        counts = Analytics::ReportMetrics.unique_counts_from_grouped_visit_ids(grouped_visit_ids, visits)
+        group_keys = nil
+      end
 
       if comparison_names.any?
-        grouped_visit_ids.select! { |name, _| comparison_names.include?(Analytics::Devices.formatted_name(name)) }
+        grouped_visit_ids&.select! { |name, _| comparison_names.include?(Analytics::Devices.formatted_name(name)) }
         counts.select! { |name, _| comparison_names.include?(Analytics::Devices.formatted_name(name)) }
         group_metadata.select! { |name, _| comparison_names.include?(Analytics::Devices.formatted_name(name)) }
+        group_keys&.select! { |name, _| comparison_names.include?(Analytics::Devices.formatted_name(name)) }
       end
 
       total = Analytics::ReportMetrics.percentage_total_visitors(visits)
@@ -207,7 +218,19 @@ class Analytics::DevicesDatasetQuery::Postgres
         end
 
       paged_names, has_more = Analytics::Pagination.paginate_names(sorted_names, limit: limit, page: page)
-      page_visit_ids = grouped_visit_ids.slice(*paged_names)
+      page_visit_ids =
+        if grouped_visit_ids
+          grouped_visit_ids.slice(*paged_names)
+        else
+          Analytics::Devices.grouped_visit_ids_for_names(
+            relation,
+            grouping,
+            group_keys_by_name: group_keys,
+            names: paged_names,
+            meta_key: grouping[:meta_key],
+            disambiguate_by_meta: disambiguate_by_meta
+          )
+        end
 
       if goal.present?
         conversions, = Analytics::ReportMetrics.conversions_and_rates(
@@ -263,6 +286,45 @@ class Analytics::DevicesDatasetQuery::Postgres
           meta: { has_more: has_more, skip_imported_reason: Analytics::Imports.skip_reason(query) }
         }
       end
+    end
+
+    def devices_count_first_path?
+      return false if goal.present?
+
+      metric = order_by&.first
+      !metric.in?(%w[bounce_rate visit_duration])
+    end
+
+    def screen_sizes_count_first_path?
+      return false if goal.present?
+
+      metric = order_by&.first
+      !metric.in?(%w[bounce_rate visit_duration])
+    end
+
+    def screen_sizes_relation
+      relation = visits
+      if search.present?
+        relation = relation.where(
+          Analytics::SqlExpression.lower_matches(
+            screen_size_expression,
+            Analytics::Search.contains_pattern(search)
+          )
+        )
+      end
+      relation
+    end
+
+    def grouped_screen_size_visit_ids(relation, names: nil)
+      return {} if names == []
+
+      scoped = relation
+      scoped = scoped.where(Analytics::SqlExpression.in_list(screen_size_expression, names)) unless names.nil?
+      scoped.group(Arel.sql(screen_size_expression)).pluck(Arel.sql("#{screen_size_expression}, ARRAY_AGG(ahoy_visits.id)")).to_h
+    end
+
+    def screen_size_expression
+      @screen_size_expression ||= Analytics::Devices.screen_size_category_sql("screen_size")
     end
 
     def unpaged_devices_payload(grouping)

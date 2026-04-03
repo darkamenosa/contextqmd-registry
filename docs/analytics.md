@@ -64,9 +64,9 @@ analytics_sites
   -> analytics_site_boundaries
   -> ahoy_visits
        -> ahoy_events
+       -> analytics_visit_summaries
        -> analytics_profiles
             -> analytics_profile_keys
-            -> analytics_profile_sessions
             -> analytics_profile_summaries
   -> analytics_goals
   -> analytics_funnels
@@ -312,7 +312,7 @@ first-party page
         ↓
   Analytics::EventsController + Analytics::AhoyStore
         ↓
-  analytics database (ahoy_visits, ahoy_events, analytics_profiles, analytics_profile_keys, analytics_profile_sessions, analytics_profile_summaries)
+  analytics database (ahoy_visits, ahoy_events, analytics_visit_summaries, analytics_profiles, analytics_profile_keys, analytics_profile_summaries)
         ↓
   Analytics::RequestQueryParser → Analytics::Query
         ↓
@@ -342,7 +342,7 @@ class AnalyticsRecord < ActiveRecord::Base
 end
 ```
 
-**Tables today**: `analytics_sites`, `analytics_site_boundaries`, `ahoy_visits`, `ahoy_events`, `analytics_funnels`, `analytics_goals`, `analytics_allowed_event_properties`, `analytics_site_tracking_rules`, `analytics_profiles`, `analytics_profile_keys`, `analytics_profile_sessions`, `analytics_profile_summaries`, `analytics_google_search_console_connections`, `analytics_google_search_console_syncs`, `analytics_google_search_console_query_rows`
+**Tables today**: `analytics_sites`, `analytics_site_boundaries`, `ahoy_visits`, `ahoy_events`, `analytics_visit_summaries`, `analytics_visit_page_engagements`, `analytics_site_visit_hourly_rollups`, `analytics_site_event_hourly_rollups`, `analytics_site_source_hourly_visitor_rollups`, `analytics_site_location_hourly_visitor_rollups`, `analytics_site_page_hourly_rollups`, `analytics_funnels`, `analytics_goals`, `analytics_allowed_event_properties`, `analytics_site_tracking_rules`, `analytics_profiles`, `analytics_profile_keys`, `analytics_profile_summaries`, `analytics_google_search_console_connections`, `analytics_google_search_console_syncs`, `analytics_google_search_console_query_rows`
 
 **Legacy schema note**: `analytics_settings` still exists in the analytics schema,
 but the current runtime design no longer uses it as an active config surface.
@@ -462,16 +462,26 @@ Important rule:
 - unresolved orders or payments are acceptable
 - forcing weak profile links too early is worse than leaving a fact unresolved temporarily
 
-### analytics_profile_sessions
+### analytics_visit_summaries
 
-One row per projected profile-owned session, keyed back to the original `ahoy_visits` row. This is the profile journey read model used by profile-specific views.
+One row per projected visit/session, keyed back to the original `ahoy_visits` row. This is the canonical visit-level read model used by profile journeys, entry/exit page reads, visit metrics, and filtered report fallbacks.
 
 | Column group | Columns | Purpose |
 |---|---|---|
-| Ownership | `analytics_profile_id`, `visit_id` | Canonical profile + backing visit |
-| Timeline | `started_at`, `last_event_at`, `duration_seconds` | Session chronology |
-| Activity | `events_count`, `pageviews_count`, `event_names`, `page_paths` | Session-level rollups |
-| Context | `entry_page`, `exit_page`, `current_page`, `source`, `country`, `country_code`, `region`, `city`, `device_type`, `browser`, `os` | Latest session summary for journey/live/profile screens |
+| Ownership | `visit_id`, `analytics_site_id`, `analytics_profile_id`, `visitor_token` | Backing visit plus optional resolved profile ownership |
+| Timeline | `started_at`, `last_event_at`, `visit_duration_seconds`, `duration_seconds` | Visit chronology plus pageview/session duration views |
+| Activity | `events_count`, `pageviews_count`, `event_names`, `page_paths`, `engaged_ms_total`, `has_non_pageview_events` | Visit-level rollups reused by profile/reporting queries |
+| Context | `entry_page`, `exit_page`, `current_page`, `source`, `country`, `country_code`, `region`, `city`, `device_type`, `browser`, `os` | Latest visit summary for journey/live/profile screens |
+
+### analytics_visit_page_engagements
+
+One row per `visit + page_path`. This is the page-engagement read model used for time-on-page and scroll-depth metrics without rescanning raw events.
+
+| Column group | Columns | Purpose |
+|---|---|---|
+| Ownership | `visit_id`, `analytics_site_id`, `visitor_token` | Backing visit and site |
+| Timeline | `started_at` | Bucketable visit start for filtered metrics |
+| Activity | `pageviews_count`, `legacy_time_on_page_seconds`, `legacy_time_on_page_count`, `engaged_seconds_total`, `has_engagement`, `max_scroll_depth` | Reusable page engagement projection |
 
 ### analytics_profile_summaries
 
@@ -706,11 +716,20 @@ Long-term split:
 
 Today the fact store is still Postgres. Later it can move behind ClickHouse adapters without changing the control plane.
 
+Current code boundary:
+
+- `Analytics::FactStore` is the application-side raw fact boundary for append + read operations
+- `Analytics::FactStore::Postgres` is the current adapter over `Ahoy::Visit` and `Ahoy::Event`
+- ingest should append visits/events through this boundary instead of treating `Analytics::AhoyStore` as the architecture seam
+- canonical visit/session projections, visit/page/property filters, rollup refreshers, and live/profile payloads should prefer this boundary over direct raw-fact queries
+- reporting query classes still use `Analytics::Storage` for adapter-backed aggregate reads
+
 ### Privacy and operations notes
 
 - provider credentials should always be encrypted
 - webhook ingestion must be idempotent
-- event ids or external ids should be used for replay-safe upserts
+- browser-originated events now carry stable event ids, persisted on `ahoy_events.event_id`, for replay-safe retries and future dual-write / replication work
+- provider or external ids should follow the same rule for non-browser ingestion paths
 - privacy deletion or redaction flows from providers should be handled explicitly
 - keep original provider identifiers and original currency values for auditability
 
@@ -819,6 +838,24 @@ Site ownership should still resolve server-side through `website_id` lookup for
 bootstrap, internal site attestation for events, and strict boundary
 resolution.
 
+### Abuse Hardening Backlog
+
+The current tracker and ingest edge are optimized for product correctness and
+scalability work first. They are not yet the final anti-abuse posture.
+
+One known failure mode is analytics spam from a single actor that repeatedly
+opens pages or replays event requests. Because browser continuity is sticky,
+that can show up as one profile with many sessions rather than many distinct
+profiles.
+
+This is a documented deferred issue, not a reason to change the core raw-facts
+or projection design. When revisiting abuse hardening, prioritize:
+
+- explicit rate limits on `POST /a/e` and `POST /a/b`
+- shorter-lived external site attestation tokens
+- suspicious-traffic heuristics keyed by site, IP, browser id, and request rate
+- edge blocking and quarantine/cleanup flows for polluted visit/event ranges
+
 ## Server-Side Initial Pageviews
 
 `app/controllers/concerns/server_side_pageview_tracking.rb` owns first-party analytics bootstrap for eligible public HTML renders and seeds the browser continuity cookie.
@@ -858,8 +895,8 @@ resolution.
 
 ## Rebuild And Replay
 
-Raw visits and events are the source of truth. Sessions, summaries, and profile
-directory state are disposable read models.
+Raw visits and events are the source of truth. Visit summaries, page engagement
+rows, hourly rollups, and profile directory state are disposable read models.
 
 Use these operational entrypoints when derived analytics state needs recovery:
 
@@ -867,13 +904,38 @@ Use these operational entrypoints when derived analytics state needs recovery:
   - reprojects visit-level session state from raw facts
   - use `VISIT_ID=...` to target one visit
   - use `SITE_ID=...` to scope to one analytics site
+- `bin/rake analytics:visits:refresh_summaries`
+  - rebuilds canonical visit summaries from raw facts, including entry/exit pages, visit/profile context, event/page path projection, and visit metrics used by profile/session/reporting reads
+  - use `VISIT_ID=...` to target one visit
+  - use `SITE_ID=...` to scope to one analytics site
+- `bin/rake analytics:visits:refresh_page_summaries`
+  - legacy alias for `analytics:visits:refresh_summaries`
+- `bin/rake analytics:visits:refresh_page_engagements`
+  - rebuilds visit-level page engagement projections from raw pageviews and engagement events
+  - use `VISIT_ID=...` to target one visit
+  - use `SITE_ID=...` to scope to one analytics site
 - `bin/rake analytics:profiles:rebuild`
-  - rebuilds profile sessions + summaries from the profile's raw visit set
+  - rebuilds profile-owned visit summaries + profile summaries from the profile's raw visit set
   - use `PROFILE_ID=...` to target one profile
   - use `SITE_ID=...` to scope to one analytics site
 - `bin/rake analytics:profiles:refresh_summaries`
-  - refreshes summaries only when sessions are already correct
+  - refreshes summaries only when visit summaries are already correct
   - use `PROFILE_ID=...` or `SITE_ID=...` to narrow scope
+- `bin/rake analytics:rollups:refresh_visits`
+  - rebuilds site visit hourly rollups from visit starts plus derived pageview/bounce/duration metrics
+  - use `SITE_ID=...`, `FROM=...`, and `TO=...` to narrow the hourly backfill window
+- `bin/rake analytics:rollups:refresh_events`
+  - rebuilds site event hourly rollups from `ahoy_events.time`
+  - use `SITE_ID=...`, `FROM=...`, and `TO=...` to narrow the hourly backfill window
+- `bin/rake analytics:rollups:refresh_sources`
+  - rebuilds site source hourly visitor rollups from `ahoy_visits.started_at`
+  - use `SITE_ID=...`, `FROM=...`, and `TO=...` to narrow the hourly backfill window
+- `bin/rake analytics:rollups:refresh_locations`
+  - rebuilds site location hourly visitor rollups from `ahoy_visits.started_at`
+  - use `SITE_ID=...`, `FROM=...`, and `TO=...` to narrow the hourly backfill window
+- `bin/rake analytics:rollups:refresh_pages`
+  - rebuilds site page hourly rollups from `ahoy_events.time` for `pageview` events
+  - use `SITE_ID=...`, `FROM=...`, and `TO=...` to narrow the hourly backfill window
 
 Rules:
 
@@ -882,6 +944,8 @@ Rules:
   for a profile may be wrong
 - use summary refresh when only the aggregated profile card/search state is out
   of date
+- use rollup refresh after introducing or changing rollup tables before relying on
+  them for dashboard reads
 - keep historical cleanup explicit through tasks or one-off scripts, not
   request-time repair
 

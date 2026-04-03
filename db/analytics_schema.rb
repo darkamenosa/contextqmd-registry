@@ -10,13 +10,14 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_30_192857) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_03_100000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
   create_table "ahoy_events", force: :cascade do |t|
     t.bigint "analytics_site_boundary_id"
     t.bigint "analytics_site_id"
+    t.string "event_id"
     t.string "name"
     t.jsonb "properties"
     t.datetime "time"
@@ -26,6 +27,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_30_192857) do
     t.index ["analytics_site_boundary_id"], name: "index_ahoy_events_on_analytics_site_boundary_id"
     t.index ["analytics_site_id", "time"], name: "index_ahoy_events_on_site_id_and_time"
     t.index ["analytics_site_id"], name: "index_ahoy_events_on_analytics_site_id"
+    t.index ["event_id"], name: "index_ahoy_events_on_event_id", unique: true, where: "(event_id IS NOT NULL)"
     t.index ["name", "time"], name: "index_ahoy_events_on_name_and_time"
     t.index ["properties"], name: "index_ahoy_events_on_properties", opclass: :jsonb_path_ops, using: :gin
     t.index ["time", "visit_id"], name: "index_ahoy_events_on_time_and_visit_id"
@@ -212,40 +214,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_30_192857) do
     t.index ["kind"], name: "index_analytics_profile_keys_on_kind"
   end
 
-  create_table "analytics_profile_sessions", force: :cascade do |t|
-    t.bigint "analytics_profile_id", null: false
-    t.bigint "analytics_site_id"
-    t.string "browser"
-    t.string "city"
-    t.string "country"
-    t.string "country_code"
-    t.datetime "created_at", null: false
-    t.string "current_page"
-    t.string "device_type"
-    t.integer "duration_seconds", default: 0, null: false
-    t.integer "engaged_ms_total", default: 0, null: false
-    t.string "entry_page"
-    t.jsonb "event_names", default: [], null: false
-    t.integer "events_count", default: 0, null: false
-    t.string "exit_page"
-    t.datetime "last_event_at"
-    t.string "os"
-    t.jsonb "page_paths", default: [], null: false
-    t.integer "pageviews_count", default: 0, null: false
-    t.string "region"
-    t.string "source"
-    t.datetime "started_at", null: false
-    t.datetime "updated_at", null: false
-    t.bigint "visit_id", null: false
-    t.index ["analytics_profile_id", "last_event_at"], name: "index_profile_sessions_on_profile_id_and_last_event_at"
-    t.index ["analytics_profile_id", "started_at"], name: "index_profile_sessions_on_profile_id_and_started_at"
-    t.index ["analytics_profile_id"], name: "index_analytics_profile_sessions_on_analytics_profile_id"
-    t.index ["analytics_site_id", "started_at"], name: "index_analytics_profile_sessions_on_site_id_and_started_at"
-    t.index ["analytics_site_id"], name: "index_analytics_profile_sessions_on_analytics_site_id"
-    t.index ["visit_id"], name: "index_analytics_profile_sessions_on_visit_id", unique: true
-    t.check_constraint "country_code IS NULL OR country_code::text ~ '^[A-Z]{2}$'::text", name: "analytics_profile_sessions_country_code_format"
-  end
-
   create_table "analytics_profile_summaries", force: :cascade do |t|
     t.bigint "analytics_profile_id", null: false
     t.bigint "analytics_site_id"
@@ -328,6 +296,54 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_30_192857) do
     t.index ["host"], name: "index_analytics_site_boundaries_on_host"
   end
 
+  create_table "analytics_site_event_hourly_rollups", force: :cascade do |t|
+    t.bigint "analytics_site_id", null: false
+    t.datetime "bucket_start", null: false
+    t.datetime "created_at", null: false
+    t.integer "events_count", default: 0, null: false
+    t.integer "pageviews_count", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["analytics_site_id", "bucket_start"], name: "idx_site_event_hourly_rollups_on_site_bucket", unique: true
+    t.index ["analytics_site_id"], name: "index_analytics_site_event_hourly_rollups_on_analytics_site_id"
+    t.index ["bucket_start"], name: "index_analytics_site_event_hourly_rollups_on_bucket_start"
+  end
+
+  create_table "analytics_site_location_hourly_visitor_rollups", force: :cascade do |t|
+    t.bigint "analytics_site_id", null: false
+    t.datetime "bucket_start", null: false
+    t.string "country_code", default: "", null: false
+    t.datetime "created_at", null: false
+    t.string "dimension", null: false
+    t.datetime "updated_at", null: false
+    t.string "value", default: "", null: false
+    t.string "visitor_token", null: false
+    t.index ["analytics_site_id", "bucket_start", "dimension", "value", "country_code", "visitor_token"], name: "idx_site_location_hourly_rollups_unique", unique: true
+    t.index ["analytics_site_id"], name: "idx_on_analytics_site_id_f1e61c25c1"
+  end
+
+  create_table "analytics_site_page_hourly_rollups", force: :cascade do |t|
+    t.bigint "analytics_site_id", null: false
+    t.datetime "bucket_start", null: false
+    t.datetime "created_at", null: false
+    t.string "page_path", default: "", null: false
+    t.integer "pageviews_count", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.string "visitor_token", null: false
+    t.index ["analytics_site_id", "bucket_start", "page_path", "visitor_token"], name: "idx_site_page_hourly_rollups_unique", unique: true
+    t.index ["analytics_site_id"], name: "index_analytics_site_page_hourly_rollups_on_analytics_site_id"
+  end
+
+  create_table "analytics_site_source_hourly_visitor_rollups", force: :cascade do |t|
+    t.bigint "analytics_site_id", null: false
+    t.datetime "bucket_start", null: false
+    t.datetime "created_at", null: false
+    t.string "dimension", null: false
+    t.datetime "updated_at", null: false
+    t.string "value", default: "", null: false
+    t.string "visitor_token", null: false
+    t.index ["analytics_site_id", "bucket_start", "dimension", "value", "visitor_token"], name: "idx_site_source_hourly_rollups_unique", unique: true
+  end
+
   create_table "analytics_site_tracking_rules", force: :cascade do |t|
     t.bigint "analytics_site_id", null: false
     t.datetime "created_at", null: false
@@ -335,6 +351,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_30_192857) do
     t.jsonb "include_paths", default: [], null: false
     t.datetime "updated_at", null: false
     t.index ["analytics_site_id"], name: "index_analytics_site_tracking_rules_on_analytics_site_id", unique: true
+  end
+
+  create_table "analytics_site_visit_hourly_rollups", force: :cascade do |t|
+    t.bigint "analytics_site_id", null: false
+    t.integer "bounces_count"
+    t.datetime "bucket_start", null: false
+    t.datetime "created_at", null: false
+    t.integer "pageviews_count"
+    t.float "total_visit_duration_seconds"
+    t.integer "unique_visitors_count", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.integer "visits_count", default: 0, null: false
+    t.index ["analytics_site_id", "bucket_start"], name: "idx_site_visit_hourly_rollups_on_site_bucket", unique: true
+    t.index ["analytics_site_id"], name: "index_analytics_site_visit_hourly_rollups_on_analytics_site_id"
+    t.index ["bucket_start"], name: "index_analytics_site_visit_hourly_rollups_on_bucket_start"
   end
 
   create_table "analytics_sites", force: :cascade do |t|
@@ -353,6 +384,64 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_30_192857) do
     t.index ["public_id"], name: "index_analytics_sites_on_public_id", unique: true
   end
 
+  create_table "analytics_visit_page_engagements", force: :cascade do |t|
+    t.bigint "analytics_site_id", null: false
+    t.datetime "created_at", null: false
+    t.float "engaged_seconds_total", default: 0.0, null: false
+    t.boolean "has_engagement", default: false, null: false
+    t.integer "legacy_time_on_page_count", default: 0, null: false
+    t.float "legacy_time_on_page_seconds", default: 0.0, null: false
+    t.float "max_scroll_depth", default: 0.0, null: false
+    t.text "page_path", default: "", null: false
+    t.integer "pageviews_count", default: 0, null: false
+    t.datetime "started_at", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "visit_id", null: false
+    t.string "visitor_token", null: false
+    t.index ["analytics_site_id", "started_at", "page_path"], name: "idx_analytics_visit_page_engagements_lookup"
+    t.index ["analytics_site_id"], name: "index_analytics_visit_page_engagements_on_analytics_site_id"
+    t.index ["visit_id", "page_path"], name: "idx_analytics_visit_page_engagements_on_visit_page", unique: true
+    t.index ["visit_id"], name: "index_analytics_visit_page_engagements_on_visit_id"
+  end
+
+  create_table "analytics_visit_summaries", force: :cascade do |t|
+    t.bigint "analytics_profile_id"
+    t.bigint "analytics_site_id", null: false
+    t.string "browser"
+    t.string "city"
+    t.string "country"
+    t.string "country_code"
+    t.datetime "created_at", null: false
+    t.string "current_page"
+    t.string "device_type"
+    t.integer "duration_seconds", default: 0, null: false
+    t.integer "engaged_ms_total"
+    t.string "entry_page", default: "", null: false
+    t.jsonb "event_names"
+    t.integer "events_count"
+    t.string "exit_page", default: "", null: false
+    t.boolean "has_non_pageview_events", default: false, null: false
+    t.datetime "last_event_at"
+    t.string "os"
+    t.jsonb "page_paths"
+    t.integer "pageviews_count", default: 0, null: false
+    t.string "region"
+    t.string "source"
+    t.datetime "started_at", null: false
+    t.datetime "updated_at", null: false
+    t.float "visit_duration_seconds", default: 0.0, null: false
+    t.bigint "visit_id", null: false
+    t.string "visitor_token", null: false
+    t.index ["analytics_profile_id", "last_event_at"], name: "index_visit_summaries_on_profile_id_and_last_event_at"
+    t.index ["analytics_profile_id", "started_at"], name: "index_visit_summaries_on_profile_id_and_started_at"
+    t.index ["analytics_profile_id"], name: "index_analytics_visit_summaries_on_analytics_profile_id"
+    t.index ["analytics_site_id", "started_at", "entry_page"], name: "idx_visit_summaries_entry_lookup"
+    t.index ["analytics_site_id", "started_at", "exit_page"], name: "idx_visit_summaries_exit_lookup"
+    t.index ["analytics_site_id"], name: "index_analytics_visit_summaries_on_analytics_site_id"
+    t.index ["visit_id"], name: "index_analytics_visit_summaries_on_visit_id", unique: true
+    t.check_constraint "country_code IS NULL OR country_code::text ~ '^[A-Z]{2}$'::text", name: "analytics_visit_summaries_country_code_format"
+  end
+
   add_foreign_key "ahoy_events", "analytics_site_boundaries"
   add_foreign_key "ahoy_events", "analytics_sites"
   add_foreign_key "ahoy_visits", "analytics_profiles"
@@ -367,9 +456,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_30_192857) do
   add_foreign_key "analytics_google_search_console_syncs", "analytics_google_search_console_connections"
   add_foreign_key "analytics_profile_keys", "analytics_profiles"
   add_foreign_key "analytics_profile_keys", "analytics_sites"
-  add_foreign_key "analytics_profile_sessions", "ahoy_visits", column: "visit_id"
-  add_foreign_key "analytics_profile_sessions", "analytics_profiles"
-  add_foreign_key "analytics_profile_sessions", "analytics_sites"
   add_foreign_key "analytics_profile_summaries", "ahoy_visits", column: "latest_visit_id"
   add_foreign_key "analytics_profile_summaries", "analytics_profiles"
   add_foreign_key "analytics_profile_summaries", "analytics_sites"
@@ -377,5 +463,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_30_192857) do
   add_foreign_key "analytics_profiles", "analytics_sites"
   add_foreign_key "analytics_settings", "analytics_sites"
   add_foreign_key "analytics_site_boundaries", "analytics_sites"
+  add_foreign_key "analytics_site_event_hourly_rollups", "analytics_sites"
+  add_foreign_key "analytics_site_location_hourly_visitor_rollups", "analytics_sites"
+  add_foreign_key "analytics_site_page_hourly_rollups", "analytics_sites"
+  add_foreign_key "analytics_site_source_hourly_visitor_rollups", "analytics_sites"
   add_foreign_key "analytics_site_tracking_rules", "analytics_sites"
+  add_foreign_key "analytics_site_visit_hourly_rollups", "analytics_sites"
+  add_foreign_key "analytics_visit_page_engagements", "ahoy_visits", column: "visit_id", on_delete: :cascade
+  add_foreign_key "analytics_visit_page_engagements", "analytics_sites"
+  add_foreign_key "analytics_visit_summaries", "ahoy_visits", column: "visit_id", on_delete: :cascade
+  add_foreign_key "analytics_visit_summaries", "analytics_profiles"
+  add_foreign_key "analytics_visit_summaries", "analytics_sites"
 end

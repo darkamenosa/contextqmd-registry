@@ -14,6 +14,38 @@ end
 module ActiveSupport
   class TestCase
     include TenantTestHelper
+
+    def with_stubbed_singleton_method(object, method_name, replacement = nil, &block)
+      singleton = object.singleton_class
+      method_defined = object.respond_to?(method_name, true)
+      visibility =
+        if singleton.private_method_defined?(method_name)
+          :private
+        elsif singleton.protected_method_defined?(method_name)
+          :protected
+        else
+          :public
+        end
+      original_method = object.method(method_name) if method_defined
+
+      singleton.define_method(method_name) do |*args, **kwargs, &method_block|
+        if replacement.respond_to?(:call)
+          replacement.call(*args, **kwargs, &method_block)
+        else
+          replacement
+        end
+      end
+      singleton.send(visibility, method_name) unless visibility == :public
+
+      yield
+    ensure
+      singleton.send(:remove_method, method_name) rescue nil
+      if method_defined && original_method
+        singleton.define_method(method_name, original_method)
+        singleton.send(visibility, method_name) unless visibility == :public
+      end
+    end
+
     teardown do
       Current.reset
       ::Analytics::Current.reset if defined?(::Analytics::Current)

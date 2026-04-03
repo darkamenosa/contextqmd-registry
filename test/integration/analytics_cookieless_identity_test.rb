@@ -93,6 +93,47 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  test "duplicate browser event ids are idempotent on event ingest" do
+    event_time = Time.current.iso8601
+    event_id = "evt_test_duplicate_pageview"
+    payload = {
+      events: [
+        {
+          id: event_id,
+          name: "pageview",
+          properties: {
+            page: "/about",
+            url: about_url,
+            title: "About",
+            referrer: "",
+            screen_size: "1440x900"
+          },
+          time: event_time
+        }
+      ]
+    }
+
+    assert_difference -> { Ahoy::Visit.count }, +1 do
+      assert_difference -> { Ahoy::Event.count }, +1 do
+        post "/a/e", params: payload, as: :json, headers: BROWSER_HEADERS
+      end
+    end
+
+    assert_response :success
+
+    assert_no_difference -> { Ahoy::Visit.count } do
+      assert_no_difference -> { Ahoy::Event.count } do
+        post "/a/e", params: payload, as: :json, headers: BROWSER_HEADERS
+      end
+    end
+
+    assert_response :success
+
+    event = Ahoy::Event.find_by!(event_id: event_id)
+    assert_equal "pageview", event.name
+    assert_equal "/about", event.properties["page"]
+  end
+
   test "burst event ingest on a fresh anonymous visit coalesces profile resolution" do
     assert_difference -> { Ahoy::Visit.count }, +1 do
       assert_difference -> { Ahoy::Event.count }, +2 do
@@ -718,7 +759,8 @@ class AnalyticsCookielessIdentityTest < ActionDispatch::IntegrationTest
       perform_enqueued_jobs(
         only: [
           Analytics::ProfileResolutionJob,
-          Analytics::VisitProjectionJob
+          Analytics::VisitProjectionJob,
+          Analytics::ProfileSummaryRefreshJob
         ],
         &block
       )

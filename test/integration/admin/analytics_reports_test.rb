@@ -13,9 +13,9 @@ class Admin::AnalyticsReportsTest < ActionDispatch::IntegrationTest
   }.freeze
 
   setup do
+    Analytics::VisitSummary.delete_all if Analytics::VisitSummary.available?
     Ahoy::Event.delete_all
     Ahoy::Visit.delete_all
-    AnalyticsProfileSession.delete_all if defined?(AnalyticsProfileSession)
     AnalyticsProfileSummary.delete_all if defined?(AnalyticsProfileSummary)
     Analytics::AllowedEventProperty.delete_all if defined?(Analytics::AllowedEventProperty)
     Analytics::Goal.delete_all

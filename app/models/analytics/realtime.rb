@@ -3,44 +3,29 @@
 module Analytics::Realtime
   class << self
     def active_visits(now: Time.zone.now, window: 5.minutes)
-      window_start = now - window
-
-      Ahoy::Visit
-        .for_analytics_site
-        .where(started_at: window_start..now)
-        .or(Ahoy::Visit.for_analytics_site.where(id: recent_event_visit_ids(window_start)))
-        .distinct
+      Analytics::FactStore.active_visits(site: current_site, now:, window:)
     end
 
     def live_visitors_count(now: Time.zone.now, window: 5.minutes)
-      cutoff = now - window
-      recent_event_visitors = Ahoy::Visit.for_analytics_site.where(id: recent_event_visit_ids(cutoff))
-        .distinct
-        .count(:visitor_token)
-
-      if recent_event_visitors.positive?
-        recent_event_visitors
-      else
-        Ahoy::Visit.for_analytics_site.where(started_at: cutoff..now).distinct.count(:visitor_token)
-      end
+      Analytics::FactStore.live_visitors_count(site: current_site, now:, window:)
     end
 
     def active_visits_with_coordinates(window: 5.minutes, now: Time.zone.now)
-      active_visits(now:, window:).merge(Ahoy::Visit.with_coordinates)
+      Analytics::FactStore.active_visits(site: current_site, now:, window:, with_coordinates: true)
     end
 
     def live_dots(limit: 200, window: 5.minutes, now: Time.zone.now)
       window_start = now - window
       visits = active_visits_with_coordinates(window: window, now: now)
-        .order(started_at: :desc)
-        .limit(limit)
+        .sort_by { |visit| [ visit.started_at || Time.at(0), visit.id.to_i ] }
+        .reverse
+        .first(limit)
 
-      event_times = Ahoy::Event
-        .for_analytics_site
-        .where(visit_id: visits.map(&:id))
-        .where("time >= ?", window_start)
-        .group(:visit_id)
-        .maximum(:time)
+      event_times = Analytics::FactStore.latest_event_times_by_visit_id(
+        site: current_site,
+        visit_ids: visits.map(&:id),
+        since: window_start
+      )
 
       visits.map do |visit|
         last_activity = event_times[visit.id] || visit.started_at || now
@@ -63,24 +48,22 @@ module Analytics::Realtime
       end
     end
 
-    def sparkline_today_vs_yesterday(bucket: 15.minutes, now: Time.zone.now, yesterday_full_day: true, table: Ahoy::Visit.table_name, column: "started_at")
+    def sparkline_today_vs_yesterday(bucket: 15.minutes, now: Time.zone.now, yesterday_full_day: true)
       start_today = now.beginning_of_day
       bucket_seconds = bucket.to_i
       bucket_count_today = (((now - start_today) / bucket).floor + 1).clamp(1, 24 * 60 * 60 / bucket_seconds)
       full_day_buckets = (24 * 60 * 60) / bucket_seconds
       bucket_count_yesterday = yesterday_full_day ? full_day_buckets : bucket_count_today
 
-      today_series = series_counts(
-        table: table,
-        column: column,
+      today_series = Analytics::FactStore.visit_series_counts(
+        site: current_site,
         start_at: start_today,
         buckets: bucket_count_today,
         bucket_seconds: bucket_seconds
       )
 
-      yesterday_series = series_counts(
-        table: table,
-        column: column,
+      yesterday_series = Analytics::FactStore.visit_series_counts(
+        site: current_site,
         start_at: start_today - 1.day,
         buckets: bucket_count_yesterday,
         bucket_seconds: bucket_seconds
@@ -89,41 +72,9 @@ module Analytics::Realtime
       { today: today_series, yesterday: yesterday_series }
     end
 
-    def series_counts(table:, column:, start_at:, buckets:, bucket_seconds:)
-      finish = start_at + (buckets - 1) * bucket_seconds
-      seconds = bucket_seconds.to_i
-      seconds = 1 if seconds <= 0
-      seconds = 86_400 if seconds > 86_400
-      connection = Ahoy::Visit.connection
-      start_ts = connection.quote("#{start_at.utc.strftime('%Y-%m-%d %H:%M:%S')}+00")
-      finish_ts = connection.quote("#{finish.utc.strftime('%Y-%m-%d %H:%M:%S')}+00")
-      table_name = connection.quote_table_name(table)
-      column_name = connection.quote_column_name(column)
-      sql = <<~SQL.squish
-        WITH series AS (
-          SELECT generate_series(
-            TIMESTAMPTZ #{start_ts},
-            TIMESTAMPTZ #{finish_ts},
-            INTERVAL '#{seconds} seconds'
-          ) AS bucket
-        )
-        SELECT
-          s.bucket AS bucket,
-          COUNT(t.id) AS value
-        FROM series s
-        LEFT JOIN #{table_name} t
-          ON t.#{column_name} >= s.bucket
-         AND t.#{column_name} < s.bucket + INTERVAL '#{seconds} seconds'
-        GROUP BY s.bucket
-        ORDER BY s.bucket ASC
-      SQL
-
-      rows = connection.exec_query(sql)
-      rows.rows.map { |(_, value)| value.to_i }
-    end
-
-    def recent_event_visit_ids(window_start)
-      Ahoy::Event.for_analytics_site.where("time >= ?", window_start).select(:visit_id).distinct
-    end
+    private
+      def current_site
+        ::Analytics::Current.site_or_default
+      end
   end
 end

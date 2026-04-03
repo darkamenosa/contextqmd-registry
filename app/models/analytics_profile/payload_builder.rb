@@ -154,12 +154,15 @@ module AnalyticsProfile::PayloadBuilder
     def current_page_for_visit(visit)
       return unless visit
 
-      pageview = Ahoy::Event
-        .for_analytics_site(::Analytics::Current.site)
-        .where(visit_id: visit.id, name: "pageview")
-        .order(time: :desc, id: :desc)
-        .limit(1)
-        .pick(Arel.sql("ahoy_events.properties->>'page'"))
+      if Analytics::VisitSummary.available?
+        current_page = Analytics::VisitSummary.find_by(visit_id: visit.id)&.current_page.to_s.presence
+        return current_page if current_page.present?
+      end
+
+      pageview = Analytics::FactStore.last_page_for_visit(
+        visit_id: visit.id,
+        site: ::Analytics::Current.site
+      )
 
       return pageview if pageview.present?
 
@@ -212,7 +215,7 @@ module AnalyticsProfile::PayloadBuilder
       return [] if visit_ids.empty?
       return [] unless AnalyticsProfile::Projection.available?
 
-      AnalyticsProfileSession
+      Analytics::VisitSummary
         .for_analytics_site(::Analytics::Current.site)
         .where(analytics_profile_id: profile.id, visit_id: visit_ids)
         .order(started_at: :desc, id: :desc)
@@ -222,7 +225,7 @@ module AnalyticsProfile::PayloadBuilder
     def profile_activity_payload(profile)
       return [] unless AnalyticsProfile::Projection.available?
 
-      AnalyticsProfileSession
+      Analytics::VisitSummary
         .for_analytics_site(::Analytics::Current.site)
         .where(analytics_profile_id: profile.id)
         .order(started_at: :desc, id: :desc)
@@ -314,7 +317,12 @@ module AnalyticsProfile::PayloadBuilder
 
     def filtered_session_events(visit_id, query)
       query = Analytics::Query.wrap(query)
-      events = Ahoy::Event.for_analytics_site.where(visit_id: visit_id).order(time: :desc, id: :desc).limit(200).to_a
+      events = Analytics::FactStore.events(
+        site: ::Analytics::Current.site,
+        visit_ids: [ visit_id ],
+        order: :desc,
+        limit: 200
+      )
       page_filter = query.filter_value(:page).presence
       goal_filter = query.filter_value(:goal).presence
       page_filter_clauses = query.filter_clauses.select { |_op, dim, _value| dim == :page }

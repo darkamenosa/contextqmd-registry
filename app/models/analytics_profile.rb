@@ -5,6 +5,10 @@ class AnalyticsProfile < AnalyticsRecord
 
   RESOLVER_VERSION = 1
   BROWSER_CONTINUITY_WINDOW = 30.days
+  SUMMARY_REFRESH_COALESCE_WINDOW = 1.second
+
+  ENQUEUE_MARKERS_MUTEX = Mutex.new
+  ENQUEUE_MARKERS = {}
 
   STATUS_ANONYMOUS = "anonymous"
   STATUS_IDENTIFIED = "identified"
@@ -13,7 +17,8 @@ class AnalyticsProfile < AnalyticsRecord
   has_many :profile_keys, class_name: "AnalyticsProfileKey", dependent: :destroy
   has_many :visits, class_name: "Ahoy::Visit", foreign_key: :analytics_profile_id, dependent: :nullify
   has_one :summary, class_name: "AnalyticsProfileSummary", dependent: :destroy
-  has_many :sessions, class_name: "AnalyticsProfileSession", dependent: :destroy
+  has_many :visit_summaries, class_name: "Analytics::VisitSummary", dependent: :nullify, inverse_of: :analytics_profile
+  has_many :sessions, class_name: "Analytics::VisitSummary", foreign_key: :analytics_profile_id
   belongs_to :analytics_site, class_name: "Analytics::Site", optional: true
 
   belongs_to :merged_into, class_name: "AnalyticsProfile", optional: true
@@ -59,7 +64,9 @@ class AnalyticsProfile < AnalyticsRecord
   end
 
   def rebuild_summary_later
-    Analytics::ProfileSummaryRefreshJob.perform_later(self)
+    if should_enqueue_summary_refresh?
+      Analytics::ProfileSummaryRefreshJob.perform_later(self)
+    end
   end
 
   def rebuild_summary_now
@@ -151,11 +158,51 @@ class AnalyticsProfile < AnalyticsRecord
       first_seen_at: first_seen,
       last_seen_at: last_seen,
       last_event_at: event_seen,
-    resolver_version: RESOLVER_VERSION
-  )
+      resolver_version: RESOLVER_VERSION
+    )
   end
 
   private
+    def should_enqueue_summary_refresh?
+      write_coalesced_enqueue_marker(summary_refresh_cache_key, expires_in: SUMMARY_REFRESH_COALESCE_WINDOW)
+    end
+
+    def write_coalesced_enqueue_marker(cache_key, expires_in:)
+      if cache_available_for_enqueue_markers?
+        Rails.cache.write(cache_key, true, unless_exist: true, expires_in:)
+      else
+        write_process_local_enqueue_marker(cache_key, expires_in:)
+      end
+    rescue StandardError
+      true
+    end
+
+    def cache_available_for_enqueue_markers?
+      !Rails.cache.is_a?(ActiveSupport::Cache::NullStore)
+    rescue StandardError
+      false
+    end
+
+    def write_process_local_enqueue_marker(cache_key, expires_in:)
+      now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      expires_at = now + expires_in.to_f
+
+      ENQUEUE_MARKERS_MUTEX.synchronize do
+        ENQUEUE_MARKERS.delete_if { |_key, stored_expires_at| stored_expires_at <= now }
+
+        if ENQUEUE_MARKERS[cache_key].to_f > now
+          false
+        else
+          ENQUEUE_MARKERS[cache_key] = expires_at
+          true
+        end
+      end
+    end
+
+    def summary_refresh_cache_key
+      [ "analytics", "profile", id, "summary-refresh" ].join(":")
+    end
+
     def assign_public_id
       self.public_id ||= SecureRandom.uuid
     end

@@ -74,8 +74,13 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :success
-    assert_includes response.body, "\"includePaths\":[\"/**\"]"
-    assert_includes response.body, "\"excludePaths\":[\"/admin\",\"/.well-known\",\"/analytics\",\"/a\",\"/ahoy\",\"/cable\",\"/preview/**\"]"
+    payload = analytics_bootstrap_payload(response.body)
+
+    assert_equal [ "/**" ], payload.dig("filters", "includePaths")
+    assert_equal(
+      [ "/admin", "/.well-known", "/favicon", "/analytics", "/a", "/ahoy", "/cable", "/preview/**" ],
+      payload.dig("filters", "excludePaths")
+    )
   end
 
   test "head requests do not bootstrap or track analytics" do
@@ -119,6 +124,11 @@ class AnalyticsBootstrapTest < ActionDispatch::IntegrationTest
   end
 
   private
+    def analytics_bootstrap_payload(body)
+      raw_payload = body.match(/window\.analyticsConfig = (\{.*?\});/m)&.captures&.first
+      JSON.parse(raw_payload)
+    end
+
     def with_server_visits(enabled)
       original = Analytics.config.server_visits
       Analytics.config.server_visits = enabled

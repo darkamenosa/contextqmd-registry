@@ -18,7 +18,10 @@ class Analytics::ProfilesDatasetQuery::Postgres < Analytics::DatasetQuery
   end
 
   def latest_visits_by_profile
-    @latest_visits_by_profile ||= Ahoy::Visit.for_analytics_site.where(id: latest_visit_ids).index_by(&:id)
+    @latest_visits_by_profile ||= Analytics::FactStore.visits(
+      site: ::Analytics::Current.site_or_default,
+      ids: latest_visit_ids
+    ).index_by(&:id)
   end
 
   def total_visits_by_profile
@@ -28,7 +31,10 @@ class Analytics::ProfilesDatasetQuery::Postgres < Analytics::DatasetQuery
       missing_ids = totals.select { |_, total| total.nil? }.keys
       next if missing_ids.empty?
 
-      Ahoy::Visit.for_analytics_site.where(analytics_profile_id: missing_ids).group(:analytics_profile_id).count.each do |profile_id, count|
+      Analytics::FactStore.visit_counts_by_profile(
+        site: ::Analytics::Current.site_or_default,
+        profile_ids: missing_ids
+      ).each do |profile_id, count|
         totals[profile_id] = count
       end
 

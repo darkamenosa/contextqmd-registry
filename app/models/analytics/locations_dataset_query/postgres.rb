@@ -55,23 +55,28 @@ class Analytics::LocationsDatasetQuery::Postgres
     end
 
     def map_payload
+      return map_rollup_payload if location_rollup_eligible?
+
       counts = visits.group(Arel.sql(Analytics::Locations.country_code_expression)).count("DISTINCT visitor_token")
       Analytics::Locations.map_from_counts(counts)
     end
 
     def countries_payload
+      return countries_rollup_payload if location_rollup_eligible?
       return all_countries_payload unless paged?
 
-      expr = "COALESCE(#{Analytics::Locations.country_code_expression}, '(unknown)')"
-      relation = visits
-      if search.present?
-        matching_codes = Ahoy::Visit.matching_country_codes(search)
-        relation = matching_codes.any? ? relation.where(country_code: matching_codes) : relation.none
+      relation = countries_relation
+      grouped_visit_ids = nil
+
+      if goal.present?
+        grouped_visit_ids = grouped_location_visit_ids(relation, countries_expression)
+        counts = Analytics::ReportMetrics.unique_counts_from_grouped_visit_ids(grouped_visit_ids, visits)
+        Analytics::Locations.filter_groups!("countries", grouped_visit_ids, counts, comparison_names, comparison_codes)
+      else
+        counts = relation.group(Arel.sql(countries_expression)).count("DISTINCT visitor_token")
+        Analytics::Locations.filter_groups!("countries", {}, counts, comparison_names, comparison_codes)
       end
 
-      grouped_visit_ids = relation.group(Arel.sql(expr)).pluck(Arel.sql("#{expr}, ARRAY_AGG(ahoy_visits.id)")).to_h
-      counts = Analytics::ReportMetrics.unique_counts_from_grouped_visit_ids(grouped_visit_ids, visits)
-      Analytics::Locations.filter_groups!("countries", grouped_visit_ids, counts, comparison_names, comparison_codes)
       total = Analytics::ReportMetrics.percentage_total_visitors(visits)
 
       if goal.present?
@@ -171,15 +176,21 @@ class Analytics::LocationsDatasetQuery::Postgres
     end
 
     def regions_payload
+      return regions_rollup_payload if location_rollup_eligible?
       return all_regions_payload unless paged?
 
-      expr = "COALESCE(region, '(unknown)')"
-      relation = visits
-      pattern = search.present? ? Analytics::Search.contains_pattern(search) : nil
-      relation = relation.where("LOWER(COALESCE(region, '(unknown)')) LIKE ?", pattern) if pattern.present?
-      grouped_visit_ids = relation.group(Arel.sql(expr)).pluck(Arel.sql("#{expr}, ARRAY_AGG(ahoy_visits.id)")).to_h
-      counts = Analytics::ReportMetrics.unique_counts_from_grouped_visit_ids(grouped_visit_ids, visits)
-      Analytics::Locations.filter_groups!("regions", grouped_visit_ids, counts, comparison_names, comparison_codes)
+      relation = grouped_locations_relation(regions_expression)
+      grouped_visit_ids = nil
+
+      if goal.present?
+        grouped_visit_ids = grouped_location_visit_ids(relation, regions_expression)
+        counts = Analytics::ReportMetrics.unique_counts_from_grouped_visit_ids(grouped_visit_ids, visits)
+        Analytics::Locations.filter_groups!("regions", grouped_visit_ids, counts, comparison_names, comparison_codes)
+      else
+        counts = relation.group(Arel.sql(regions_expression)).count("DISTINCT visitor_token")
+        Analytics::Locations.filter_groups!("regions", {}, counts, comparison_names, comparison_codes)
+      end
+
       total = Analytics::ReportMetrics.percentage_total_visitors(visits)
 
       if goal.present?
@@ -224,7 +235,8 @@ class Analytics::LocationsDatasetQuery::Postgres
           end
         sorted_names = Analytics::Ordering.order_names(counts: counts, metrics_map: metrics_map, order_by: order_by)
         paged_names, has_more = Analytics::Pagination.paginate_names(sorted_names, limit: limit, page: page)
-        flags_by_region = Analytics::Locations.country_flags_for_grouped(grouped_visit_ids.slice(*paged_names), visits, :region, query)
+        paged_visit_ids = grouped_visit_ids || grouped_location_visit_ids(relation, regions_expression, names: paged_names)
+        flags_by_region = Analytics::Locations.country_flags_for_grouped(paged_visit_ids, visits, :region, query)
 
         results = paged_names.map do |name|
           visitors = counts[name]
@@ -287,15 +299,21 @@ class Analytics::LocationsDatasetQuery::Postgres
     end
 
     def cities_payload
+      return cities_rollup_payload if location_rollup_eligible?
       return all_cities_payload unless paged?
 
-      expr = "COALESCE(city, '(unknown)')"
-      relation = visits
-      pattern = search.present? ? Analytics::Search.contains_pattern(search) : nil
-      relation = relation.where("LOWER(COALESCE(city, '(unknown)')) LIKE ?", pattern) if pattern.present?
-      grouped_visit_ids = relation.group(Arel.sql(expr)).pluck(Arel.sql("#{expr}, ARRAY_AGG(ahoy_visits.id)")).to_h
-      counts = Analytics::ReportMetrics.unique_counts_from_grouped_visit_ids(grouped_visit_ids, visits)
-      Analytics::Locations.filter_groups!("cities", grouped_visit_ids, counts, comparison_names, comparison_codes)
+      relation = grouped_locations_relation(cities_expression)
+      grouped_visit_ids = nil
+
+      if goal.present?
+        grouped_visit_ids = grouped_location_visit_ids(relation, cities_expression)
+        counts = Analytics::ReportMetrics.unique_counts_from_grouped_visit_ids(grouped_visit_ids, visits)
+        Analytics::Locations.filter_groups!("cities", grouped_visit_ids, counts, comparison_names, comparison_codes)
+      else
+        counts = relation.group(Arel.sql(cities_expression)).count("DISTINCT visitor_token")
+        Analytics::Locations.filter_groups!("cities", {}, counts, comparison_names, comparison_codes)
+      end
+
       total = Analytics::ReportMetrics.percentage_total_visitors(visits)
 
       if goal.present?
@@ -340,7 +358,8 @@ class Analytics::LocationsDatasetQuery::Postgres
           end
         sorted_names = Analytics::Ordering.order_names(counts: counts, metrics_map: metrics_map, order_by: order_by)
         paged_names, has_more = Analytics::Pagination.paginate_names(sorted_names, limit: limit, page: page)
-        flags_by_city = Analytics::Locations.country_flags_for_grouped(grouped_visit_ids.slice(*paged_names), visits, :city, query)
+        paged_visit_ids = grouped_visit_ids || grouped_location_visit_ids(relation, cities_expression, names: paged_names)
+        flags_by_city = Analytics::Locations.country_flags_for_grouped(paged_visit_ids, visits, :city, query)
 
         results = paged_names.map do |name|
           visitors = counts[name]
@@ -416,5 +435,224 @@ class Analytics::LocationsDatasetQuery::Postgres
           skip_imported_reason: Analytics::Imports.skip_reason(query)
         }
       }
+    end
+
+    def countries_relation
+      relation = visits
+      if search.present?
+        matching_codes = Ahoy::Visit.matching_country_codes(search)
+        relation = matching_codes.any? ? relation.where(country_code: matching_codes) : relation.none
+      end
+      relation
+    end
+
+    def grouped_locations_relation(expression)
+      relation = visits
+      if search.present?
+        relation = relation.where(
+          Analytics::SqlExpression.lower_matches(
+            expression,
+            Analytics::Search.contains_pattern(search)
+          )
+        )
+      end
+      relation
+    end
+
+    def grouped_location_visit_ids(relation, expression, names: nil)
+      return {} if names == []
+
+      scoped = relation
+      scoped = scoped.where(Analytics::SqlExpression.in_list(expression, names)) unless names.nil?
+      scoped.group(Arel.sql(expression)).pluck(Arel.sql("#{expression}, ARRAY_AGG(ahoy_visits.id)")).to_h
+    end
+
+    def countries_expression
+      "COALESCE(#{Analytics::Locations.country_code_expression}, '(unknown)')"
+    end
+
+    def regions_expression
+      "COALESCE(region, '(unknown)')"
+    end
+
+    def cities_expression
+      "COALESCE(city, '(unknown)')"
+    end
+
+    def current_site
+      Analytics::Current.site_or_default
+    end
+
+    def map_rollup_payload
+      counts = Analytics::SiteLocationHourlyVisitorRollup.counts_for(
+        range: range,
+        site: current_site,
+        dimension: "map"
+      )
+      Analytics::Locations.map_from_counts(counts)
+    end
+
+    def countries_rollup_payload
+      counts = Analytics::SiteLocationHourlyVisitorRollup.counts_for(
+        range: range,
+        site: current_site,
+        dimension: "countries",
+        search: search
+      )
+      Analytics::Locations.filter_groups!("countries", {}, counts, comparison_names, comparison_codes)
+      total = Analytics::ReportMetrics.percentage_total_visitors(visits)
+
+      if paged?
+        sorted_names =
+          if order_by&.first == "percentage"
+            percentages = counts.keys.index_with { |key| { percentage: counts[key].to_f / total } }
+            Analytics::Ordering.order_names(counts: counts, metrics_map: percentages, order_by: order_by)
+          else
+            Analytics::Ordering.order_names(counts: counts, metrics_map: {}, order_by: order_by)
+          end
+        paged_names, has_more = Analytics::Pagination.paginate_names(sorted_names, limit: limit, page: page)
+        results = paged_names.map { |code| country_result_row(code, counts[code], total) }
+      else
+        has_more = false
+        results = counts
+          .sort_by { |code, visitors| [ -visitors.to_i, country_label_sort_key(code) ] }
+          .map { |code, visitors| country_result_row(code, visitors, total) }
+      end
+
+      {
+        results: results,
+        metrics: %i[visitors percentage],
+        meta: {
+          has_more: has_more,
+          skip_imported_reason: Analytics::Imports.skip_reason(query),
+          metric_labels: { percentage: "Percentage" }
+        }
+      }
+    end
+
+    def regions_rollup_payload
+      counts = Analytics::SiteLocationHourlyVisitorRollup.counts_for(
+        range: range,
+        site: current_site,
+        dimension: "regions",
+        search: search
+      )
+      Analytics::Locations.filter_groups!("regions", {}, counts, comparison_names, comparison_codes)
+      total = Analytics::ReportMetrics.percentage_total_visitors(visits)
+
+      if paged?
+        metrics_map =
+          if order_by&.first == "percentage"
+            counts.keys.index_with { |name| { percentage: counts[name].to_f / total } }
+          else
+            {}
+          end
+        sorted_names = Analytics::Ordering.order_names(counts: counts, metrics_map: metrics_map, order_by: order_by)
+        paged_names, has_more = Analytics::Pagination.paginate_names(sorted_names, limit: limit, page: page)
+        flags_by_region = flags_for_rollup("regions", paged_names)
+        results = paged_names.map { |name| location_result_row(name, counts[name], total, flags_by_region[name]) }
+      else
+        has_more = false
+        flags_by_region = flags_for_rollup("regions", counts.keys)
+        results = counts
+          .sort_by { |name, visitors| [ -visitors.to_i, name.to_s ] }
+          .map { |name, visitors| location_result_row(name, visitors, total, flags_by_region[name]) }
+      end
+
+      {
+        results: results,
+        metrics: %i[visitors percentage],
+        meta: {
+          has_more: has_more,
+          skip_imported_reason: Analytics::Imports.skip_reason(query),
+          metric_labels: { percentage: "Percentage" }
+        }
+      }
+    end
+
+    def cities_rollup_payload
+      counts = Analytics::SiteLocationHourlyVisitorRollup.counts_for(
+        range: range,
+        site: current_site,
+        dimension: "cities",
+        search: search
+      )
+      Analytics::Locations.filter_groups!("cities", {}, counts, comparison_names, comparison_codes)
+      total = Analytics::ReportMetrics.percentage_total_visitors(visits)
+
+      if paged?
+        metrics_map =
+          if order_by&.first == "percentage"
+            counts.keys.index_with { |name| { percentage: counts[name].to_f / total } }
+          else
+            {}
+          end
+        sorted_names = Analytics::Ordering.order_names(counts: counts, metrics_map: metrics_map, order_by: order_by)
+        paged_names, has_more = Analytics::Pagination.paginate_names(sorted_names, limit: limit, page: page)
+        flags_by_city = flags_for_rollup("cities", paged_names)
+        results = paged_names.map { |name| location_result_row(name, counts[name], total, flags_by_city[name]) }
+      else
+        has_more = false
+        flags_by_city = flags_for_rollup("cities", counts.keys)
+        results = counts
+          .sort_by { |name, visitors| [ -visitors.to_i, name.to_s ] }
+          .map { |name, visitors| location_result_row(name, visitors, total, flags_by_city[name]) }
+      end
+
+      {
+        results: results,
+        metrics: %i[visitors percentage],
+        meta: {
+          has_more: has_more,
+          skip_imported_reason: Analytics::Imports.skip_reason(query),
+          metric_labels: { percentage: "Percentage" }
+        }
+      }
+    end
+
+    def flags_for_rollup(dimension, names)
+      return {} if names.blank?
+
+      Analytics::SiteLocationHourlyVisitorRollup
+        .dominant_country_codes_for(range: range, site: current_site, dimension: dimension, values: names)
+        .transform_values { |country_code| Analytics::Locations.emoji_flag_for(country_code) }
+    end
+
+    def country_result_row(code, visitors, total)
+      code_string = code.to_s
+      name = code_string.present? && code_string != "(unknown)" ? Analytics::Locations.country_name_for(code_string) : "(unknown)"
+      {
+        name: name,
+        code: code_string != "(unknown)" ? code_string : nil,
+        visitors: visitors,
+        percentage: (visitors.to_f / total).round(3)
+      }.compact
+    end
+
+    def country_label_sort_key(code)
+      code_string = code.to_s
+      if code_string.present? && code_string != "(unknown)"
+        Analytics::Locations.country_name_for(code_string).to_s
+      else
+        "(unknown)"
+      end
+    end
+
+    def location_result_row(name, visitors, total, country_flag)
+      row = {
+        name: name.to_s.presence || "(unknown)",
+        visitors: visitors,
+        percentage: (visitors.to_f / total).round(3)
+      }
+      country_flag.present? ? row.merge(country_flag: country_flag) : row
+    end
+
+    def location_rollup_eligible?
+      return false if goal.present?
+      return false unless query.filter_dimensions.empty?
+      return false unless query.advanced_filters.empty?
+      return false unless Analytics::SiteLocationHourlyVisitorRollup.available?
+
+      Analytics::SiteLocationHourlyVisitorRollup.usable_for?(range: range, site: current_site, dimension: mode)
     end
 end

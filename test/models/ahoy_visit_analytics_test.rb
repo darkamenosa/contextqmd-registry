@@ -8,9 +8,10 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
   include ActiveSupport::Testing::TimeHelpers
 
   setup do
+    Analytics::VisitPageEngagement.delete_all if Analytics::VisitPageEngagement.available?
+    Analytics::VisitSummary.delete_all if Analytics::VisitSummary.available?
     Ahoy::Event.delete_all
     Ahoy::Visit.delete_all
-    AnalyticsProfileSession.delete_all if defined?(AnalyticsProfileSession)
     AnalyticsProfileSummary.delete_all if defined?(AnalyticsProfileSummary)
     AnalyticsProfileKey.delete_all if defined?(AnalyticsProfileKey)
     AnalyticsProfile.delete_all if defined?(AnalyticsProfile)
@@ -89,6 +90,56 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
     end
   end
 
+  test "rebuild_summary_later coalesces duplicate jobs for the same profile" do
+    profile = AnalyticsProfile.create!(
+      status: AnalyticsProfile::STATUS_ANONYMOUS,
+      first_seen_at: 10.minutes.ago,
+      last_seen_at: 1.minute.ago
+    )
+
+    assert_enqueued_jobs 1, only: Analytics::ProfileSummaryRefreshJob do
+      2.times { profile.rebuild_summary_later }
+    end
+  end
+
+  test "visit projection job enqueues a summary refresh instead of rebuilding it inline" do
+    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    profile = AnalyticsProfile.create!(
+      analytics_site: site,
+      status: AnalyticsProfile::STATUS_ANONYMOUS,
+      first_seen_at: 10.minutes.ago,
+      last_seen_at: 1.minute.ago
+    )
+    visit = Ahoy::Visit.create!(
+      analytics_site: site,
+      analytics_profile: profile,
+      visit_token: SecureRandom.hex(16),
+      visitor_token: SecureRandom.hex(16),
+      browser_id: SecureRandom.uuid,
+      started_at: 5.minutes.ago.change(usec: 0),
+      country: "Spain",
+      city: "Barcelona",
+      device_type: "Desktop",
+      browser: "Chrome",
+      os: "Mac OS",
+      landing_page: "https://docs.example.test/pricing"
+    )
+    Ahoy::Event.create!(
+      analytics_site: site,
+      visit: visit,
+      name: "pageview",
+      properties: { page: "/pricing" },
+      time: 4.minutes.ago.change(usec: 0)
+    )
+
+    assert_enqueued_jobs 1, only: Analytics::ProfileSummaryRefreshJob do
+      Analytics::VisitProjectionJob.perform_now(visit)
+    end
+
+    assert Analytics::VisitSummary.find_by(visit_id: visit.id)
+    assert_nil AnalyticsProfileSummary.find_by(analytics_profile_id: profile.id)
+  end
+
   test "track_event enqueues visit projection when a profiled visit receives later events" do
     site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
     profile = AnalyticsProfile.create!(
@@ -118,6 +169,29 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
           time: 4.minutes.ago.change(usec: 0)
         )
       end
+    end
+  end
+
+  test "track_event refreshes visit page summaries for non-pageview events" do
+    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    visit = Ahoy::Visit.create!(
+      analytics_site: site,
+      visit_token: SecureRandom.hex(16),
+      visitor_token: SecureRandom.hex(16),
+      browser_id: SecureRandom.uuid,
+      started_at: 5.minutes.ago.change(usec: 0)
+    )
+
+    store = Analytics::AhoyStore.new(
+      ahoy: OpenStruct.new(visit_token: visit.visit_token, existing_visit_token: true)
+    )
+
+    assert_enqueued_jobs 1, only: Analytics::VisitSummaryRefreshJob do
+      store.track_event(
+        name: "signup",
+        properties: {},
+        time: 4.minutes.ago.change(usec: 0)
+      )
     end
   end
 
@@ -324,6 +398,61 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
     assert_equal "fbads", row.dig(:source_info, :top_utm_source)
   end
 
+  test "sources payload uses hourly source visitor rollups for unfiltered counts" do
+    now = Time.zone.now.change(usec: 0)
+    Ahoy::Visit.create!(
+      visit_token: SecureRandom.hex(16),
+      visitor_token: "source-rollup-direct-a",
+      started_at: now
+    )
+    Ahoy::Visit.create!(
+      visit_token: SecureRandom.hex(16),
+      visitor_token: "source-rollup-direct-b",
+      started_at: now
+    )
+    Ahoy::Visit.create!(
+      visit_token: SecureRandom.hex(16),
+      visitor_token: "source-rollup-google",
+      referring_domain: "google.com",
+      started_at: now
+    )
+
+    with_stubbed_singleton_method(Analytics::SiteSourceHourlyVisitorRollup, :available?, true) do
+      with_stubbed_singleton_method(Analytics::SiteSourceHourlyVisitorRollup, :usable_for?, true) do
+        with_stubbed_singleton_method(
+          Analytics::SiteSourceHourlyVisitorRollup,
+          :counts_for,
+          {
+            "Direct" => 2,
+            "Organic Search" => 1
+          }
+        ) do
+          with_stubbed_singleton_method(
+            Analytics::ReportMetrics,
+            :unique_counts_from_grouped_visit_ids,
+            ->(*) { raise "hourly source rollups should provide counts" }
+          ) do
+            payload = sources_payload(
+              {
+                period: "custom",
+                from: now.to_date.iso8601,
+                to: now.to_date.iso8601,
+                filters: {},
+                advanced_filters: {},
+                mode: "channels"
+              },
+              limit: 20,
+              page: 1
+            )
+
+            assert_equal [ "Direct", "Organic Search" ], payload.fetch(:results).map { |row| row.fetch(:name) }
+            assert_equal [ 2, 1 ], payload.fetch(:results).map { |row| row.fetch(:visitors) }
+          end
+        end
+      end
+    end
+  end
+
   test "classifies plausible-style ai search and social aliases into channels" do
     now = Time.zone.now.change(usec: 0)
 
@@ -367,7 +496,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
     assert_equal({}, Analytics::Imports.exit_aggregates(range))
   end
 
-  test "live visitors prefer recent event activity over recent started_at fallback" do
+  test "live visitors include both recent event activity and newly started visits" do
     now = Time.zone.now.change(usec: 0)
 
     active_by_event = Ahoy::Visit.create!(
@@ -392,7 +521,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
       longitude: -122.4194
     )
 
-    assert_equal 1, Analytics::LiveState.current_visitors(now: now)
+    assert_equal 2, Analytics::LiveState.current_visitors(now: now)
   end
 
   test "live visitors fall back to recent started_at when there are no recent events" do
@@ -424,7 +553,7 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
       time: now - 1.minute
     )
 
-    ids = Analytics::LiveState.active_visits_with_coordinates(now: now, window: 5.minutes).pluck(:id)
+    ids = Analytics::LiveState.active_visits_with_coordinates(now: now, window: 5.minutes).map(&:id)
 
     assert_includes ids, old_visit.id
   end
@@ -544,6 +673,44 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
     end
   end
 
+  test "main graph payload uses visit hourly rollups for unfiltered visits" do
+    range = Time.zone.parse("2026-03-25 09:00:00")..Time.zone.parse("2026-03-25 10:59:59")
+    query = Analytics::Query.new(filters: {})
+    rolled = {
+      Time.zone.parse("2026-03-25 09:00:00").utc => 3,
+      Time.zone.parse("2026-03-25 10:00:00").utc => 1
+    }
+
+    with_stubbed_singleton_method(Analytics::SiteVisitHourlyRollup, :usable_for?, true) do
+      with_stubbed_singleton_method(Analytics::SiteVisitHourlyRollup, :series_for, rolled) do
+        with_stubbed_singleton_method(Analytics::VisitScope, :visits, ->(*) { raise "raw visits should not be queried" }) do
+          series = Analytics::TimeSeries.series_for(range, "hour", query, "visits")
+
+          assert_equal [ 3, 1 ], series[:values]
+        end
+      end
+    end
+  end
+
+  test "main graph payload uses event hourly rollups for unfiltered pageviews" do
+    range = Time.zone.parse("2026-03-25 09:00:00")..Time.zone.parse("2026-03-25 10:59:59")
+    query = Analytics::Query.new(filters: {})
+    rolled = {
+      Time.zone.parse("2026-03-25 09:00:00").utc => 7,
+      Time.zone.parse("2026-03-25 10:00:00").utc => 2
+    }
+
+    with_stubbed_singleton_method(Analytics::SiteEventHourlyRollup, :usable_for?, true) do
+      with_stubbed_singleton_method(Analytics::SiteEventHourlyRollup, :series_for, rolled) do
+        with_stubbed_singleton_method(Analytics::VisitScope, :pageviews, ->(*) { raise "raw pageviews should not be queried" }) do
+          series = Analytics::TimeSeries.series_for(range, "hour", query, "pageviews")
+
+          assert_equal [ 7, 2 ], series[:values]
+        end
+      end
+    end
+  end
+
   test "top stat change follows plausible comparison semantics" do
     assert_equal 100, Analytics::ReportMetrics.top_stat_change(:visitors, 0, 60)
     assert_equal 0, Analytics::ReportMetrics.top_stat_change(:visitors, 0, 0)
@@ -605,6 +772,78 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
       assert_equal 0, unique_visitors[:change]
       assert_equal "2026-03-24T00:00:00+07:00", payload[:comparing_from]
       assert_equal "2026-03-24T17:59:59+07:00", payload[:comparing_to]
+    end
+  end
+
+  test "top stats use hourly rollups for unfiltered visit and pageview totals" do
+    travel_to Time.zone.parse("2026-03-25 14:00:00") do
+      current_visit = Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "top-stats-rollup-current",
+        started_at: Time.zone.parse("2026-03-25 09:00:00")
+      )
+      Ahoy::Event.create!(
+        visit: current_visit,
+        name: "pageview",
+        time: Time.zone.parse("2026-03-25 09:00:00"),
+        properties: { page: "/docs" }
+      )
+
+      previous_visit = Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "top-stats-rollup-previous",
+        started_at: Time.zone.parse("2026-03-24 09:00:00")
+      )
+      Ahoy::Event.create!(
+        visit: previous_visit,
+        name: "pageview",
+        time: Time.zone.parse("2026-03-24 09:00:00"),
+        properties: { page: "/docs" }
+      )
+
+      fallback_metrics = {
+        total_visits: 1,
+        live_visitors: 0,
+        pageviews: 1,
+        pageviews_per_visit: 1.0,
+        bounce_rate: 0.0,
+        average_duration: 0.0
+      }
+
+      with_stubbed_singleton_method(Analytics::SiteVisitHourlyRollup, :usable_for?, true) do
+        with_stubbed_singleton_method(Analytics::SiteEventHourlyRollup, :usable_for?, true) do
+          with_stubbed_singleton_method(
+            Analytics::SiteVisitHourlyRollup,
+            :sum_for,
+            ->(range:, **_) { range.begin.to_date == Date.new(2026, 3, 25) ? 5 : 4 }
+          ) do
+            with_stubbed_singleton_method(
+              Analytics::SiteEventHourlyRollup,
+              :sum_for,
+              ->(range:, **_) { range.begin.to_date == Date.new(2026, 3, 25) ? 11 : 8 }
+            ) do
+              with_stubbed_singleton_method(Analytics::ReportMetrics, :visit_metrics, fallback_metrics) do
+                payload = top_stats_payload(
+                  period: "day",
+                  comparison: "previous_period",
+                  filters: {}
+                )
+
+                total_visits = payload[:top_stats].find { |item| item[:name] == "Total visits" }
+                total_pageviews = payload[:top_stats].find { |item| item[:name] == "Total pageviews" }
+                views_per_visit = payload[:top_stats].find { |item| item[:name] == "Views per visit" }
+
+                assert_equal 5, total_visits[:value]
+                assert_equal 4, total_visits[:comparison_value]
+                assert_equal 11, total_pageviews[:value]
+                assert_equal 8, total_pageviews[:comparison_value]
+                assert_equal 2.2, views_per_visit[:value]
+                assert_equal 2.0, views_per_visit[:comparison_value]
+              end
+            end
+          end
+        end
+      end
     end
   end
 
@@ -1224,6 +1463,71 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
     assert_equal "Desktop", Analytics::Devices.categorize_screen_size("1440x900")
   end
 
+  test "size filter matches categorized raw screen size values" do
+    desktop_visit = Ahoy::Visit.create!(
+      visit_token: SecureRandom.hex(16),
+      visitor_token: "size-filter-desktop",
+      started_at: Time.zone.parse("2026-03-25 09:00:00"),
+      screen_size: "1440x900"
+    )
+    Ahoy::Visit.create!(
+      visit_token: SecureRandom.hex(16),
+      visitor_token: "size-filter-mobile",
+      started_at: Time.zone.parse("2026-03-25 09:10:00"),
+      screen_size: "375x812"
+    )
+
+    filtered = Analytics::VisitScope.visits(
+      Time.zone.parse("2026-03-25 00:00:00")..Time.zone.parse("2026-03-25 23:59:59"),
+      Analytics::Query.new(filter_clauses: [ [ :eq, :size, "Desktop" ] ])
+    )
+
+    assert_equal [ desktop_visit.id ], filtered.pluck(:id)
+  end
+
+  test "screen sizes payload uses grouped counts before fetching paged visit ids" do
+    travel_to Time.zone.parse("2026-03-25 14:00:00") do
+      Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "screen-size-desktop-1",
+        started_at: Time.zone.parse("2026-03-25 09:00:00"),
+        screen_size: "1440x900"
+      )
+      Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "screen-size-desktop-2",
+        started_at: Time.zone.parse("2026-03-25 09:10:00"),
+        screen_size: "Desktop"
+      )
+      Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "screen-size-mobile",
+        started_at: Time.zone.parse("2026-03-25 09:20:00"),
+        screen_size: "375x812"
+      )
+
+      with_stubbed_singleton_method(
+        Analytics::ReportMetrics,
+        :unique_counts_from_grouped_visit_ids,
+        ->(*) { raise "count-first pagination should not use grouped visit ids" }
+      ) do
+        payload = devices_payload(
+          {
+            period: "day",
+            mode: "screen-sizes",
+            filters: {},
+            advanced_filters: {}
+          },
+          limit: 20,
+          page: 1
+        )
+
+        assert_equal [ "Desktop", "Mobile" ], payload.fetch(:results).map { |row| row.fetch(:name) }
+        assert_equal [ 2, 1 ], payload.fetch(:results).map { |row| row.fetch(:visitors) }
+      end
+    end
+  end
+
   test "search terms payload reads cached search console facts for the current site" do
     site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
     connection = Analytics::GoogleSearchConsoleConnection.rotate_for_site!(
@@ -1350,6 +1654,519 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
     assert_equal [ "ChatGPT" ], payload.fetch(:results).map { |row| row.fetch(:name) }
   end
 
+  test "pages payload uses grouped counts before fetching visit ids for paged rows" do
+    travel_to Time.zone.parse("2026-03-25 14:00:00") do
+      alpha_first = Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "pages-alpha-1",
+        started_at: Time.zone.parse("2026-03-25 09:00:00")
+      )
+      alpha_second = Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "pages-alpha-2",
+        started_at: Time.zone.parse("2026-03-25 09:10:00")
+      )
+      beta_visit = Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "pages-beta-1",
+        started_at: Time.zone.parse("2026-03-25 09:20:00")
+      )
+
+      [
+        [ alpha_first, "/alpha", Time.zone.parse("2026-03-25 09:00:00") ],
+        [ alpha_second, "/alpha", Time.zone.parse("2026-03-25 09:10:00") ],
+        [ beta_visit, "/beta", Time.zone.parse("2026-03-25 09:20:00") ]
+      ].each do |visit, page, at|
+        Ahoy::Event.create!(
+          visit: visit,
+          name: "pageview",
+          time: at,
+          properties: { page: page }
+        )
+      end
+
+      with_stubbed_singleton_method(
+        Analytics::ReportMetrics,
+        :unique_counts_from_grouped_visit_ids,
+        ->(*) { raise "count-first pagination should not use grouped visit ids" }
+      ) do
+        payload = pages_payload(
+          {
+            period: "day",
+            mode: "pages",
+            filters: {},
+            advanced_filters: {}
+          },
+          limit: 20,
+          page: 1
+        )
+
+        assert_equal [ "/alpha", "/beta" ], payload.fetch(:results).map { |row| row.fetch(:name) }
+        assert_equal [ 2, 1 ], payload.fetch(:results).map { |row| row.fetch(:visitors) }
+      end
+    end
+  end
+
+  test "pages payload uses site page hourly rollups when eligible" do
+    travel_to Time.zone.parse("2026-03-25 14:00:00") do
+      alpha_first = Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "rollup-pages-alpha-1",
+        started_at: Time.zone.parse("2026-03-25 09:00:00")
+      )
+      alpha_second = Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "rollup-pages-alpha-2",
+        started_at: Time.zone.parse("2026-03-25 09:10:00")
+      )
+      beta_visit = Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "rollup-pages-beta-1",
+        started_at: Time.zone.parse("2026-03-25 09:20:00")
+      )
+
+      [
+        [ alpha_first, "/alpha", Time.zone.parse("2026-03-25 09:00:00") ],
+        [ alpha_second, "/alpha", Time.zone.parse("2026-03-25 09:10:00") ],
+        [ beta_visit, "/beta", Time.zone.parse("2026-03-25 09:20:00") ]
+      ].each do |visit, page, at|
+        Ahoy::Event.create!(
+          visit: visit,
+          name: "pageview",
+          time: at,
+          properties: { page: page }
+        )
+      end
+
+      with_stubbed_singleton_method(Analytics::SitePageHourlyRollup, :available?, true) do
+        with_stubbed_singleton_method(Analytics::SitePageHourlyRollup, :usable_for?, true) do
+          with_stubbed_singleton_method(Analytics::SitePageHourlyRollup, :counts_for, { "/alpha" => 2, "/beta" => 1 }) do
+            with_stubbed_singleton_method(Analytics::SitePageHourlyRollup, :pageviews_for, { "/alpha" => 7, "/beta" => 3 }) do
+              with_stubbed_singleton_method(
+                Analytics::ReportMetrics,
+                :unique_counts_from_grouped_visit_ids,
+                ->(*) { raise "rollup-backed pages should not use grouped visitor count scans" }
+              ) do
+                payload = pages_payload(
+                  {
+                    period: "day",
+                    mode: "pages",
+                    filters: {},
+                    advanced_filters: {}
+                  },
+                  limit: 20,
+                  page: 1
+                )
+
+                assert_equal [ "/alpha", "/beta" ], payload.fetch(:results).map { |row| row.fetch(:name) }
+                assert_equal [ 2, 1 ], payload.fetch(:results).map { |row| row.fetch(:visitors) }
+                assert_equal [ 7, 3 ], payload.fetch(:results).map { |row| row.fetch(:pageviews) }
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+
+  test "seo pages payload uses site page hourly rollups when eligible" do
+    travel_to Time.zone.parse("2026-03-25 14:00:00") do
+      Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "rollup-seo-alpha-1",
+        started_at: Time.zone.parse("2026-03-25 09:00:00")
+      )
+      Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "rollup-seo-alpha-2",
+        started_at: Time.zone.parse("2026-03-25 09:10:00")
+      )
+      Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "rollup-seo-beta-1",
+        started_at: Time.zone.parse("2026-03-25 09:20:00")
+      )
+
+      with_stubbed_singleton_method(Analytics::SitePageHourlyRollup, :available?, true) do
+        with_stubbed_singleton_method(Analytics::SitePageHourlyRollup, :usable_for?, true) do
+          with_stubbed_singleton_method(Analytics::SitePageHourlyRollup, :counts_for, { "/alpha" => 2, "/beta" => 1 }) do
+            with_stubbed_singleton_method(Analytics::SitePageHourlyRollup, :pageviews_for, { "/alpha" => 7, "/beta" => 3 }) do
+              with_stubbed_singleton_method(
+                Analytics::ReportMetrics,
+                :unique_counts_from_grouped_visit_ids,
+                ->(*) { raise "rollup-backed seo pages should not use grouped visitor count scans" }
+              ) do
+                payload = pages_payload(
+                  {
+                    period: "day",
+                    mode: "seo",
+                    filters: {},
+                    advanced_filters: {}
+                  },
+                  limit: 20,
+                  page: 1
+                )
+
+                assert_equal [ "/beta", "/alpha" ], payload.fetch(:results).map { |row| row.fetch(:name) }
+                assert_equal [ 1, 2 ], payload.fetch(:results).map { |row| row.fetch(:visitors) }
+                assert_equal [ 3, 7 ], payload.fetch(:results).map { |row| row.fetch(:pageviews) }
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+
+  test "entry pages payload uses visit page summaries when pageviews are no longer available" do
+    travel_to Time.zone.parse("2026-03-25 14:00:00") do
+      site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+      Analytics::Current.site = site
+      Analytics::Goal.create!(analytics_site: site, display_name: "Signup", event_name: "Signup", custom_props: {})
+
+      converting_visit = Ahoy::Visit.create!(
+        analytics_site: site,
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "entry-summary-convert",
+        landing_page: "/docs",
+        started_at: Time.zone.parse("2026-03-25 09:00:00")
+      )
+      Ahoy::Event.create!(
+        visit: converting_visit,
+        analytics_site: site,
+        name: "pageview",
+        time: Time.zone.parse("2026-03-25 09:00:00"),
+        properties: { page: "/docs" }
+      )
+      Ahoy::Event.create!(
+        visit: converting_visit,
+        analytics_site: site,
+        name: "Signup",
+        time: Time.zone.parse("2026-03-25 09:10:00"),
+        properties: {}
+      )
+
+      Analytics::VisitSummary.refresh_visit!(converting_visit)
+      Ahoy::Event.where(name: "pageview", visit_id: converting_visit.id).delete_all
+
+      payload = pages_payload(
+        {
+          period: "day",
+          mode: "entry",
+          filters: { "goal" => "Signup" },
+          advanced_filters: {}
+        },
+        limit: 20,
+        page: 1
+      )
+
+      assert_equal [ "/docs" ], payload.fetch(:results).map { |row| row.fetch(:name) }
+      assert_equal 1, payload.fetch(:results).first.fetch(:visitors)
+      assert_equal 100.0, payload.fetch(:results).first.fetch(:conversion_rate)
+    end
+  end
+
+  test "exit page filter uses visit page summaries when pageviews are no longer available" do
+    travel_to Time.zone.parse("2026-03-25 14:00:00") do
+      site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+      Analytics::Current.site = site
+
+      matching_visit = Ahoy::Visit.create!(
+        analytics_site: site,
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "exit-summary-match",
+        landing_page: "/docs",
+        started_at: Time.zone.parse("2026-03-25 09:00:00")
+      )
+      other_visit = Ahoy::Visit.create!(
+        analytics_site: site,
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "exit-summary-other",
+        landing_page: "/docs",
+        started_at: Time.zone.parse("2026-03-25 09:10:00")
+      )
+
+      [
+        [ matching_visit, "/docs", Time.zone.parse("2026-03-25 09:00:00") ],
+        [ matching_visit, "/pricing", Time.zone.parse("2026-03-25 09:02:00") ],
+        [ other_visit, "/docs", Time.zone.parse("2026-03-25 09:10:00") ],
+        [ other_visit, "/contact", Time.zone.parse("2026-03-25 09:12:00") ]
+      ].each do |visit, page, at|
+        Ahoy::Event.create!(
+          visit: visit,
+          analytics_site: site,
+          name: "pageview",
+          time: at,
+          properties: { page: page }
+        )
+      end
+
+      Analytics::VisitSummary.refresh_visit!(matching_visit)
+      Analytics::VisitSummary.refresh_visit!(other_visit)
+      Ahoy::Event.where(name: "pageview", visit_id: [ matching_visit.id, other_visit.id ]).delete_all
+
+      range = Time.zone.parse("2026-03-25 00:00:00")..Time.zone.parse("2026-03-25 23:59:59")
+      result_ids = Analytics::VisitScope.visits(range, Analytics::Query.new(filters: { "exit_page" => "/pricing" })).pluck(:id)
+
+      assert_equal [ matching_visit.id ], result_ids
+    end
+  end
+
+  test "locations payload uses grouped counts before fetching region flags for paged rows" do
+    travel_to Time.zone.parse("2026-03-25 14:00:00") do
+      Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "locations-tx-1",
+        started_at: Time.zone.parse("2026-03-25 09:00:00"),
+        region: "Texas",
+        country_code: "US"
+      )
+      Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "locations-tx-2",
+        started_at: Time.zone.parse("2026-03-25 09:10:00"),
+        region: "Texas",
+        country_code: "US"
+      )
+      Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "locations-hcm",
+        started_at: Time.zone.parse("2026-03-25 09:20:00"),
+        region: "Ho Chi Minh City",
+        country_code: "VN"
+      )
+
+      with_stubbed_singleton_method(
+        Analytics::ReportMetrics,
+        :unique_counts_from_grouped_visit_ids,
+        ->(*) { raise "count-first pagination should not use grouped visit ids" }
+      ) do
+        payload = locations_payload(
+          {
+            period: "day",
+            mode: "regions",
+            filters: {},
+            advanced_filters: {}
+          },
+          limit: 20,
+          page: 1
+        )
+
+        assert_equal [ "Texas", "Ho Chi Minh City" ], payload.fetch(:results).map { |row| row.fetch(:name) }
+        assert_equal [ 2, 1 ], payload.fetch(:results).map { |row| row.fetch(:visitors) }
+        assert_equal [ "🇺🇸", "🇻🇳" ], payload.fetch(:results).map { |row| row.fetch(:country_flag) }
+      end
+    end
+  end
+
+  test "locations payload uses site location hourly visitor rollups when eligible" do
+    travel_to Time.zone.parse("2026-03-25 14:00:00") do
+      Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "rollup-region-tx-1",
+        started_at: Time.zone.parse("2026-03-25 09:00:00"),
+        region: "Texas",
+        country_code: "US"
+      )
+      Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "rollup-region-tx-2",
+        started_at: Time.zone.parse("2026-03-25 09:10:00"),
+        region: "Texas",
+        country_code: "US"
+      )
+      Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "rollup-region-hcm",
+        started_at: Time.zone.parse("2026-03-25 09:20:00"),
+        region: "Ho Chi Minh City",
+        country_code: "VN"
+      )
+
+      with_stubbed_singleton_method(Analytics::SiteLocationHourlyVisitorRollup, :available?, true) do
+        with_stubbed_singleton_method(Analytics::SiteLocationHourlyVisitorRollup, :usable_for?, true) do
+          with_stubbed_singleton_method(
+            Analytics::SiteLocationHourlyVisitorRollup,
+            :counts_for,
+            { "Texas" => 2, "Ho Chi Minh City" => 1 }
+          ) do
+            with_stubbed_singleton_method(
+              Analytics::SiteLocationHourlyVisitorRollup,
+              :dominant_country_codes_for,
+              { "Texas" => "US", "Ho Chi Minh City" => "VN" }
+            ) do
+              with_stubbed_singleton_method(
+                Analytics::Locations,
+                :country_flags_for_grouped,
+                ->(*) { raise "rollup-backed locations should not fetch grouped visit flags" }
+              ) do
+                payload = locations_payload(
+                  {
+                    period: "day",
+                    mode: "regions",
+                    filters: {},
+                    advanced_filters: {}
+                  },
+                  limit: 20,
+                  page: 1
+                )
+
+                assert_equal [ "Texas", "Ho Chi Minh City" ], payload.fetch(:results).map { |row| row.fetch(:name) }
+                assert_equal [ 2, 1 ], payload.fetch(:results).map { |row| row.fetch(:visitors) }
+                assert_equal [ "🇺🇸", "🇻🇳" ], payload.fetch(:results).map { |row| row.fetch(:country_flag) }
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+
+  test "devices payload uses grouped counts before fetching browser version visit ids" do
+    travel_to Time.zone.parse("2026-03-25 14:00:00") do
+      Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "devices-chrome-136",
+        started_at: Time.zone.parse("2026-03-25 09:00:00"),
+        browser: "Chrome",
+        browser_version: "136"
+      )
+      Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "devices-firefox-136",
+        started_at: Time.zone.parse("2026-03-25 09:10:00"),
+        browser: "Firefox",
+        browser_version: "136"
+      )
+
+      with_stubbed_singleton_method(
+        Analytics::ReportMetrics,
+        :unique_counts_from_grouped_visit_ids,
+        ->(*) { raise "count-first pagination should not use grouped visit ids" }
+      ) do
+        payload = devices_payload(
+          {
+            period: "day",
+            mode: "browser-versions",
+            filters: {},
+            advanced_filters: {}
+          },
+          limit: 20,
+          page: 1
+        )
+
+        assert_equal [ "Chrome 136", "Firefox 136" ], payload.fetch(:results).map { |row| row.fetch(:name) }.sort
+        assert_equal "Chrome", payload.fetch(:results).find { |row| row.fetch(:name) == "Chrome 136" }.fetch(:browser)
+        assert_equal "Firefox", payload.fetch(:results).find { |row| row.fetch(:name) == "Firefox 136" }.fetch(:browser)
+      end
+    end
+  end
+
+  test "devices payload accumulates unknown browser buckets and keeps grouped metrics correct" do
+    travel_to Time.zone.parse("2026-03-25 14:00:00") do
+      unknown_nil_visit = Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "devices-unknown-nil",
+        started_at: Time.zone.parse("2026-03-25 09:00:00"),
+        browser: nil
+      )
+      unknown_blank_visit = Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "devices-unknown-blank",
+        started_at: Time.zone.parse("2026-03-25 09:20:00"),
+        browser: ""
+      )
+      Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "devices-chrome",
+        started_at: Time.zone.parse("2026-03-25 09:40:00"),
+        browser: "Chrome"
+      )
+
+      Ahoy::Event.create!(
+        visit: unknown_nil_visit,
+        name: "pageview",
+        properties: { page: "/unknown-start" },
+        time: Time.zone.parse("2026-03-25 09:00:00")
+      )
+      Ahoy::Event.create!(
+        visit: unknown_nil_visit,
+        name: "pageview",
+        properties: { page: "/unknown-end" },
+        time: Time.zone.parse("2026-03-25 09:10:00")
+      )
+      Ahoy::Event.create!(
+        visit: unknown_blank_visit,
+        name: "pageview",
+        properties: { page: "/unknown-once" },
+        time: Time.zone.parse("2026-03-25 09:20:00")
+      )
+
+      payload = devices_payload(
+        {
+          period: "day",
+          mode: "browsers",
+          filters: {},
+          advanced_filters: {}
+        },
+        limit: 20,
+        page: 1
+      )
+
+      unknown_row = payload.fetch(:results).find { |row| row.fetch(:name) == "(unknown)" }
+
+      assert_equal 2, unknown_row.fetch(:visitors)
+      assert_equal 50.0, unknown_row.fetch(:bounce_rate)
+      assert_equal 300.0, unknown_row.fetch(:visit_duration)
+    end
+  end
+
+  test "referrers payload uses grouped counts before fetching visit ids for paged rows" do
+    travel_to Time.zone.parse("2026-03-25 14:00:00") do
+      Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "referrer-alpha-1",
+        started_at: Time.zone.parse("2026-03-25 09:00:00"),
+        referring_domain: "google.com",
+        referrer: "https://google.com/search?q=alpha"
+      )
+      Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "referrer-alpha-2",
+        started_at: Time.zone.parse("2026-03-25 09:10:00"),
+        referring_domain: "google.com",
+        referrer: "https://google.com/search?q=alpha"
+      )
+      Ahoy::Visit.create!(
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "referrer-beta-1",
+        started_at: Time.zone.parse("2026-03-25 09:20:00"),
+        referring_domain: "google.com",
+        referrer: "https://google.com/search?q=beta"
+      )
+
+      with_stubbed_singleton_method(
+        Analytics::ReportMetrics,
+        :unique_counts_from_grouped_visit_ids,
+        ->(*) { raise "count-first pagination should not use grouped visit ids" }
+      ) do
+        payload = referrers_payload(
+          {
+            period: "day",
+            filters: {},
+            advanced_filters: {}
+          },
+          source: "google.com",
+          limit: 20,
+          page: 1
+        )
+
+        assert_equal [ "https://google.com/search?q=alpha", "https://google.com/search?q=beta" ], payload.fetch(:results).map { |row| row.fetch(:name) }
+        assert_equal [ 2, 1 ], payload.fetch(:results).map { |row| row.fetch(:visitors) }
+      end
+    end
+  end
+
   private
     def sources_payload(query, **options)
       Analytics::SourcesDatasetQuery.payload(query: query, **options)
@@ -1369,5 +2186,21 @@ class AhoyVisitAnalyticsTest < ActiveSupport::TestCase
 
     def behaviors_payload(query, **options)
       Analytics::BehaviorsDatasetQuery.payload(query: query, **options)
+    end
+
+    def pages_payload(query, **options)
+      Analytics::PagesDatasetQuery.payload(query: query, **options)
+    end
+
+    def locations_payload(query, **options)
+      Analytics::LocationsDatasetQuery.payload(query: query, **options)
+    end
+
+    def devices_payload(query, **options)
+      Analytics::DevicesDatasetQuery.payload(query: query, **options)
+    end
+
+    def referrers_payload(query, **options)
+      Analytics::ReferrersDatasetQuery.payload(query: query, **options)
     end
 end

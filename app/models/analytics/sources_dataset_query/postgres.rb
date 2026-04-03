@@ -10,22 +10,18 @@ class Analytics::SourcesDatasetQuery::Postgres
   end
 
   def payload
-    return full_payload unless paged?
-
-    grouped_visit_ids = paged_grouped_visit_ids
-    counts = Analytics::ReportMetrics.unique_counts_from_grouped_visit_ids(grouped_visit_ids, visits)
-    remove_empty_utm_groups!(grouped_visit_ids, counts) if utm_mode?
-    Analytics::Sources.filter_groups!(mode, grouped_visit_ids, counts, comparison_names)
-    total = Analytics::ReportMetrics.percentage_total_visitors(visits)
-    sorted_names = sorted_names_for(grouped_visit_ids, counts, total)
-    paged_names, has_more = Analytics::Pagination.paginate_names(sorted_names, limit: limit, page: page)
-    page_visit_ids = grouped_visit_ids.slice(*paged_names)
-    source_previews = mode == "all" ? Analytics::Sources.debug_previews(page_visit_ids) : {}
-
-    if goal.present?
-      goal_payload(page_visit_ids, paged_names, source_previews, has_more)
+    if paged?
+      if source_rollup_eligible?
+        paged_rollup_payload
+      else
+        paged_raw_payload
+      end
     else
-      metrics_payload(page_visit_ids, paged_names, source_previews, counts, total, has_more)
+      if source_rollup_eligible?
+        full_rollup_payload
+      else
+        full_payload
+      end
     end
   end
 
@@ -71,17 +67,32 @@ class Analytics::SourcesDatasetQuery::Postgres
       source_sql.first
     end
 
+    def current_site
+      Analytics::Current.site_or_default
+    end
+
+    def source_relation
+      relation = visits
+      if search.present? && where_clause.present?
+        relation = relation.where([ where_clause, Analytics::Search.contains_pattern(search) ])
+      end
+      relation
+    end
+
     def where_clause
       source_sql.last
     end
 
     def paged_grouped_visit_ids
-      relation = visits
-      if search.present? && where_clause.present?
-        relation = relation.where([ where_clause, Analytics::Search.contains_pattern(search) ])
-      end
+      grouped_visit_ids_for(source_relation)
+    end
 
-      relation.group(Arel.sql(expr)).pluck(Arel.sql("#{expr}, ARRAY_AGG(ahoy_visits.id)")).to_h
+    def grouped_visit_ids_for(relation, names: nil)
+      return {} if names == []
+
+      scoped = relation
+      scoped = scoped.where(Analytics::SqlExpression.in_list(expr, names)) unless names.nil?
+      scoped.group(Arel.sql(expr)).pluck(Arel.sql("#{expr}, ARRAY_AGG(ahoy_visits.id)")).to_h
     end
 
     def remove_empty_utm_groups!(grouped_visit_ids, counts)
@@ -91,6 +102,45 @@ class Analytics::SourcesDatasetQuery::Postgres
       counts.delete(nil)
       counts.delete("")
       counts.delete("(not set)")
+    end
+
+    def paged_raw_payload
+      grouped_visit_ids = paged_grouped_visit_ids
+      counts = Analytics::ReportMetrics.unique_counts_from_grouped_visit_ids(grouped_visit_ids, visits)
+      remove_empty_utm_groups!(grouped_visit_ids, counts) if utm_mode?
+      Analytics::Sources.filter_groups!(mode, grouped_visit_ids, counts, comparison_names)
+      total = Analytics::ReportMetrics.percentage_total_visitors(visits)
+      sorted_names = sorted_names_for(grouped_visit_ids, counts, total)
+      paged_names, has_more = Analytics::Pagination.paginate_names(sorted_names, limit: limit, page: page)
+      page_visit_ids = grouped_visit_ids.slice(*paged_names)
+      source_previews = mode == "all" ? Analytics::Sources.debug_previews(page_visit_ids) : {}
+
+      if goal.present?
+        goal_payload(page_visit_ids, paged_names, source_previews, has_more)
+      else
+        metrics_payload(page_visit_ids, paged_names, source_previews, counts, total, has_more)
+      end
+    end
+
+    def paged_rollup_payload
+      counts = Analytics::SiteSourceHourlyVisitorRollup.counts_for(
+        range: range,
+        site: current_site,
+        dimension: mode,
+        search: search
+      )
+      grouped_visit_ids = order_requires_grouped_visits? ? paged_grouped_visit_ids : nil
+
+      remove_empty_utm_groups!(grouped_visit_ids || {}, counts) if utm_mode?
+      Analytics::Sources.filter_groups!(mode, grouped_visit_ids || {}, counts, comparison_names)
+
+      total = Analytics::ReportMetrics.percentage_total_visitors(visits)
+      sorted_names = sorted_names_for(grouped_visit_ids || {}, counts, total)
+      paged_names, has_more = Analytics::Pagination.paginate_names(sorted_names, limit: limit, page: page)
+      page_visit_ids = grouped_visit_ids ? grouped_visit_ids.slice(*paged_names) : grouped_visit_ids_for(source_relation, names: paged_names)
+      source_previews = mode == "all" ? Analytics::Sources.debug_previews(page_visit_ids) : {}
+
+      metrics_payload(page_visit_ids, paged_names, source_previews, counts, total, has_more)
     end
 
     def sorted_names_for(grouped_visit_ids, counts, total)
@@ -193,5 +243,46 @@ class Analytics::SourcesDatasetQuery::Postgres
           metric_labels: { percentage: "Percentage" }
         }
       }
+    end
+
+    def full_rollup_payload
+      counts = Analytics::SiteSourceHourlyVisitorRollup.counts_for(
+        range: range,
+        site: current_site,
+        dimension: mode,
+        search: search
+      )
+      remove_empty_utm_groups!(counts, counts) if utm_mode?
+      total = Analytics::ReportMetrics.percentage_total_visitors(visits)
+      rows = counts.sort_by { |_, value| -value }.map do |name, value|
+        {
+          name: Analytics::Sources.formatted_name(mode, name),
+          visitors: value,
+          percentage: (value.to_f / total).round(3)
+        }
+      end
+
+      {
+        results: rows,
+        metrics: %i[visitors percentage],
+        meta: {
+          has_more: false,
+          skip_imported_reason: Analytics::Imports.skip_reason(query),
+          metric_labels: { percentage: "Percentage" }
+        }
+      }
+    end
+
+    def source_rollup_eligible?
+      return false if goal.present?
+      return false unless query.filter_dimensions.empty?
+      return false unless query.advanced_filters.empty?
+      return false unless Analytics::SiteSourceHourlyVisitorRollup.available?
+
+      Analytics::SiteSourceHourlyVisitorRollup.usable_for?(range: range, site: current_site, dimension: mode)
+    end
+
+    def order_requires_grouped_visits?
+      order_by.present? && %w[bounce_rate visit_duration].include?(order_by[0])
     end
 end

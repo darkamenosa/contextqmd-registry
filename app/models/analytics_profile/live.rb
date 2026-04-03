@@ -90,18 +90,18 @@ class AnalyticsProfile::Live
 
     def active_live_visits
       Analytics::LiveState.active_visits(now:, window:)
-        .where.not(analytics_profile_id: nil)
-        .order(started_at: :desc, id: :desc)
-        .to_a
+        .select { |visit| visit.analytics_profile_id.present? }
+        .sort_by { |visit| [ visit.started_at || Time.at(0), visit.id.to_i ] }
+        .reverse
     end
 
     def recent_activity_events
-      Ahoy::Event
-        .for_analytics_site
-        .where("time >= ?", now - recent_window)
-        .order(time: :desc, id: :desc)
-        .limit(200)
-        .to_a
+      Analytics::FactStore.events(
+        site: ::Analytics::Current.site_or_default,
+        range: (now - recent_window)..now,
+        limit: 200,
+        order: :desc
+      )
     end
 
     def visits_by_id(active_visits, recent_events)
@@ -109,11 +109,10 @@ class AnalyticsProfile::Live
       visits = active_visits
 
       if event_visit_ids.any?
-        visits += Ahoy::Visit
-          .for_analytics_site
-          .where(id: event_visit_ids)
-          .where.not(analytics_profile_id: nil)
-          .to_a
+        visits += Analytics::FactStore.visits(
+          site: ::Analytics::Current.site_or_default,
+          ids: event_visit_ids
+        ).select { |visit| visit.analytics_profile_id.present? }
       end
 
       visits.uniq { |visit| visit.id }.index_by(&:id)
@@ -129,7 +128,10 @@ class AnalyticsProfile::Live
     def total_visits_by_profile(profile_ids)
       return {} if profile_ids.empty?
 
-      Ahoy::Visit.for_analytics_site.where(analytics_profile_id: profile_ids).group(:analytics_profile_id).count
+      Analytics::FactStore.visit_counts_by_profile(
+        site: ::Analytics::Current.site_or_default,
+        profile_ids: profile_ids
+      )
     end
 
     def last_seen_by_visit(recent_events_by_visit, visits_by_id)
