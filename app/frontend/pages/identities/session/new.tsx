@@ -3,6 +3,10 @@ import type { SharedProps } from "@/types"
 import { Command } from "lucide-react"
 
 import { csrfToken } from "@/lib/csrf-token"
+import {
+  flushPublicShellCache,
+  publicShellPrefetchProps,
+} from "@/lib/public-shell-prefetch"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -51,6 +55,7 @@ export default function LoginPage() {
       },
     }))
     post("/login", {
+      onSuccess: () => flushPublicShellCache(),
       onFinish: () => setData("password", ""),
     })
   }
@@ -61,6 +66,7 @@ export default function LoginPage() {
       <div className="flex w-full max-w-sm flex-col gap-6">
         <Link
           href="/"
+          {...publicShellPrefetchProps("/")}
           className="flex items-center gap-2 self-center font-medium"
         >
           <div className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
@@ -195,6 +201,7 @@ export default function LoginPage() {
                         Don&apos;t have an account?{" "}
                         <Link
                           href="/register"
+                          {...publicShellPrefetchProps("/register")}
                           className="underline underline-offset-4"
                         >
                           Sign up
@@ -208,11 +215,19 @@ export default function LoginPage() {
           </Card>
           <FieldDescription className="px-6 text-center">
             By continuing, you agree to our{" "}
-            <Link href="/terms" className="underline underline-offset-4">
+            <Link
+              href="/terms"
+              {...publicShellPrefetchProps("/terms")}
+              className="underline underline-offset-4"
+            >
               Terms of Service
             </Link>{" "}
             and{" "}
-            <Link href="/privacy" className="underline underline-offset-4">
+            <Link
+              href="/privacy"
+              {...publicShellPrefetchProps("/privacy")}
+              className="underline underline-offset-4"
+            >
               Privacy Policy
             </Link>
             .

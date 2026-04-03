@@ -1,6 +1,7 @@
 import { Link } from "@inertiajs/react"
 import { Command } from "lucide-react"
 
+import { publicShellPrefetchProps } from "@/lib/public-shell-prefetch"
 import { HydratedCurrentYear } from "@/components/shared/hydrated-date-time"
 
 export function SiteFooter() {
@@ -14,6 +15,7 @@ export function SiteFooter() {
               <li>
                 <Link
                   href="/libraries"
+                  {...publicShellPrefetchProps("/libraries")}
                   className="transition-colors hover:text-foreground"
                 >
                   Libraries
@@ -22,6 +24,7 @@ export function SiteFooter() {
               <li>
                 <Link
                   href="/rankings"
+                  {...publicShellPrefetchProps("/rankings")}
                   className="transition-colors hover:text-foreground"
                 >
                   Rankings
@@ -30,6 +33,7 @@ export function SiteFooter() {
               <li>
                 <Link
                   href="/crawl"
+                  {...publicShellPrefetchProps("/crawl")}
                   className="transition-colors hover:text-foreground"
                 >
                   Queue
@@ -43,6 +47,7 @@ export function SiteFooter() {
               <li>
                 <Link
                   href="/about"
+                  {...publicShellPrefetchProps("/about")}
                   className="transition-colors hover:text-foreground"
                 >
                   About
@@ -61,6 +66,7 @@ export function SiteFooter() {
               <li>
                 <Link
                   href="/contact"
+                  {...publicShellPrefetchProps("/contact")}
                   className="transition-colors hover:text-foreground"
                 >
                   Contact
@@ -74,6 +80,7 @@ export function SiteFooter() {
               <li>
                 <Link
                   href="/privacy"
+                  {...publicShellPrefetchProps("/privacy")}
                   className="transition-colors hover:text-foreground"
                 >
                   Privacy Policy
@@ -82,6 +89,7 @@ export function SiteFooter() {
               <li>
                 <Link
                   href="/terms"
+                  {...publicShellPrefetchProps("/terms")}
                   className="transition-colors hover:text-foreground"
                 >
                   Terms of Service
@@ -91,7 +99,11 @@ export function SiteFooter() {
           </div>
         </div>
         <div className="mt-8 flex flex-col items-center gap-4 border-t pt-8 text-center text-sm text-muted-foreground sm:flex-row sm:justify-between sm:text-left">
-          <Link href="/" className="flex items-center gap-2">
+          <Link
+            href="/"
+            {...publicShellPrefetchProps("/")}
+            className="flex items-center gap-2"
+          >
             <div className="flex size-6 items-center justify-center rounded-lg bg-foreground text-background">
               <Command className="size-3" />
             </div>

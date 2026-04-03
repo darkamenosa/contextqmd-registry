@@ -12,6 +12,10 @@ import {
 } from "lucide-react"
 
 import { withAccountScope } from "@/lib/account-scope"
+import {
+  flushPublicShellCache,
+  publicShellPrefetchProps,
+} from "@/lib/public-shell-prefetch"
 import { userInitials } from "@/lib/user-initials"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -50,6 +54,13 @@ export function SiteHeader() {
         currentIdentity.defaultAccountId
       )
     : "/app/settings"
+  const dashboardPath = currentIdentity
+    ? withAccountScope(
+        currentUrl,
+        "/app/dashboard",
+        currentIdentity.defaultAccountId
+      )
+    : "/app"
 
   const isActive = (href: string) => {
     if (href === "/") return currentUrl === "/"
@@ -60,7 +71,11 @@ export function SiteHeader() {
     <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="mx-auto flex h-16 max-w-7xl items-center px-4 sm:px-6 lg:px-8">
         {/* Logo */}
-        <Link href="/" className="flex shrink-0 items-center gap-2.5">
+        <Link
+          href="/"
+          {...publicShellPrefetchProps("/")}
+          className="flex shrink-0 items-center gap-2.5"
+        >
           <div className="flex size-8 items-center justify-center rounded-lg bg-foreground text-background">
             <Command className="size-4" />
           </div>
@@ -73,6 +88,7 @@ export function SiteHeader() {
             <Link
               key={link.href}
               href={link.href}
+              {...publicShellPrefetchProps(link.href)}
               className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
                 isActive(link.href)
                   ? "font-medium text-foreground"
@@ -129,7 +145,7 @@ export function SiteHeader() {
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
-                  <DropdownMenuItem onClick={() => router.visit("/app")}>
+                  <DropdownMenuItem onClick={() => router.visit(dashboardPath)}>
                     <LayoutDashboard />
                     Dashboard
                   </DropdownMenuItem>
@@ -152,7 +168,13 @@ export function SiteHeader() {
                   </>
                 )}
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => router.delete("/logout")}>
+                <DropdownMenuItem
+                  onClick={() =>
+                    router.delete("/logout", {
+                      onSuccess: () => flushPublicShellCache(),
+                    })
+                  }
+                >
                   <LogOut />
                   Log out
                 </DropdownMenuItem>
@@ -162,13 +184,19 @@ export function SiteHeader() {
             <>
               <Link
                 href="/login"
+                {...publicShellPrefetchProps("/login")}
                 className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground sm:block"
               >
                 Log in
               </Link>
               <Button
                 nativeButton={false}
-                render={<Link href="/register" />}
+                render={
+                  <Link
+                    href="/register"
+                    {...publicShellPrefetchProps("/register")}
+                  />
+                }
                 size="sm"
                 className="hidden sm:inline-flex"
               >
@@ -196,6 +224,7 @@ export function SiteHeader() {
               <div className="flex items-center justify-between border-b px-4 py-3">
                 <Link
                   href="/"
+                  {...publicShellPrefetchProps("/")}
                   className="flex items-center gap-2.5"
                   onClick={() => setOpen(false)}
                 >
@@ -213,6 +242,7 @@ export function SiteHeader() {
                   <Link
                     key={link.href}
                     href={link.href}
+                    {...publicShellPrefetchProps(link.href)}
                     className={`rounded-lg px-4 py-3 text-[15px] transition-colors ${
                       isActive(link.href)
                         ? "bg-muted font-medium text-foreground"
@@ -248,7 +278,7 @@ export function SiteHeader() {
                   </div>
                   <nav className="flex flex-col p-2">
                     <Link
-                      href="/app"
+                      href={dashboardPath}
                       className="flex items-center gap-3 rounded-lg px-4 py-3 text-[15px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                       onClick={() => setOpen(false)}
                     >
@@ -279,7 +309,9 @@ export function SiteHeader() {
                       type="button"
                       onClick={() => {
                         setOpen(false)
-                        router.delete("/logout")
+                        router.delete("/logout", {
+                          onSuccess: () => flushPublicShellCache(),
+                        })
                       }}
                       className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-[15px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     >
@@ -293,7 +325,11 @@ export function SiteHeader() {
                   <Button
                     nativeButton={false}
                     render={
-                      <Link href="/register" onClick={() => setOpen(false)} />
+                      <Link
+                        href="/register"
+                        {...publicShellPrefetchProps("/register")}
+                        onClick={() => setOpen(false)}
+                      />
                     }
                     size="lg"
                     className="w-full"
@@ -304,7 +340,11 @@ export function SiteHeader() {
                     variant="outline"
                     nativeButton={false}
                     render={
-                      <Link href="/login" onClick={() => setOpen(false)} />
+                      <Link
+                        href="/login"
+                        {...publicShellPrefetchProps("/login")}
+                        onClick={() => setOpen(false)}
+                      />
                     }
                     size="lg"
                     className="w-full"

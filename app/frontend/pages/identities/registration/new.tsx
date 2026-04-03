@@ -3,6 +3,10 @@ import type { SharedProps } from "@/types"
 import { Command } from "lucide-react"
 
 import { csrfToken } from "@/lib/csrf-token"
+import {
+  flushPublicShellCache,
+  publicShellPrefetchProps,
+} from "@/lib/public-shell-prefetch"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -45,7 +49,9 @@ export default function RegisterPage() {
       identity: { email: data.email, password: data.password },
       user: { name: data.name },
     }))
-    post("/register")
+    post("/register", {
+      onSuccess: () => flushPublicShellCache(),
+    })
   }
 
   return (
@@ -54,6 +60,7 @@ export default function RegisterPage() {
       <div className="flex w-full max-w-sm flex-col gap-6">
         <Link
           href="/"
+          {...publicShellPrefetchProps("/")}
           className="flex items-center gap-2 self-center font-medium"
         >
           <div className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
@@ -176,6 +183,7 @@ export default function RegisterPage() {
                         Already have an account?{" "}
                         <Link
                           href="/login"
+                          {...publicShellPrefetchProps("/login")}
                           className="underline underline-offset-4"
                         >
                           Sign in
@@ -189,11 +197,19 @@ export default function RegisterPage() {
           </Card>
           <FieldDescription className="px-6 text-center">
             By creating an account, you agree to our{" "}
-            <Link href="/terms" className="underline underline-offset-4">
+            <Link
+              href="/terms"
+              {...publicShellPrefetchProps("/terms")}
+              className="underline underline-offset-4"
+            >
               Terms of Service
             </Link>{" "}
             and{" "}
-            <Link href="/privacy" className="underline underline-offset-4">
+            <Link
+              href="/privacy"
+              {...publicShellPrefetchProps("/privacy")}
+              className="underline underline-offset-4"
+            >
               Privacy Policy
             </Link>
             .

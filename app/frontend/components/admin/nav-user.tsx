@@ -5,6 +5,7 @@ import { ArrowLeft, EllipsisVertical, LogOut, UserCircle } from "lucide-react"
 import { withAccountScope } from "@/lib/account-scope"
 import { prefetchAppShellPage } from "@/lib/app-shell-prefetch"
 import { currentUserSummary } from "@/lib/current-user"
+import { flushPublicShellCache } from "@/lib/public-shell-prefetch"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -95,7 +96,13 @@ export function NavUser() {
                 <DropdownMenuSeparator />
               </>
             )}
-            <DropdownMenuItem onClick={() => router.delete("/logout")}>
+            <DropdownMenuItem
+              onClick={() =>
+                router.delete("/logout", {
+                  onSuccess: () => flushPublicShellCache(),
+                })
+              }
+            >
               <LogOut />
               Log out
             </DropdownMenuItem>
