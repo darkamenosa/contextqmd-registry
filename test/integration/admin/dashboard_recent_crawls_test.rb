@@ -32,6 +32,37 @@ class Admin::DashboardRecentCrawlsTest < ActionDispatch::IntegrationTest
     Current.reset
   end
 
+  test "dashboard stats use aggregated library counters" do
+    staff_identity, = create_tenant(
+      email: "staff-stats-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Stats"
+    )
+    staff_identity.update!(staff: true)
+
+    hex = SecureRandom.hex(4)
+    library = Library.create!(
+      account: Account.system,
+      namespace: "dashboard-counters-#{hex}",
+      name: "docs-#{hex}",
+      slug: "dashboard-counters-#{hex}",
+      display_name: "Dashboard Counters",
+      source_type: "github"
+    )
+    library.update_columns(versions_count: 7, total_pages_count: 42)
+
+    sign_in(staff_identity)
+
+    get admin_dashboard_path
+
+    assert_response :success
+    stats = page_props.fetch("props").fetch("stats")
+    assert_equal Library.count, stats["libraryCount"]
+    assert_equal Version.count + 7, stats["versionCount"]
+    assert_equal Page.count + 42, stats["pageCount"]
+  ensure
+    Current.reset
+  end
+
   private
 
     def page_props

@@ -52,6 +52,8 @@ class App::DashboardScopingTest < ActionDispatch::IntegrationTest
       title: "Intro",
       description: "Other content"
     )
+    version.reconcile_pages_count
+    other_version.reconcile_pages_count
 
     CrawlRequest.create!(
       creator: user,

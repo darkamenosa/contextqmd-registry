@@ -22,35 +22,35 @@ module App
     private
 
       def my_crawl_requests
-        Current.user.crawl_requests
+        @my_crawl_requests ||= Current.user.crawl_requests
       end
 
       def my_libraries
-        Library.where(id: my_crawl_requests.select(:library_id))
-      end
-
-      def my_versions
-        Version.where(library_id: my_libraries.select(:id))
-      end
-
-      def my_pages
-        Page.where(version_id: my_versions.select(:id))
+        @my_libraries ||= Library.where(id: my_crawl_requests.select(:library_id))
       end
 
       def dashboard_cache_state
-        library_count = my_libraries.count
-        version_count = my_versions.count
-        page_count = my_pages.count
-        crawl_pending = my_crawl_requests.pending.count
+        library_count,
+          version_count,
+          page_count,
+          libraries_updated_at = my_libraries.pick(
+            Arel.sql("COUNT(*)"),
+            Arel.sql("COALESCE(SUM(libraries.versions_count), 0)"),
+            Arel.sql("COALESCE(SUM(libraries.total_pages_count), 0)"),
+            Arel.sql("MAX(libraries.updated_at)")
+          )
+
+        crawl_pending, crawls_updated_at = my_crawl_requests.pick(
+          Arel.sql("COUNT(*) FILTER (WHERE status = 'pending')"),
+          Arel.sql("MAX(updated_at)")
+        )
 
         last_modified = [
           Current.account.updated_at,
           Current.identity.updated_at,
           Current.user.updated_at,
-          my_crawl_requests.maximum(:updated_at),
-          my_libraries.maximum(:updated_at),
-          my_versions.maximum(:updated_at),
-          my_pages.maximum(:updated_at)
+          crawls_updated_at,
+          libraries_updated_at
         ].compact.max
 
         {
