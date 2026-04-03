@@ -25,14 +25,11 @@ class Analytics::LiveState
 
     def broadcast_now(now: Time.zone.now, site: ::Analytics::Current.site)
       resolved_site = resolve_site(site)
-      resolved_boundary = resolved_site&.boundaries&.find_by(primary: true)
 
-      ::Analytics::Current.set(site: resolved_site, site_boundary: resolved_boundary) do
-        ActionCable.server.broadcast(
-          broadcast_stream(site: resolved_site),
-          build(now:, camelize: true)
-        )
-      end
+      ActionCable.server.broadcast(
+        broadcast_stream(site: resolved_site),
+        payload_for_site(site: resolved_site, now:, camelize: true)
+      )
     end
 
     def current_visitors(now: Time.zone.now, window: LIVE_WINDOW)
@@ -63,16 +60,26 @@ class Analytics::LiveState
     def resolve_subscription_stream(token)
       return nil if token.blank?
 
-      payload = subscription_verifier.verified(
-        token,
-        purpose: SUBSCRIPTION_PURPOSE
-      )
-      return nil unless payload.is_a?(Hash) && payload.key?("site_public_id")
-
-      site_key = payload["site_public_id"]
-      return nil if site_key != nil && !site_key.is_a?(String)
+      site_key = site_public_id_from_subscription_token(token)
+      return nil if site_key == false
 
       broadcast_stream(site: site_key.presence)
+    end
+
+    def resolve_subscription_site(token)
+      site_key = site_public_id_from_subscription_token(token)
+      return nil if site_key == false
+
+      resolve_site(site_key.presence)
+    end
+
+    def payload_for_site(site: ::Analytics::Current.site, now: Time.zone.now, camelize: true)
+      resolved_site = resolve_site(site)
+      resolved_boundary = resolved_site&.boundaries&.find_by(primary: true)
+
+      ::Analytics::Current.set(site: resolved_site, site_boundary: resolved_boundary) do
+        build(now:, camelize:)
+      end
     end
 
     def register_subscription(stream)
@@ -186,6 +193,19 @@ class Analytics::LiveState
         else
           Analytics::Site.find_by(public_id: site.to_s)
         end
+      end
+
+      def site_public_id_from_subscription_token(token)
+        payload = subscription_verifier.verified(
+          token,
+          purpose: SUBSCRIPTION_PURPOSE
+        )
+        return false unless payload.is_a?(Hash) && payload.key?("site_public_id")
+
+        site_key = payload["site_public_id"]
+        return false if site_key != nil && !site_key.is_a?(String)
+
+        site_key
       end
 
       def subscription_verifier

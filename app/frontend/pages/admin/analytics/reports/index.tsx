@@ -9,7 +9,7 @@ import type { AnalyticsPageProps } from "../types"
 import AnalyticsDashboard from "../ui/analytics-dashboard"
 
 export default function AdminAnalyticsReports(props: AnalyticsPageProps) {
-  const { site, query, defaultQuery, boot } = props
+  const { site, query, defaultQuery, boot, liveSubscriptionToken } = props
   const { url } = usePage()
 
   return (
@@ -21,6 +21,7 @@ export default function AdminAnalyticsReports(props: AnalyticsPageProps) {
           <AnalyticsDashboardProvider
             site={site}
             initialTopStats={boot.topStats}
+            liveSubscriptionToken={liveSubscriptionToken}
           >
             <QueryProvider initialQuery={query} defaultQuery={defaultQuery}>
               <AnalyticsDashboard initialBoot={boot} />

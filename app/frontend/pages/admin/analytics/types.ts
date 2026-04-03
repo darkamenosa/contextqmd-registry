@@ -522,6 +522,7 @@ export type AnalyticsPageProps = {
   query: AnalyticsQuery
   defaultQuery: AnalyticsQuery
   boot: AnalyticsDashboardBoot
+  liveSubscriptionToken?: string | null
 }
 
 export type AnalyticsSettingsPageProps = {

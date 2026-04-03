@@ -26,6 +26,22 @@ class AnalyticsChannelTest < ActionCable::Channel::TestCase
     assert_has_stream "analytics:#{site.public_id}"
   end
 
+  test "subscribing transmits the current scoped live payload" do
+    site = Analytics::Site.create!(
+      name: "Docs",
+      canonical_hostname: "docs.example.test",
+      time_zone: "UTC"
+    )
+    payload = { "currentVisitors" => 3, "recentEvents" => [] }
+
+    with_stubbed_singleton_method(Analytics::LiveState, :payload_for_site, payload) do
+      subscribe(subscription_token: Analytics::LiveState.subscription_token(site: site))
+
+      assert subscription.confirmed?
+      assert_equal payload, transmissions.last
+    end
+  end
+
   test "rejects subscriptions without a valid live subscription token" do
     subscribe(subscription_token: "invalid-token")
 

@@ -7,6 +7,10 @@ class AnalyticsChannel < ApplicationCable::Channel
       return
     end
 
+    @analytics_live_site = Analytics::LiveState.resolve_subscription_site(
+      params[:subscription_token]
+    )
+
     @analytics_live_stream = Analytics::LiveState.resolve_subscription_stream(
       params[:subscription_token]
     )
@@ -18,6 +22,11 @@ class AnalyticsChannel < ApplicationCable::Channel
 
     stream_from @analytics_live_stream
     @analytics_live_subscription_id = Analytics::LiveState.register_subscription(@analytics_live_stream)
+    transmit Analytics::LiveState.payload_for_site(
+      site: @analytics_live_site,
+      now: Time.zone.now,
+      camelize: true
+    )
   end
 
   def unsubscribed

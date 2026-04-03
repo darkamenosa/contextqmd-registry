@@ -1,3 +1,4 @@
+import { useMemo } from "react"
 import {
   CategoryScale,
   Chart as ChartJS,
@@ -8,13 +9,13 @@ import {
   PointElement,
   Title,
   Tooltip,
+  type ChartOptions,
 } from "chart.js"
 import { ArrowDownIcon, ArrowUpIcon } from "lucide-react"
 import { Line } from "react-chartjs-2"
 
 import { Card, CardContent } from "@/components/ui/card"
 
-// Register Chart.js components
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -53,6 +54,68 @@ export function MetricCard({
     : sparklineData || { today: [], yesterday: undefined }
   const showSparkline = normalized.today && normalized.today.length > 0
   const hasMeaningfulChange = isPositive || isNegative
+  const sparklineDataConfig = useMemo(
+    () => ({
+      labels: Array.from(
+        {
+          length: Math.max(
+            normalized.today.length,
+            normalized.yesterday?.length || 0
+          ),
+        },
+        (_, i) => i
+      ),
+      datasets: [
+        ...(normalized.yesterday && normalized.yesterday.length > 0
+          ? [
+              {
+                data: normalized.yesterday,
+                borderColor: "rgba(128, 128, 128, 0.4)",
+                backgroundColor: "transparent",
+                borderWidth: 1,
+                borderDash: [3, 3] as [number, number],
+                pointRadius: 0,
+                pointHoverRadius: 0,
+                tension: 0.45,
+                fill: false,
+              },
+            ]
+          : []),
+        {
+          data: normalized.today,
+          borderColor: "rgba(26, 26, 26, 1)",
+          backgroundColor: "rgba(26, 26, 26, 0.06)",
+          borderWidth: 1.3,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          tension: 0.45,
+          fill: true,
+        },
+      ],
+    }),
+    [normalized.today, normalized.yesterday]
+  )
+  const sparklineOptions = useMemo<ChartOptions<"line">>(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      events: [],
+      plugins: {
+        legend: { display: false },
+        tooltip: { enabled: false },
+      },
+      scales: {
+        x: { display: false },
+        y: { display: false, beginAtZero: true, grace: "20%" },
+      },
+      interaction: {
+        mode: "index",
+        intersect: false,
+      },
+    }),
+    []
+  )
 
   return (
     <Card className="overflow-hidden rounded-lg border border-border bg-card !py-0">
@@ -102,63 +165,7 @@ export function MetricCard({
 
             {showSparkline && (
               <div className="ml-auto h-8 w-full max-w-[92px] overflow-hidden rounded-md">
-                <Line
-                  data={{
-                    labels: Array.from(
-                      {
-                        length: Math.max(
-                          normalized.today.length,
-                          normalized.yesterday?.length || 0
-                        ),
-                      },
-                      (_, i) => i
-                    ),
-                    datasets: [
-                      ...(normalized.yesterday &&
-                      normalized.yesterday.length > 0
-                        ? [
-                            {
-                              data: normalized.yesterday,
-                              borderColor: "rgba(128, 128, 128, 0.4)",
-                              backgroundColor: "transparent",
-                              borderWidth: 1,
-                              borderDash: [3, 3] as [number, number],
-                              pointRadius: 0,
-                              pointHoverRadius: 0,
-                              tension: 0.45,
-                              fill: false,
-                            },
-                          ]
-                        : []),
-                      {
-                        data: normalized.today,
-                        borderColor: "rgba(26, 26, 26, 1)",
-                        backgroundColor: "rgba(26, 26, 26, 0.06)",
-                        borderWidth: 1.3,
-                        pointRadius: 0,
-                        pointHoverRadius: 0,
-                        tension: 0.45,
-                        fill: true,
-                      },
-                    ],
-                  }}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                      legend: { display: false },
-                      tooltip: { enabled: false },
-                    },
-                    scales: {
-                      x: { display: false },
-                      y: { display: false, beginAtZero: true, grace: "20%" },
-                    },
-                    interaction: {
-                      mode: "index",
-                      intersect: false,
-                    },
-                  }}
-                />
+                <Line data={sparklineDataConfig} options={sparklineOptions} />
               </div>
             )}
           </div>

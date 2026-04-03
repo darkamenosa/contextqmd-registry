@@ -6,8 +6,12 @@ module Admin
       prepend_before_action :ensure_canonical_reports_path, only: :index
 
       def index
+        boot = cache_for([ :reports_boot, request.fullpath ]) { dashboard_boot_payload(@query) }
+        refresh_live_visitors_top_stat!(boot)
+
         render inertia: "admin/analytics/reports/index", props: shell_props(@query).merge(
-          boot: cache_for([ :reports_boot, request.fullpath ]) { dashboard_boot_payload(@query) }
+          boot: boot,
+          live_subscription_token: ::Analytics::LiveState.subscription_token
         )
       end
 

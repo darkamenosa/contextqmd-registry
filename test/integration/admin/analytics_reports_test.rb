@@ -13,6 +13,7 @@ class Admin::AnalyticsReportsTest < ActionDispatch::IntegrationTest
   }.freeze
 
   setup do
+    Rails.cache.clear
     Analytics::VisitSummary.delete_all if Analytics::VisitSummary.available?
     Ahoy::Event.delete_all
     Ahoy::Visit.delete_all
@@ -22,6 +23,33 @@ class Admin::AnalyticsReportsTest < ActionDispatch::IntegrationTest
     Analytics::Funnel.delete_all
     Analytics::SiteBoundary.delete_all
     Analytics::Site.delete_all
+  end
+
+  test "reports shell refreshes live visitors even when boot payload is cached" do
+    staff_identity, = create_tenant(
+      email: "staff-reports-live-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Reports Live"
+    )
+    staff_identity.update!(staff: true)
+    site = Analytics::Bootstrap.ensure_default_site!(host: "localhost")
+
+    sign_in(staff_identity)
+
+    with_stubbed_singleton_method(Analytics::LiveState, :current_visitors, 2) do
+      get reports_path_for(site), headers: INERTIA_HEADERS
+      assert_response :success
+      payload = JSON.parse(response.body).fetch("props")
+      assert_equal 2, payload.fetch("boot").fetch("topStats").fetch("topStats").first.fetch("value")
+    end
+
+    with_stubbed_singleton_method(Analytics::LiveState, :current_visitors, 1) do
+      get reports_path_for(site), headers: INERTIA_HEADERS
+      assert_response :success
+      payload = JSON.parse(response.body).fetch("props")
+      assert_equal 1, payload.fetch("boot").fetch("topStats").fetch("topStats").first.fetch("value")
+    end
+  ensure
+    Current.reset
   end
 
   test "reports shell hides behaviors when nothing is configured or discovered" do
@@ -502,6 +530,7 @@ class Admin::AnalyticsReportsTest < ActionDispatch::IntegrationTest
     payload = JSON.parse(response.body).fetch("props")
     boot = payload.fetch("boot")
 
+    assert_kind_of String, payload.fetch("liveSubscriptionToken")
     assert boot.key?("topStats")
     assert boot.key?("mainGraph")
     assert boot.key?("sources")

@@ -3,14 +3,8 @@ import { useEffect, useState } from "react"
 import { getConsumer, type Subscription } from "@/lib/cable"
 
 import { sortInitialEvents } from "../lib/live-utils"
+import { liveStatsChannelIdentifier } from "../live-stats-channel"
 import type { LiveStats } from "../types"
-
-export function liveStatsChannelIdentifier(subscriptionToken?: string | null) {
-  return {
-    channel: "AnalyticsChannel",
-    subscription_token: subscriptionToken || undefined,
-  }
-}
 
 export function useLiveStats(
   initialStats: LiveStats,

@@ -114,7 +114,6 @@ export default function VisitorGraph({ initialGraph }: VisitorGraphProps) {
     omitMetric: true,
     omitInterval: true,
   })
-  const didFetchTopStatsRef = useRef(false)
   const didFetchGraphRef = useRef(false)
 
   const graphableMetrics = payload.graphableMetrics
@@ -183,11 +182,6 @@ export default function VisitorGraph({ initialGraph }: VisitorGraphProps) {
   ])
 
   useEffect(() => {
-    if (!didFetchTopStatsRef.current) {
-      didFetchTopStatsRef.current = true
-      return
-    }
-
     const controller = new AbortController()
 
     fetchTopStats(baseQuery, controller.signal)

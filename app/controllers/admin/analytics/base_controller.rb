@@ -129,6 +129,25 @@ module Admin
           payload
         end
 
+        def refresh_live_visitors_top_stat!(payload)
+          top_stats_payload =
+            if payload.is_a?(Hash) && payload[:top_stats].is_a?(Array)
+              payload
+            elsif payload.is_a?(Hash) && payload[:top_stats].is_a?(Hash)
+              payload[:top_stats]
+            end
+          top_stats = top_stats_payload&.[](:top_stats) || top_stats_payload&.[]("top_stats")
+          live_stat = top_stats&.first
+          return payload unless (live_stat&.[](:name) || live_stat&.[]("name")) == "Live visitors"
+
+          if live_stat.is_a?(Hash) && live_stat.key?(:value)
+            live_stat[:value] = ::Analytics::LiveState.current_visitors
+          else
+            live_stat["value"] = ::Analytics::LiveState.current_visitors
+          end
+          payload
+        end
+
         def prepare_query
           @query = ::Analytics::Query.from_ui_params(
             default_query.ui_attributes.merge(prepared_params(params)),
