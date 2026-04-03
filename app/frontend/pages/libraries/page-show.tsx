@@ -175,7 +175,7 @@ export default function LibraryPageShow({
             <Card>
               <CardContent className="pt-6">
                 {page.content ? (
-                  <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:scroll-mt-20 prose-code:before:content-none prose-code:after:content-none prose-pre:bg-zinc-950 prose-pre:text-zinc-100">
+                  <div className="prose max-w-none dark:prose-invert prose-headings:scroll-mt-20 prose-code:before:content-none prose-code:after:content-none prose-pre:rounded-lg prose-pre:bg-zinc-950 prose-pre:px-5 prose-pre:py-4 prose-pre:text-[13px] prose-pre:leading-relaxed prose-pre:text-zinc-100">
                     <MarkdownContent content={page.content} headingIds />
                   </div>
                 ) : (
