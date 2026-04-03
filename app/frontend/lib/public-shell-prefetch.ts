@@ -54,6 +54,7 @@ export function publicShellCacheTags(url: string): string[] {
 
 export function publicShellPrefetchProps(url: string) {
   return buildShellPrefetchProps(publicShellCacheTags(url), {
+    linkPrefetch: ["hover"],
     linkCacheFor: ["10s", "30s"],
     programmaticCacheFor: "30s",
   })
