@@ -12,6 +12,8 @@ import {
 } from "lucide-react"
 
 import { withAccountScope } from "@/lib/account-scope"
+import { prefetchAdminShellPage } from "@/lib/admin-shell-prefetch"
+import { prefetchAppShellPage } from "@/lib/app-shell-prefetch"
 import {
   flushPublicShellCache,
   publicShellPrefetchProps,
@@ -62,6 +64,17 @@ export function SiteHeader() {
       )
     : "/app"
 
+  function handleUserMenuOpenChange(open: boolean) {
+    if (!open || !currentIdentity) return
+
+    prefetchAppShellPage(dashboardPath)
+    prefetchAppShellPage(settingsPath)
+
+    if (currentIdentity.staff) {
+      prefetchAdminShellPage("/admin/dashboard")
+    }
+  }
+
   const isActive = (href: string) => {
     if (href === "/") return currentUrl === "/"
     return currentUrl === href || currentUrl.startsWith(`${href}/`)
@@ -103,7 +116,7 @@ export function SiteHeader() {
         {/* Right: Auth + Mobile toggle */}
         <div className="ml-auto flex items-center gap-3">
           {currentIdentity ? (
-            <DropdownMenu>
+            <DropdownMenu onOpenChange={handleUserMenuOpenChange}>
               <DropdownMenuTrigger className="hidden cursor-pointer items-center gap-2 rounded-full py-1 pr-3 pl-1 ring-offset-background outline-hidden transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:flex">
                 <Avatar className="size-7">
                   <AvatarFallback className="bg-foreground text-xs font-medium text-background">
