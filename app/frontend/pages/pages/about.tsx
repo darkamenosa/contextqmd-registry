@@ -89,7 +89,7 @@ export default function About({ seo }: Props) {
   return (
     <PublicLayout seo={seo}>
       {/* Intro */}
-      <section className="mx-auto max-w-7xl px-4 pt-10 pb-8 sm:px-6 sm:pt-20 sm:pb-14 lg:px-8">
+      <section className="mx-auto max-w-7xl px-4 pt-8 pb-6 sm:px-6 sm:pt-16 sm:pb-12 lg:px-8">
         <div className="mx-auto max-w-3xl">
           <h1 className="text-3xl font-bold tracking-tight sm:text-5xl">
             About ContextQMD
@@ -135,7 +135,7 @@ export default function About({ seo }: Props) {
 
       {/* How Context7 MCP works */}
       <section className="border-t">
-        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-20 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-24 lg:px-8">
           <div className="mx-auto max-w-3xl">
             <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
               How Context7 MCP works
@@ -242,7 +242,7 @@ export default function About({ seo }: Props) {
 
       {/* How ContextQMD works */}
       <section className="border-t bg-muted/10">
-        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-20 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-24 lg:px-8">
           <div className="mx-auto max-w-3xl">
             <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
               How ContextQMD works
@@ -369,7 +369,7 @@ export default function About({ seo }: Props) {
 
       {/* Side-by-side comparison */}
       <section className="border-t">
-        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-20 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-24 lg:px-8">
           <div className="mx-auto max-w-3xl">
             <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
               The difference at a glance
@@ -441,7 +441,7 @@ export default function About({ seo }: Props) {
 
       {/* Why I built it */}
       <section className="border-t bg-muted/10">
-        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-20 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-24 lg:px-8">
           <div className="mx-auto max-w-3xl">
             <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
               Why I built it
@@ -482,7 +482,7 @@ export default function About({ seo }: Props) {
 
       {/* What's next */}
       <section className="border-t">
-        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-20 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-24 lg:px-8">
           <div className="mx-auto max-w-3xl">
             <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
               What&apos;s next
@@ -506,7 +506,7 @@ export default function About({ seo }: Props) {
 
       {/* Who am I */}
       <section className="border-t bg-muted/10">
-        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-20 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 sm:py-24 lg:px-8">
           <div className="mx-auto max-w-3xl">
             <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
               Who&apos;s behind this?
