@@ -1,3 +1,5 @@
+<% require "dotenv"; Dotenv.load(".env") %>
+
 # Name of your application. Used to uniquely configure containers.
 service: contextqmd_registry
 
@@ -39,10 +41,6 @@ env:
   secret:
     - RAILS_MASTER_KEY
     - POSTGRES_PASSWORD
-    - CLOUDFLARE_ACCOUNT_ID
-    - CLOUDFLARE_PUBLIC_BUCKET
-    - CLOUDFLARE_PRIVATE_BUCKET
-    - CLOUDFLARE_PUBLIC_URL
     - CLOUDFLARE_R2_ACCESS_KEY_ID
     - CLOUDFLARE_R2_SECRET_ACCESS_KEY
     - GOOGLE_CLIENT_ID
@@ -60,6 +58,10 @@ env:
     DB_POOL: 5
     APP_HOST: contextqmd.com
     INERTIA_SSR_URL: http://vite_ssr:13714
+    CLOUDFLARE_ACCOUNT_ID: <%= ENV["CLOUDFLARE_ACCOUNT_ID"] %>
+    CLOUDFLARE_PUBLIC_BUCKET: <%= ENV.fetch("CLOUDFLARE_PUBLIC_BUCKET", "contextqmd-registry-assets") %>
+    CLOUDFLARE_PRIVATE_BUCKET: <%= ENV.fetch("CLOUDFLARE_PRIVATE_BUCKET", "contextqmd-registry-private") %>
+    CLOUDFLARE_PUBLIC_URL: <%= ENV.fetch("CLOUDFLARE_PUBLIC_URL", "https://assets.contextqmd.com") %>
 
     # Job queue configuration - conservative starting point for 4 vCPU / 7.5 GiB RAM
     JOB_CONCURRENCY: 2
