@@ -55,10 +55,13 @@ test:
 production:
   primary: &primary_production
     <<: *default
-    host: <%= ENV["DB_HOST"] %>
+    host: <%= ENV.fetch("DB_HOST", "contextqmd_registry-db") %>
+    port: <%= ENV.fetch("DB_PORT", 5432) %>
     database: contextqmd_registry_production
     username: contextqmd_registry
     password: <%= ENV["POSTGRES_PASSWORD"] %>
+    advisory_locks: false
+    statement_limit: 200
   cache:
     <<: *primary_production
     database: contextqmd_registry_production_cache

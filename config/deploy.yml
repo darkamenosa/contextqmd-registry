@@ -1,5 +1,3 @@
-<% require "dotenv"; Dotenv.load(".env") %>
-
 # Name of your application. Used to uniquely configure containers.
 service: contextqmd_registry
 
@@ -41,6 +39,10 @@ env:
   secret:
     - RAILS_MASTER_KEY
     - POSTGRES_PASSWORD
+    - CLOUDFLARE_ACCOUNT_ID
+    - CLOUDFLARE_PUBLIC_BUCKET
+    - CLOUDFLARE_PRIVATE_BUCKET
+    - CLOUDFLARE_PUBLIC_URL
     - CLOUDFLARE_R2_ACCESS_KEY_ID
     - CLOUDFLARE_R2_SECRET_ACCESS_KEY
     - GOOGLE_CLIENT_ID
@@ -52,19 +54,17 @@ env:
     SOLID_QUEUE_IN_PUMA: false
 
     # Database configuration
-    DB_HOST: contextqmd_registry-db
+    DB_HOST: contextqmd_registry-pgbouncer
+    DB_DIRECT_HOST: contextqmd_registry-db
+    DB_PORT: 5432
     DB_POOL: 5
     APP_HOST: contextqmd.com
     INERTIA_SSR_URL: http://vite_ssr:13714
-    CLOUDFLARE_ACCOUNT_ID: <%= ENV["CLOUDFLARE_ACCOUNT_ID"] %>
-    CLOUDFLARE_PUBLIC_BUCKET: <%= ENV.fetch("CLOUDFLARE_PUBLIC_BUCKET", "contextqmd-public-assets") %>
-    CLOUDFLARE_PRIVATE_BUCKET: <%= ENV.fetch("CLOUDFLARE_PRIVATE_BUCKET", "contextqmd-private-assets") %>
-    CLOUDFLARE_PUBLIC_URL: <%= ENV.fetch("CLOUDFLARE_PUBLIC_URL", "https://cdn.contextqmd.com") %>
 
-    # Job queue configuration - optimized for 2 vCPU, 4GB RAM
+    # Job queue configuration - conservative starting point for 4 vCPU / 7.5 GiB RAM
     JOB_CONCURRENCY: 2
 
-    # Web server configuration - optimized for 2 vCPU, 4GB RAM
+    # Web server configuration - conservative starting point for 4 vCPU / 7.5 GiB RAM
     WEB_CONCURRENCY: 2
     RAILS_MAX_THREADS: 3
 
@@ -73,7 +73,8 @@ aliases:
   console: app exec --interactive --reuse "bin/rails console"
   shell: app exec --interactive --reuse "bash"
   logs: app logs -f
-  dbc: app exec --interactive --reuse "bin/rails dbconsole"
+  dbc: app exec --interactive --reuse "DB_HOST=contextqmd_registry-db DB_PORT=5432 bin/rails dbconsole"
+  dbc-pooled: app exec --interactive --reuse "DB_HOST=contextqmd_registry-pgbouncer DB_PORT=5432 bin/rails dbconsole"
 
 # Persistent storage volume for Active Storage files.
 volumes:
@@ -90,7 +91,7 @@ builder:
 # PostgreSQL database accessory.
 accessories:
   db:
-    image: postgres:18
+    image: postgres:18.3
     host: 46.225.105.37
     port: "127.0.0.1:5432:5432"
     env:
@@ -103,9 +104,19 @@ accessories:
       - db/production.sql:/docker-entrypoint-initdb.d/setup.sql
     directories:
       - contextqmd_registry_data:/var/lib/postgresql
-#  redis:
-#    image: valkey/valkey:9
-#    host: 46.225.105.37
-#    port: "127.0.0.1:6379:6379"
-#    directories:
-#      - redis_data:/data
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.25.1-p0
+    host: 46.225.105.37
+    port: "127.0.0.1:6432:5432"
+    env:
+      secret:
+        - DATABASE_URLS
+      clear:
+        POOL_MODE: transaction
+        MAX_CLIENT_CONN: 500
+        DEFAULT_POOL_SIZE: 5
+        MIN_POOL_SIZE: 1
+        RESERVE_POOL_SIZE: 2
+        RESERVE_POOL_TIMEOUT: 2
+        MAX_PREPARED_STATEMENTS: 200
+        IGNORE_STARTUP_PARAMETERS: extra_float_digits

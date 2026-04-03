@@ -2,7 +2,11 @@
 
 # If running the rails server then create or migrate existing database
 if [ "${@: -2:1}" == "./bin/rails" ] && [ "${@: -1:1}" == "server" ]; then
-  ./bin/rails db:prepare
+  if [ -n "${DB_DIRECT_HOST:-}" ]; then
+    DB_HOST="$DB_DIRECT_HOST" DB_PORT="${DB_PORT:-5432}" ./bin/rails db:prepare
+  else
+    ./bin/rails db:prepare
+  fi
 fi
 
 exec "${@}"

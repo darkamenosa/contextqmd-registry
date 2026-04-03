@@ -12,6 +12,64 @@ Current production host shape:
 Because the database is not on a dedicated server, tuning should stay
 conservative.
 
+## PgBouncer
+
+Production app traffic should go through PgBouncer first to reduce backend
+Postgres connection pressure.
+
+Communication flow on this Kamal host:
+
+```text
+Rails web/job container
+  -> contextqmd_registry-pgbouncer:5432
+  -> PgBouncer container
+  -> contextqmd_registry-db:5432
+  -> PostgreSQL container
+```
+
+These are separate Docker containers, but Kamal puts them on the same Docker
+network. Inside that network, containers can reach each other by container name
+or network alias. So:
+
+- Rails connects to `contextqmd_registry-pgbouncer`
+- PgBouncer connects to `contextqmd_registry-db`
+- the host-exposed port `127.0.0.1:6432` is only for direct debugging from the
+  server, not for normal app traffic
+
+Current production split:
+
+- Rails app containers default to `DB_HOST=contextqmd_registry-pgbouncer`
+- Direct Postgres remains available at `contextqmd_registry-db`
+- `kamal dbc` is intentionally pinned to the direct host for maintenance work
+- web boot uses `DB_DIRECT_HOST` for `db:prepare`, so schema checks and
+  migrations do not run through transaction pooling
+
+PgBouncer runs in `transaction` pooling mode with conservative limits for this
+host:
+
+- `default_pool_size = 5`
+- `min_pool_size = 1`
+- `reserve_pool_size = 2`
+- `max_client_conn = 500`
+- `ignore_startup_parameters = extra_float_digits`
+- `max_prepared_statements = 200`
+
+Rails production config disables Active Record advisory locks so deploy-time
+tasks do not rely on session-level locks while running through the pooler, and
+it caps `statement_limit = 200` to match the PgBouncer prepared-statement cache.
+
+### Secret
+
+PgBouncer should receive its backend database URLs from the accessory env var
+`DATABASE_URLS`, provided via Kamal secrets rather than clear config.
+
+That secret value should contain a comma-separated list of production database
+URLs, for example:
+
+```text
+postgres://contextqmd_registry:...@contextqmd_registry-db/contextqmd_registry_production,postgres://contextqmd_registry:...@contextqmd_registry-db/contextqmd_registry_production_cache,postgres://contextqmd_registry:...@contextqmd_registry-db/contextqmd_registry_production_queue,postgres://contextqmd_registry:...@contextqmd_registry-db/contextqmd_registry_production_cable,postgres://contextqmd_registry:...@contextqmd_registry-db/contextqmd_registry_production_analytics
+```
+
 Current first-pass target values:
 
 - `shared_buffers = 768MB`
