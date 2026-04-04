@@ -2,14 +2,23 @@
 
 module Admin
   class DashboardsController < BaseController
-    include PrivateInertiaPageCaching
-
     def show
       state = dashboard_cache_state
-      return unless stale_private_inertia_page?(
-        etag: state[:etag],
-        last_modified: state[:last_modified]
-      )
+      merge_vary_header!("X-Inertia")
+
+      if flash.to_hash.present?
+        response.headers["Cache-Control"] = "no-store"
+      else
+        request.session_options[:skip] = true if request.get? || request.head?
+
+        fresh_when(
+          etag: [ request.inertia? ? "inertia" : "html", *state[:etag] ],
+          last_modified: state[:last_modified],
+          public: false,
+          template: false
+        )
+        return if performed?
+      end
 
       pagy, recent_crawls = pagy(:offset,
         CrawlRequest.includes(:creator, :library).recent,

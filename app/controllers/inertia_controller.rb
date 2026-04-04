@@ -12,6 +12,16 @@ class InertiaController < ApplicationController
 
   private
 
+    def shared_identity_cache_key_parts
+      default_membership = Current.identity.present? ? current_identity_default_membership : nil
+
+      [
+        Current.identity&.cache_key_with_version || "anonymous-identity",
+        default_membership&.cache_key_with_version || "no-default-membership",
+        default_membership&.account&.cache_key_with_version || "no-default-account"
+      ]
+    end
+
     def current_user_props
       return nil unless Current.user && Current.account
 

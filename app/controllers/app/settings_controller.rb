@@ -9,16 +9,28 @@ module App
         Current.user.updated_at
       ].compact.max
 
-      return unless stale_private_inertia_page?(
-        etag: [
-          "app-settings",
-          Current.account.cache_key_with_version,
-          Current.identity.cache_key_with_version,
-          Current.user.cache_key_with_version,
-          Current.identity.password_set_by_user?
-        ],
-        last_modified: last_modified
-      )
+      merge_vary_header!("X-Inertia")
+
+      if flash.to_hash.present?
+        response.headers["Cache-Control"] = "no-store"
+      else
+        request.session_options[:skip] = true if request.get? || request.head?
+
+        fresh_when(
+          etag: [
+            request.inertia? ? "inertia" : "html",
+            "app-settings",
+            Current.account.cache_key_with_version,
+            Current.identity.cache_key_with_version,
+            Current.user.cache_key_with_version,
+            Current.identity.password_set_by_user?
+          ],
+          last_modified: last_modified,
+          public: false,
+          template: false
+        )
+        return if performed?
+      end
 
       render inertia: "app/settings/show", props: {
         name: Current.user.name,

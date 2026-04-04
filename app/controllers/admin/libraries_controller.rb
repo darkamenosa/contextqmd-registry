@@ -10,6 +10,43 @@ module Admin
       else
         Library.all
       end
+      page_signature = libraries_index_page_signature(base)
+      total_count = Library.count
+      filtered_count = base.count
+      last_modified = [
+        Library.maximum(:updated_at),
+        Version.maximum(:updated_at),
+        SourcePolicy.maximum(:updated_at),
+        Account.maximum(:updated_at)
+      ].compact.max
+
+      merge_vary_header!("X-Inertia")
+
+      if flash.to_hash.present?
+        response.headers["Cache-Control"] = "no-store"
+      else
+        request.session_options[:skip] = true if request.get? || request.head?
+
+        fresh_when(
+          etag: [
+            request.inertia? ? "inertia" : "html",
+            "admin-libraries-index",
+            params[:query].to_s,
+            params[:sort] || "updated_at",
+            params[:direction] || "desc",
+            params[:page].presence || "1",
+            Current.identity.cache_key_with_version,
+            total_count,
+            filtered_count,
+            page_signature,
+            last_modified&.to_fs(:usec)
+          ],
+          last_modified: last_modified,
+          public: false,
+          template: false
+        )
+        return if performed?
+      end
 
       scope = base.includes(:account, :versions, :source_policy)
 
@@ -21,7 +58,7 @@ module Admin
       render inertia: "admin/libraries/index", props: {
         libraries: libraries.map { |lib| library_row_props(lib) },
         pagination: pagination_props(pagy),
-        total_count: Library.count,
+        total_count: total_count,
         filters: {
           query: params[:query] || "",
           sort: params[:sort] || "updated_at",
@@ -111,12 +148,31 @@ module Admin
           homepage_url: library.homepage_url,
           default_version: library.default_version,
           license_status: library.source_policy&.license_status,
-          version_count: library.versions.size,
-          page_count: library.versions.sum(&:pages_count),
+          version_count: library.versions_count,
+          page_count: library.total_pages_count,
           account_name: library.account.name,
           updated_at: library.updated_at.iso8601,
           created_at: library.created_at.iso8601
         }
+      end
+
+      def libraries_index_page_signature(base)
+        page_number = [ params[:page].to_i, 1 ].max
+        offset = (page_number - 1) * 25
+
+        rows = base
+          .order(sort_column => sort_direction)
+          .offset(offset)
+          .limit(25)
+          .pluck(
+            :id,
+            :slug,
+            :versions_count,
+            :total_pages_count,
+            :updated_at
+          )
+
+        Digest::SHA256.hexdigest(rows.to_json)
       end
 
       def library_detail_props(library)

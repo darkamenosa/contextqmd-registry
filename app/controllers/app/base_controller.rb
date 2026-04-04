@@ -3,7 +3,6 @@
 module App
   class BaseController < InertiaController
     include BlockSearchEngineIndexing
-    include PrivateInertiaPageCaching
 
     private
 

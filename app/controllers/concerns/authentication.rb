@@ -67,7 +67,7 @@ module Authentication
     end
 
     def storable_location?
-      request.get? && is_navigational_format? && !devise_controller? && !request.xhr?
+      request.get? && !authenticated? && is_navigational_format? && !devise_controller? && !request.xhr?
     end
 
     def store_user_location

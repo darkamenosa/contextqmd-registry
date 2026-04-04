@@ -3,8 +3,6 @@
 require "test_helper"
 
 class App::PrivatePageCachingTest < ActionDispatch::IntegrationTest
-  include Devise::Test::IntegrationHelpers
-
   INERTIA_HEADERS = {
     "X-Inertia" => "true",
     "X-Inertia-Version" => ViteRuby.digest,
@@ -17,7 +15,8 @@ class App::PrivatePageCachingTest < ActionDispatch::IntegrationTest
       name: "Dashboard Cache"
     )
 
-    sign_in(identity)
+    sign_in_with_password(identity)
+    consume_post_login_dashboard_flash(account)
 
     get app_dashboard_path(account_id: account.external_account_id)
 
@@ -58,6 +57,53 @@ class App::PrivatePageCachingTest < ActionDispatch::IntegrationTest
     Current.reset
   end
 
+  test "dashboard html revalidation does not rewrite cookies on 304" do
+    identity, account, = create_tenant(
+      email: "dashboard-html-304-#{SecureRandom.hex(4)}@example.com",
+      name: "Dashboard HTML 304"
+    )
+
+    sign_in_with_password(identity)
+    consume_post_login_dashboard_flash(account)
+
+    get app_dashboard_path(account_id: account.external_account_id)
+
+    assert_response :success
+    etag = response.headers["ETag"]
+    assert etag.present?
+
+    get(
+      app_dashboard_path(account_id: account.external_account_id),
+      headers: { "If-None-Match" => etag }
+    )
+
+    assert_response :not_modified
+    assert_nil response.headers["Set-Cookie"]
+  ensure
+    Current.reset
+  end
+
+  test "dashboard stops rewriting cookies after the first authenticated request" do
+    identity, account, = create_tenant(
+      email: "dashboard-cookie-stability-#{SecureRandom.hex(4)}@example.com",
+      name: "Dashboard Cookie Stability"
+    )
+
+    sign_in_with_password(identity)
+    consume_post_login_dashboard_flash(account)
+
+    get app_dashboard_path(account_id: account.external_account_id)
+
+    assert_response :success
+
+    get app_dashboard_path(account_id: account.external_account_id)
+
+    assert_response :success
+    assert_nil response.headers["Set-Cookie"]
+  ensure
+    Current.reset
+  end
+
   test "dashboard invalidates when library counters change" do
     identity, account, user = create_tenant(
       email: "dashboard-counter-cache-#{SecureRandom.hex(4)}@example.com",
@@ -80,7 +126,8 @@ class App::PrivatePageCachingTest < ActionDispatch::IntegrationTest
       status: "completed"
     )
 
-    sign_in(identity)
+    sign_in_with_password(identity)
+    consume_post_login_dashboard_flash(account)
 
     get app_dashboard_path(account_id: account.external_account_id), headers: INERTIA_HEADERS
 
@@ -109,13 +156,35 @@ class App::PrivatePageCachingTest < ActionDispatch::IntegrationTest
     Current.reset
   end
 
+  test "dashboard stores payload in rails cache under the dashboard state key" do
+    identity, account, user = create_tenant(
+      email: "dashboard-payload-cache-#{SecureRandom.hex(4)}@example.com",
+      name: "Dashboard Payload Cache"
+    )
+
+    cache_store = ActiveSupport::Cache.lookup_store(:memory_store)
+
+    sign_in_with_password(identity)
+    consume_post_login_dashboard_flash(account)
+
+    with_stubbed_singleton_method(Rails, :cache, cache_store) do
+      get app_dashboard_path(account_id: account.external_account_id), headers: INERTIA_HEADERS
+
+      assert_response :success
+      assert_operator cache_store.instance_variable_get(:@data).size, :>, 0
+    end
+  ensure
+    Current.reset
+  end
+
   test "settings disables conditional caching when flash is present, then returns to private etag caching" do
     identity, account, user = create_tenant(
       email: "settings-cache-#{SecureRandom.hex(4)}@example.com",
       name: "Settings Cache"
     )
 
-    sign_in(identity)
+    sign_in_with_password(identity)
+    consume_post_login_dashboard_flash(account)
 
     patch app_settings_path(account_id: account.external_account_id), params: {
       settings: { name: "Updated Cache Name" }
@@ -155,4 +224,22 @@ class App::PrivatePageCachingTest < ActionDispatch::IntegrationTest
   ensure
     Current.reset
   end
+
+  private
+
+    def sign_in_with_password(identity, password: "password123")
+      post identity_session_path, params: {
+        identity: {
+          email: identity.email,
+          password: password
+        }
+      }
+
+      assert_response :redirect
+    end
+
+    def consume_post_login_dashboard_flash(account)
+      get app_dashboard_path(account_id: account.external_account_id)
+      assert_response :success
+    end
 end

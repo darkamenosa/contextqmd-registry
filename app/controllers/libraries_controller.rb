@@ -13,7 +13,46 @@ class LibrariesController < InertiaController
   def index
     query = params[:query].to_s.strip
     page = params[:page].presence || "1"
-    cached = Rails.cache.fetch([ "public", "libraries", "index", query, page ], expires_in: LIST_CACHE_TTL) do
+    page_signature = library_index_page_signature(query:, page:)
+    library_count = if query.present?
+      search_libraries(query).count
+    else
+      Library.count
+    end
+    last_modified = [
+      Library.maximum(:updated_at),
+      Library.maximum(:latest_version_at),
+      SourcePolicy.maximum(:updated_at),
+      LibrarySource.maximum(:updated_at)
+    ].compact.max
+
+    merge_vary_header!("X-Inertia")
+
+    if flash.to_hash.present?
+      response.headers["Cache-Control"] = "no-store"
+    else
+      fresh_when(
+        etag: [
+          request.inertia? ? "inertia" : "html",
+          "libraries-index",
+          query,
+          page,
+          *shared_identity_cache_key_parts,
+          library_count,
+          page_signature,
+          last_modified&.to_fs(:usec)
+        ],
+        last_modified: last_modified,
+        public: false,
+        template: false
+      )
+      return if performed?
+    end
+
+    cached = Rails.cache.fetch(
+      [ "public", "libraries", "index", query, page, library_count, last_modified&.to_fs(:usec) ],
+      expires_in: LIST_CACHE_TTL
+    ) do
       libraries = if query.present?
         search_libraries(query).includes(:source_policy, :library_sources)
       else
@@ -131,6 +170,28 @@ class LibrariesController < InertiaController
   end
 
   private
+
+    def library_index_page_signature(query:, page:)
+      page_number = [ page.to_i, 1 ].max
+      offset = (page_number - 1) * 10
+      base = query.present? ? search_libraries(query) : Library.order(:slug)
+
+      rows = base
+        .offset(offset)
+        .limit(10)
+        .pluck(
+          :id,
+          :slug,
+          :display_name,
+          :homepage_url,
+          :default_version,
+          :versions_count,
+          :total_pages_count,
+          :updated_at
+        )
+
+      Digest::SHA256.hexdigest(rows.to_json)
+    end
 
     def search_libraries(query)
       Library.search_by_query(query)

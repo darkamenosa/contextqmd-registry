@@ -11,6 +11,53 @@ module Admin
       else
         CrawlRequest.all
       end
+      counts = {
+        all: CrawlRequest.count,
+        pending: CrawlRequest.pending.count,
+        processing: CrawlRequest.processing.count,
+        completed: CrawlRequest.completed.count,
+        failed: CrawlRequest.failed.count,
+        cancelled: CrawlRequest.cancelled.count
+      }
+      filtered_count = apply_tab_filter(base).count
+      last_modified = [
+        CrawlRequest.maximum(:updated_at),
+        User.maximum(:updated_at),
+        Library.maximum(:updated_at)
+      ].compact.max
+
+      merge_vary_header!("X-Inertia")
+
+      if flash.to_hash.present?
+        response.headers["Cache-Control"] = "no-store"
+      else
+        request.session_options[:skip] = true if request.get? || request.head?
+
+        fresh_when(
+          etag: [
+            request.inertia? ? "inertia" : "html",
+            "admin-crawl-requests-index",
+            params[:query].to_s,
+            params[:tab] || "all",
+            params[:sort] || "created_at",
+            params[:direction] || "desc",
+            params[:page].presence || "1",
+            Current.identity.cache_key_with_version,
+            filtered_count,
+            counts[:all],
+            counts[:pending],
+            counts[:processing],
+            counts[:completed],
+            counts[:failed],
+            counts[:cancelled],
+            last_modified&.to_fs(:usec)
+          ],
+          last_modified: last_modified,
+          public: false,
+          template: false
+        )
+        return if performed?
+      end
 
       scope = apply_tab_filter(base).includes(:creator, :library)
 
@@ -22,14 +69,7 @@ module Admin
       render inertia: "admin/crawl-requests/index", props: {
         crawl_requests: crawl_requests.map { |cr| crawl_row_props(cr) },
         pagination: pagination_props(pagy),
-        counts: {
-          all: CrawlRequest.count,
-          pending: CrawlRequest.pending.count,
-          processing: CrawlRequest.processing.count,
-          completed: CrawlRequest.completed.count,
-          failed: CrawlRequest.failed.count,
-          cancelled: CrawlRequest.cancelled.count
-        },
+        counts: counts,
         filters: {
           query: params[:query] || "",
           tab: params[:tab] || "all",

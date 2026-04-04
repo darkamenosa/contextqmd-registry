@@ -23,6 +23,13 @@ class ApplicationController < ActionController::Base
 
   private
 
+    def merge_vary_header!(header)
+      existing = response.headers["Vary"].to_s.split(",").map(&:strip).reject(&:blank?)
+      return if existing.include?(header)
+
+      response.headers["Vary"] = [ *existing, header ].join(", ")
+    end
+
     # Prevent duplicate content from trailing-slash URLs (preserves query params)
     def redirect_trailing_slash
       return if mounted_root_request?

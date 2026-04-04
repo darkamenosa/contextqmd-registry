@@ -10,11 +10,43 @@ class CrawlRequestsController < InertiaController
   def index
     base = CrawlRequest.includes(:library).recent
     active_tab = params[:tab] || "active"
+    counts = {
+      pending: CrawlRequest.pending.count,
+      processing: CrawlRequest.processing.count,
+      completed: CrawlRequest.completed.count,
+      failed: CrawlRequest.failed.count
+    }
+    last_modified = CrawlRequest.maximum(:updated_at)
 
     scope = if active_tab == "completed"
       base.where(status: [ "completed", "failed" ])
     else
       base.where(status: [ "pending", "processing" ])
+    end
+
+    merge_vary_header!("X-Inertia")
+
+    if flash.to_hash.present?
+      response.headers["Cache-Control"] = "no-store"
+    else
+      fresh_when(
+        etag: [
+          request.inertia? ? "inertia" : "html",
+          "crawl-requests",
+          active_tab,
+          params[:page].presence || "1",
+          *shared_identity_cache_key_parts,
+          counts[:pending],
+          counts[:processing],
+          counts[:completed],
+          counts[:failed],
+          last_modified&.to_fs(:usec)
+        ],
+        last_modified: last_modified,
+        public: false,
+        template: false
+      )
+      return if performed?
     end
 
     pagy, crawl_requests = pagy(:offset, scope, limit: 10)
@@ -23,12 +55,7 @@ class CrawlRequestsController < InertiaController
       crawl_requests: crawl_requests.map { |cr| crawl_request_props(cr) },
       pagination: pagination_props(pagy),
       active_tab: active_tab,
-      counts: {
-        pending: CrawlRequest.pending.count,
-        processing: CrawlRequest.processing.count,
-        completed: CrawlRequest.completed.count,
-        failed: CrawlRequest.failed.count
-      },
+      counts: counts,
       seo: seo_props(
         title: "Documentation Queue",
         description: "Live crawl queue for ContextQMD. See active, pending, and completed documentation indexing requests.",

@@ -2,21 +2,27 @@
 
 module App
   class DashboardsController < BaseController
+    PAYLOAD_CACHE_TTL = 10.minutes
+
     def show
       state = dashboard_cache_state
-      return unless stale_private_inertia_page?(
-        etag: state[:etag],
-        last_modified: state[:last_modified]
-      )
+      merge_vary_header!("X-Inertia")
 
-      recent_crawls = my_crawl_requests.includes(:library).recent.limit(5)
-      recent_libraries = my_libraries.order(created_at: :desc).limit(5)
+      if flash.to_hash.present?
+        response.headers["Cache-Control"] = "no-store"
+      else
+        request.session_options[:skip] = true if request.get? || request.head?
 
-      render inertia: "app/dashboard/show", props: {
-        stats: state[:stats],
-        recent_crawls: recent_crawls.map { |cr| crawl_props(cr) },
-        recent_libraries: recent_libraries.map { |lib| library_props(lib) }
-      }
+        fresh_when(
+          etag: [ request.inertia? ? "inertia" : "html", *state[:etag] ],
+          last_modified: state[:last_modified],
+          public: false,
+          template: false
+        )
+        return if performed?
+      end
+
+      render inertia: "app/dashboard/show", props: dashboard_payload(state)
     end
 
     private
@@ -73,6 +79,23 @@ module App
           ],
           last_modified: last_modified
         }
+      end
+
+      def dashboard_payload(state)
+        Rails.cache.fetch(
+          [ "app-dashboard-payload", *state[:etag] ],
+          expires_in: PAYLOAD_CACHE_TTL,
+          race_condition_ttl: 10.seconds
+        ) do
+          recent_crawls = my_crawl_requests.includes(:library).recent.limit(5)
+          recent_libraries = my_libraries.order(created_at: :desc).limit(5)
+
+          {
+            stats: state[:stats],
+            recent_crawls: recent_crawls.map { |cr| crawl_props(cr) },
+            recent_libraries: recent_libraries.map { |lib| library_props(lib) }
+          }
+        end
       end
 
       def crawl_props(cr)

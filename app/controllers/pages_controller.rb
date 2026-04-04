@@ -15,6 +15,25 @@ class PagesController < InertiaController
 
   def show
     slug = params[:id]
+
+    merge_vary_header!("X-Inertia")
+
+    if flash.to_hash.present?
+      response.headers["Cache-Control"] = "no-store"
+    else
+      fresh_when(
+        etag: [
+          request.inertia? ? "inertia" : "html",
+          "public-page",
+          slug,
+          *shared_identity_cache_key_parts
+        ],
+        public: false,
+        template: false
+      )
+      return if performed?
+    end
+
     render inertia: "pages/#{slug}", props: {
       seo: seo_props(
         title: slug.capitalize,

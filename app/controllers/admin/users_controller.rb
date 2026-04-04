@@ -5,6 +5,48 @@ module Admin
     def index
       base = params[:query].present? ? Identity.search(params[:query]) : Identity.all
       scope = filter_by_status(base)
+      counts = {
+        all: base.count,
+        active: filter_by_status(base, "active").count,
+        cancelled: filter_by_status(base, "cancelled").count,
+        suspended: filter_by_status(base, "suspended").count
+      }
+      last_modified = [
+        Identity.maximum(:updated_at),
+        User.maximum(:updated_at),
+        Account.maximum(:updated_at),
+        Account::Cancellation.maximum(:updated_at)
+      ].compact.max
+
+      merge_vary_header!("X-Inertia")
+
+      if flash.to_hash.present?
+        response.headers["Cache-Control"] = "no-store"
+      else
+        request.session_options[:skip] = true if request.get? || request.head?
+
+        fresh_when(
+          etag: [
+            request.inertia? ? "inertia" : "html",
+            "admin-users-index",
+            params[:query].to_s,
+            params[:status] || "all",
+            params[:sort] || "created_at",
+            params[:direction] || "desc",
+            params[:page].presence || "1",
+            Current.identity.cache_key_with_version,
+            counts[:all],
+            counts[:active],
+            counts[:cancelled],
+            counts[:suspended],
+            last_modified&.to_fs(:usec)
+          ],
+          last_modified: last_modified,
+          public: false,
+          template: false
+        )
+        return if performed?
+      end
 
       pagy, identities = pagy(:offset,
         scope.includes(users: { account: :cancellation }).order(sort_column => sort_direction),
@@ -14,12 +56,7 @@ module Admin
       render inertia: "admin/users/index", props: {
         users: identities.map { |i| user_props(i) },
         pagination: pagination_props(pagy),
-        counts: {
-          all: base.count,
-          active: filter_by_status(base, "active").count,
-          cancelled: filter_by_status(base, "cancelled").count,
-          suspended: filter_by_status(base, "suspended").count
-        },
+        counts: counts,
         filters: {
           status: params[:status] || "all",
           query: params[:query] || "",
