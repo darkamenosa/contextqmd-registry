@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_03_100000) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_04_041343) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -272,6 +272,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_03_100000) do
     t.index ["status"], name: "index_analytics_profiles_on_status"
   end
 
+  create_table "analytics_rollup_refresh_states", force: :cascade do |t|
+    t.bigint "analytics_site_id", null: false
+    t.datetime "bucket_start", null: false
+    t.datetime "created_at", null: false
+    t.datetime "enqueued_at"
+    t.datetime "processed_at"
+    t.bigint "processed_version", default: 0, null: false
+    t.bigint "request_version", default: 0, null: false
+    t.string "rollup_key", null: false
+    t.datetime "updated_at", null: false
+    t.index ["analytics_site_id", "bucket_start", "rollup_key"], name: "idx_analytics_rollup_refresh_states_on_scope", unique: true
+  end
+
   create_table "analytics_settings", force: :cascade do |t|
     t.bigint "analytics_site_id"
     t.datetime "created_at", null: false
@@ -461,6 +474,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_03_100000) do
   add_foreign_key "analytics_profile_summaries", "analytics_sites"
   add_foreign_key "analytics_profiles", "analytics_profiles", column: "merged_into_id"
   add_foreign_key "analytics_profiles", "analytics_sites"
+  add_foreign_key "analytics_rollup_refresh_states", "analytics_sites"
   add_foreign_key "analytics_settings", "analytics_sites"
   add_foreign_key "analytics_site_boundaries", "analytics_sites"
   add_foreign_key "analytics_site_event_hourly_rollups", "analytics_sites"

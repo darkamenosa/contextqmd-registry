@@ -27,9 +27,12 @@ class Analytics::SiteSourceHourlyVisitorRollup < AnalyticsRecord
       bucket = bucket_start_for(bucket_start)
       return if site_id.blank? || bucket.blank?
 
-      where(analytics_site_id: site_id, bucket_start: bucket).delete_all
       rows = Analytics::FactStore.source_rollup_rows(site: site_id, bucket_start: bucket)
-      insert_all!(rows) if rows.any?
+
+      transaction do
+        where(analytics_site_id: site_id, bucket_start: bucket).delete_all
+        upsert_all(rows, unique_by: :idx_site_source_hourly_rollups_unique, update_only: [ :updated_at ], record_timestamps: false) if rows.any?
+      end
     end
 
     def refresh_range!(site:, range:)

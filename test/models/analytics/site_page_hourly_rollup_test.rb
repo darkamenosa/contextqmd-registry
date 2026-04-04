@@ -110,4 +110,51 @@ class Analytics::SitePageHourlyRollupTest < ActiveSupport::TestCase
       )
     end
   end
+
+  test "refresh_bucket updates existing page rows when the same visitor adds more pageviews" do
+    travel_to Time.zone.parse("2026-03-25 14:00:00") do
+      site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+      visit = Ahoy::Visit.create!(
+        analytics_site: site,
+        visit_token: SecureRandom.hex(16),
+        visitor_token: "repeat-visitor",
+        started_at: Time.zone.parse("2026-03-25 09:00:00")
+      )
+      bucket_start = Time.zone.parse("2026-03-25 09:00:00")
+
+      Ahoy::Event.create!(
+        analytics_site: site,
+        visit: visit,
+        name: "pageview",
+        time: Time.zone.parse("2026-03-25 09:05:00"),
+        properties: { page: "/docs" }
+      )
+
+      Analytics::SitePageHourlyRollup.refresh_bucket!(site:, bucket_start:)
+
+      assert_equal 1, Analytics::SitePageHourlyRollup.find_by!(
+        analytics_site: site,
+        bucket_start: bucket_start,
+        page_path: "/docs",
+        visitor_token: "repeat-visitor"
+      ).pageviews_count
+
+      Ahoy::Event.create!(
+        analytics_site: site,
+        visit: visit,
+        name: "pageview",
+        time: Time.zone.parse("2026-03-25 09:10:00"),
+        properties: { page: "/docs" }
+      )
+
+      Analytics::SitePageHourlyRollup.refresh_bucket!(site:, bucket_start:)
+
+      assert_equal 2, Analytics::SitePageHourlyRollup.find_by!(
+        analytics_site: site,
+        bucket_start: bucket_start,
+        page_path: "/docs",
+        visitor_token: "repeat-visitor"
+      ).pageviews_count
+    end
+  end
 end

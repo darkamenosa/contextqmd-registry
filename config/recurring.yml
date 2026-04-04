@@ -20,6 +20,11 @@ development:
     queue: default
     schedule: every hour at minute 23
 
+  cleanup_analytics_rollup_refresh_states:
+    class: Analytics::CleanupRollupRefreshStatesJob
+    queue: background
+    schedule: at 4am every day
+
 production:
   analytics_live_update:
     class: Analytics::LiveBroadcastJob
@@ -30,6 +35,11 @@ production:
     class: Analytics::RefreshDueGoogleSearchConsoleConnectionsJob
     queue: default
     schedule: every hour at minute 23
+
+  cleanup_analytics_rollup_refresh_states:
+    class: Analytics::CleanupRollupRefreshStatesJob
+    queue: background
+    schedule: at 4am every day
 
   check_due_library_sources:
     class: CheckDueLibrarySourcesJob
