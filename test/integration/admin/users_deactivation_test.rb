@@ -4,8 +4,6 @@ require "test_helper"
 require "json"
 
 class Admin::UsersDeactivationTest < ActionDispatch::IntegrationTest
-  include Devise::Test::IntegrationHelpers
-
   test "suspending a user does not destroy the identity" do
     staff_identity, _staff_account, = create_tenant(
       email: "staff-admin-#{SecureRandom.hex(4)}@example.com",
@@ -25,7 +23,7 @@ class Admin::UsersDeactivationTest < ActionDispatch::IntegrationTest
     account.users.create!(identity: remaining_identity, name: "Remaining User", role: :member)
     user_identity.update!(staff: true)
 
-    sign_in(staff_identity)
+    sign_in_with_password(staff_identity)
 
     assert_no_difference -> { Identity.count } do
       post admin_user_suspension_path(user_identity)
@@ -56,7 +54,7 @@ class Admin::UsersDeactivationTest < ActionDispatch::IntegrationTest
     )
     account.cancel(initiated_by: target_user)
 
-    sign_in(staff_identity)
+    sign_in_with_password(staff_identity)
 
     get admin_user_path(user_identity)
 
@@ -86,7 +84,8 @@ class Admin::UsersDeactivationTest < ActionDispatch::IntegrationTest
     )
     account.cancel(initiated_by: target_user)
 
-    sign_in(staff_identity)
+    sign_in_with_password(staff_identity)
+    consume_post_login_admin_flash
 
     get admin_users_path
 
@@ -123,7 +122,7 @@ class Admin::UsersDeactivationTest < ActionDispatch::IntegrationTest
     )
     account.cancel(initiated_by: target_user)
 
-    sign_in(staff_identity)
+    sign_in_with_password(staff_identity)
 
     post admin_user_account_reactivation_path(user_identity), params: {
       membership_id: target_user.id
@@ -141,6 +140,22 @@ class Admin::UsersDeactivationTest < ActionDispatch::IntegrationTest
   end
 
   private
+    def sign_in_with_password(identity, password: "password123")
+      post identity_session_path, params: {
+        identity: {
+          email: identity.email,
+          password: password
+        }
+      }
+
+      assert_response :redirect
+    end
+
+    def consume_post_login_admin_flash
+      get admin_dashboard_path
+      assert_response :success
+    end
+
     def page_props
       page_node = Nokogiri::HTML5(response.body).at_css("script[data-page]")
       JSON.parse(page_node.text)

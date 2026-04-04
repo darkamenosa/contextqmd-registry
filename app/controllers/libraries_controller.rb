@@ -15,7 +15,7 @@ class LibrariesController < InertiaController
     page = params[:page].presence || "1"
     page_signature = library_index_page_signature(query:, page:)
     library_count = if query.present?
-      search_libraries(query).count
+      search_libraries(query).except(:select, :order).count
     else
       Library.count
     end
