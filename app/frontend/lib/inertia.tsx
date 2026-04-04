@@ -58,6 +58,21 @@ export const resolvePage = (
   return applyPersistentLayout(page.default)
 }
 
+export const preloadInertiaPage = (name: string) => {
+  const pagePath = `../pages/${name}.tsx`
+
+  if (name.startsWith("admin/")) {
+    const loadPage = adminPages[pagePath]
+    if (loadPage) void loadPage()
+    return
+  }
+
+  if (name.startsWith("app/")) {
+    const loadPage = appPages[pagePath]
+    if (loadPage) void loadPage()
+  }
+}
+
 export const titleTemplate = (title: string) =>
   title && title !== "ContextQMD" && !title.includes("ContextQMD")
     ? `${title} — ContextQMD`

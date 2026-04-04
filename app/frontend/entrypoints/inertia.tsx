@@ -6,7 +6,7 @@ import { inertiaDefaults, resolvePage, titleTemplate } from "@/lib/inertia"
 
 void createInertiaApp({
   title: titleTemplate,
-  progress: { color: "#171717" },
+  progress: { delay: 250, color: "#171717", showSpinner: false },
   resolve: resolvePage,
   setup({ el, App, props }) {
     if (el) {

@@ -14,6 +14,7 @@ import {
 import { withAccountScope } from "@/lib/account-scope"
 import { prefetchAdminShellPage } from "@/lib/admin-shell-prefetch"
 import { prefetchAppShellPage } from "@/lib/app-shell-prefetch"
+import { preloadInertiaPage } from "@/lib/inertia"
 import {
   flushPublicShellCache,
   publicShellPrefetchProps,
@@ -69,9 +70,12 @@ export function SiteHeader() {
 
     prefetchAppShellPage(dashboardPath)
     prefetchAppShellPage(settingsPath)
+    preloadInertiaPage("app/dashboard/show")
+    preloadInertiaPage("app/settings/show")
 
     if (currentIdentity.staff) {
       prefetchAdminShellPage("/admin/dashboard")
+      preloadInertiaPage("admin/dashboard/show")
     }
   }
 
