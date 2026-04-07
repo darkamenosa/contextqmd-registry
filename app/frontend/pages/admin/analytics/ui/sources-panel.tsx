@@ -459,6 +459,14 @@ function SearchTermsStatusNote({
 }) {
   if (!status?.configured) return null
 
+  if (status.reauthRequired && status.connectionError) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>{status.connectionError}</AlertDescription>
+      </Alert>
+    )
+  }
+
   if (status.syncInProgress) {
     return (
       <Alert>

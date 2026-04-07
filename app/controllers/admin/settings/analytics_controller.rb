@@ -95,6 +95,7 @@ module Admin
               available: ::Analytics::GoogleSearchConsole::Configuration.configured?,
               connected: false,
               configured: false,
+              reauth_required: false,
               callback_path: ::Analytics::Configuration.google_search_console_callback_path,
               callback_url: "#{request.base_url}#{::Analytics::Configuration.google_search_console_callback_path}",
               properties: []

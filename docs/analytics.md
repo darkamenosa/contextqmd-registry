@@ -1550,6 +1550,11 @@ Google Search Console should use one stable callback URL:
 
 - `/admin/settings/analytics/google_search_console/callback`
 
+Operational note:
+
+- see [analytics-google-search-console-token-failure-note.md](./analytics-google-search-console-token-failure-note.md)
+  for the April 7, 2026 production token failure and deferred remediation notes
+
 The callback path should not include `:site`.
 
 Instead:

@@ -6,7 +6,18 @@ require "net/http"
 require "uri"
 
 class Analytics::GoogleSearchConsole::Client
-  Error = Class.new(StandardError)
+  class Error < StandardError
+    attr_reader :reason
+
+    def initialize(message, reason: nil)
+      super(message)
+      @reason = reason
+    end
+
+    def reauth_required?
+      reason == :reauth_required
+    end
+  end
 
   VERIFIED_PERMISSION_LEVELS = %w[siteOwner siteFullUser siteRestrictedUser].freeze
   AUTH_BASE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -163,19 +174,45 @@ class Analytics::GoogleSearchConsole::Client
 
       return parsed if response.is_a?(Net::HTTPSuccess)
 
-      error_message =
-        if parsed.is_a?(Hash)
-          parsed_error = parsed["error"]
-          parsed.dig("error", "message") ||
-            parsed["error_description"] ||
-            (parsed_error if parsed_error.is_a?(String))
-        end
-
+      error_reason = error_reason_from(parsed)
+      error_message = error_message_from(parsed)
       error_message ||= "Google Search Console request failed."
-      raise Error, error_message
+      raise Error.new(error_message, reason: error_reason)
     rescue JSON::ParserError
       raise Error, "Google Search Console returned an invalid response."
     rescue Timeout::Error, Errno::ECONNRESET, Errno::ETIMEDOUT, SocketError => e
       raise Error, "Google Search Console request failed: #{e.class.name.demodulize.underscore.humanize.downcase}."
+    end
+
+    def error_message_from(parsed)
+      if parsed.is_a?(Hash)
+        parsed_error = parsed["error"]
+
+        if parsed_error.is_a?(Hash)
+          parsed_error["message"] || parsed["error_description"]
+        elsif parsed_error.is_a?(String)
+          parsed["error_description"] || parsed_error
+        else
+          parsed["error_description"]
+        end
+      end
+    end
+
+    def error_reason_from(parsed)
+      return unless parsed.is_a?(Hash)
+
+      parsed_error = parsed["error"]
+      parsed_message =
+        if parsed_error.is_a?(Hash)
+          parsed_error["message"]
+        elsif parsed_error.is_a?(String)
+          parsed_error
+        end
+
+      if parsed_error == "invalid_grant" ||
+          parsed["error_description"].to_s.match?(/expired or revoked/i) ||
+          parsed_message.to_s.match?(/invalid authentication credentials|unauthenticated/i)
+        :reauth_required
+      end
     end
 end

@@ -92,6 +92,9 @@ Rails.application.routes.draw do
             patch "settings/data", to: "settings#update"
             post "google_search_console/connect", to: "google_search_console#connect"
             post "google_search_console/sync", to: "google_search_console#sync"
+            post "google_search_console/properties_refresh",
+              to: "google_search_console#refresh_properties",
+              as: :google_search_console_properties_refresh
             patch "google_search_console", to: "google_search_console#update"
             delete "google_search_console", to: "google_search_console#destroy"
             get "top_stats", to: "top_stats#show"

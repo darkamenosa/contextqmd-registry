@@ -32,21 +32,14 @@ module Admin
           connection = current_google_search_console_connection
           latest_sync = current_google_search_console_sync(connection)
           refresh_from, refresh_to = google_search_console_refresh_sync_window
-          properties = []
-          properties_error = nil
-
-          if connection.present?
-            begin
-              properties = verified_google_search_console_properties(connection)
-            rescue ::Analytics::GoogleSearchConsole::Client::Error => e
-              properties_error = e.message
-            end
-          end
 
           {
             available: ::Analytics::GoogleSearchConsole::Configuration.configured?,
             connected: connection.present?,
             configured: connection&.configured? || false,
+            status: connection&.status,
+            reauth_required: connection&.reauth_required? || false,
+            connection_error: connection&.connection_error_message,
             callback_path: analytics_google_search_console_callback_path,
             callback_url: analytics_google_search_console_callback_url,
             account_email: connection&.google_email,
@@ -55,6 +48,7 @@ module Admin
             permission_level: connection&.permission_level,
             connected_at: connection&.connected_at,
             last_verified_at: connection&.last_verified_at,
+            properties_refreshed_at: connection&.properties_refreshed_at,
             sync_status: latest_sync&.status,
             sync_error: latest_sync&.error_message,
             sync_in_progress: google_search_console_sync_in_progress?(connection, from_date: refresh_from, to_date: refresh_to),
@@ -64,22 +58,9 @@ module Admin
             synced_to: latest_sync&.to_date,
             refresh_window_from: refresh_from,
             refresh_window_to: refresh_to,
-            properties_error: properties_error,
-            properties: properties
+            properties_error: connection&.properties_refresh_error,
+            properties: connection&.cached_properties || []
           }
-        end
-
-        def verified_google_search_console_properties(connection = current_google_search_console_connection)
-          return [] if connection.blank?
-
-          access_token = google_search_console_access_token_for(connection)
-          google_search_console_client.list_verified_properties(access_token)
-        end
-
-        def google_search_console_access_token_for(connection = current_google_search_console_connection)
-          return if connection.blank?
-
-          connection.active_access_token!(client: google_search_console_client)
         end
 
         def google_search_console_client
@@ -201,6 +182,18 @@ module Admin
 
           from_date, to_date = google_search_console_search_terms_sync_window(query)
           return if from_date.blank? || to_date.blank? || to_date < from_date
+          if connection.reauth_required? &&
+              !::Analytics::GoogleSearchConsole::Sync.successful_covering?(
+                connection: connection,
+                from_date: from_date,
+                to_date: to_date,
+                search_type: ::Analytics::GoogleSearchConsole::Syncer::DEFAULT_SEARCH_TYPE
+              )
+            raise ::Analytics::GoogleSearchConsole::Client::Error.new(
+              connection.connection_error_message || "Reconnect Google Search Console to continue.",
+              reason: :reauth_required
+            )
+          end
 
           ::Analytics::GoogleSearchConsole::Syncer.ensure_covered!(
             connection: connection,
@@ -228,6 +221,9 @@ module Admin
           {
             connected: connection.present?,
             configured: connection&.configured? || false,
+            status: connection&.status,
+            reauth_required: connection&.reauth_required? || false,
+            connection_error: connection&.connection_error_message,
             unsupported_filters: unsupported_filters,
             sync_status: latest_sync&.status,
             sync_error: latest_sync&.error_message,

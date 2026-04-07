@@ -57,6 +57,10 @@ class Analytics::RefreshDueGoogleSearchConsoleConnectionsJobTest < ActiveSupport
     disconnected_connection = create_connection_for(disconnected_site)
     disconnected_connection.disconnect!
 
+    revoked_site = Analytics::Site.create!(name: "Forum", canonical_hostname: "forum.example.test")
+    revoked_connection = create_connection_for(revoked_site)
+    revoked_connection.update!(status: Analytics::GoogleSearchConsoleConnection::STATUS_REVOKED)
+
     assert_enqueued_jobs 1, only: Analytics::GoogleSearchConsoleSyncJob do
       Analytics::RefreshDueGoogleSearchConsoleConnectionsJob.perform_now(now)
     end

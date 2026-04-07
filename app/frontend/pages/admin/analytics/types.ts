@@ -82,6 +82,9 @@ export type GoogleSearchConsoleSettings = {
   available: boolean
   connected: boolean
   configured: boolean
+  status?: string | null
+  reauthRequired?: boolean
+  connectionError?: string | null
   callbackPath?: string | null
   callbackUrl?: string | null
   accountEmail?: string | null
@@ -90,6 +93,7 @@ export type GoogleSearchConsoleSettings = {
   permissionLevel?: string | null
   connectedAt?: string | null
   lastVerifiedAt?: string | null
+  propertiesRefreshedAt?: string | null
   syncStatus?: string | null
   syncError?: string | null
   syncInProgress?: boolean
@@ -161,6 +165,7 @@ export type AnalyticsSettingsPaths = {
   settingsData?: string
   googleSearchConsoleConnect?: string
   googleSearchConsole?: string
+  googleSearchConsolePropertiesRefresh?: string
   googleSearchConsoleSync?: string
 }
 
@@ -305,6 +310,9 @@ export type ListPayload = {
     searchConsole?: {
       connected: boolean
       configured: boolean
+      status?: string | null
+      reauthRequired?: boolean
+      connectionError?: string | null
       unsupportedFilters?: boolean
       syncStatus?: string | null
       syncError?: string | null

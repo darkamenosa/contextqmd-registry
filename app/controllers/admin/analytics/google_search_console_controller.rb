@@ -5,8 +5,8 @@ module Admin
     class GoogleSearchConsoleController < BaseController
       skip_before_action :prepare_query
       skip_before_action :resolve_analytics_site, only: :callback
-      before_action :ensure_google_search_console_available, only: [ :connect, :callback, :sync ]
-      before_action :set_google_search_console_connection, only: [ :update, :destroy, :sync ]
+      before_action :ensure_google_search_console_available, only: [ :connect, :callback, :sync, :refresh_properties ]
+      before_action :set_google_search_console_connection, only: [ :update, :destroy, :sync, :refresh_properties ]
 
       def connect
         if ::Analytics::Current.site.blank?
@@ -74,6 +74,7 @@ module Admin
             metadata: {}
           }
         )
+        connection.cache_verified_properties!(properties)
 
         auto_selected_property = properties.one? ? properties.first : nil
         connection.store_property!(auto_selected_property) if auto_selected_property.present?
@@ -96,12 +97,10 @@ module Admin
       def update
         permitted = params.expect(google_search_console: [ :property_identifier ])
         property_identifier = permitted.fetch(:property_identifier).to_s
-        property = verified_google_search_console_properties(@google_search_console_connection).find do |candidate|
-          candidate.fetch(:identifier) == property_identifier
-        end
+        property = @google_search_console_connection.cached_property(property_identifier)
 
         if property.blank?
-          redirect_to google_search_console_settings_path, alert: "Select a verified Search Console property."
+          redirect_to google_search_console_settings_path, alert: "Refresh verified Search Console properties before selecting one."
           return
         end
 
@@ -109,8 +108,18 @@ module Admin
         enqueue_google_search_console_sync(@google_search_console_connection)
 
         redirect_to google_search_console_settings_path, notice: "Updated Google Search Console property to #{property.fetch(:label)}."
-      rescue ::Analytics::GoogleSearchConsole::Client::Error => e
-        redirect_to google_search_console_settings_path, alert: e.message
+      end
+
+      def refresh_properties
+        if @google_search_console_connection.reauth_required?
+          redirect_to google_search_console_settings_path,
+            alert: @google_search_console_connection.connection_error_message || "Reconnect Google Search Console first."
+          return
+        end
+
+        @google_search_console_connection.refresh_verified_properties_later
+
+        redirect_to google_search_console_settings_path, notice: "Queued a Google Search Console property refresh."
       end
 
       def destroy
@@ -122,6 +131,12 @@ module Admin
       def sync
         unless @google_search_console_connection.configured?
           redirect_to google_search_console_settings_path, alert: "Select a verified Search Console property first."
+          return
+        end
+
+        if @google_search_console_connection.reauth_required?
+          redirect_to google_search_console_settings_path,
+            alert: @google_search_console_connection.connection_error_message || "Reconnect Google Search Console first."
           return
         end
 

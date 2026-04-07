@@ -2087,11 +2087,13 @@ function GoogleSearchConsoleTab({
   gsc,
   connectPath,
   connectionPath,
+  propertiesRefreshPath,
   syncPath,
 }: {
   gsc: AnalyticsSettingsPageProps["settings"]["googleSearchConsole"]
   connectPath: string
   connectionPath: string
+  propertiesRefreshPath: string
   syncPath: string
 }) {
   const [propertyId, setPropertyId] = useState(gsc.propertyIdentifier ?? "")
@@ -2165,26 +2167,48 @@ function GoogleSearchConsoleTab({
               {currentPropertyLabel ? ` \u00b7 ${currentPropertyLabel}` : ""}
             </CardDescription>
           </div>
-          <form method="post" action={connectionPath}>
-            <input
-              type="hidden"
-              name="authenticity_token"
-              value={csrfToken()}
-              readOnly
-            />
-            <input type="hidden" name="_method" value="delete" readOnly />
-            <Button
-              type="submit"
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground hover:text-destructive"
-            >
-              Disconnect
-            </Button>
-          </form>
+          <div className="flex items-center gap-2">
+            {gsc.reauthRequired ? (
+              <form method="post" action={connectPath}>
+                <input
+                  type="hidden"
+                  name="authenticity_token"
+                  value={csrfToken()}
+                  readOnly
+                />
+                <Button type="submit" size="sm" variant="outline">
+                  <Link2 className="size-3.5" />
+                  Reconnect
+                </Button>
+              </form>
+            ) : null}
+            <form method="post" action={connectionPath}>
+              <input
+                type="hidden"
+                name="authenticity_token"
+                value={csrfToken()}
+                readOnly
+              />
+              <input type="hidden" name="_method" value="delete" readOnly />
+              <Button
+                type="submit"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-destructive"
+              >
+                Disconnect
+              </Button>
+            </form>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {gsc.connectionError ? (
+          <Alert variant="destructive">
+            <AlertCircle className="size-4" />
+            <AlertDescription>{gsc.connectionError}</AlertDescription>
+          </Alert>
+        ) : null}
         {gsc.propertiesError ? (
           <Alert>
             <AlertDescription>{gsc.propertiesError}</AlertDescription>
@@ -2198,71 +2222,111 @@ function GoogleSearchConsoleTab({
         ) : null}
 
         {gsc.properties.length > 0 ? (
-          <form method="post" action={connectionPath} className="space-y-2">
-            <input
-              type="hidden"
-              name="authenticity_token"
-              value={csrfToken()}
-              readOnly
-            />
-            <input type="hidden" name="_method" value="patch" readOnly />
-            <FieldLabel>Property</FieldLabel>
-            <div className="flex items-center gap-3">
-              <Select
-                value={propertyId}
-                onValueChange={(v) => setPropertyId(v ?? "")}
-              >
-                <SelectTrigger className="flex-1">
-                  <SelectValue placeholder="Choose a property">
-                    {(value) => {
-                      const label = googleSearchConsolePropertyLabel(
-                        typeof value === "string" ? value : null,
-                        gsc.properties
-                      )
-
-                      return (
-                        <span className={cn(!label && "text-muted-foreground")}>
-                          {label ?? "Choose a property"}
-                        </span>
-                      )
-                    }}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent align="start" className="max-h-80">
-                  {gsc.properties.map((p) => (
-                    <SelectItem
-                      key={p.identifier}
-                      value={p.identifier}
-                      label={p.label}
-                    >
-                      <span>{p.label}</span>
-                      <span className="ml-2 text-xs text-muted-foreground">
-                        {propertyDescription(p)}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button type="submit" disabled={!propertyId}>
-                Save
-              </Button>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <FieldLabel>Property</FieldLabel>
+              {!gsc.reauthRequired ? (
+                <form method="post" action={propertiesRefreshPath}>
+                  <input
+                    type="hidden"
+                    name="authenticity_token"
+                    value={csrfToken()}
+                    readOnly
+                  />
+                  <Button type="submit" variant="ghost" size="sm">
+                    <RefreshCw className="size-3.5" />
+                    Refresh properties
+                  </Button>
+                </form>
+              ) : null}
             </div>
-            {selectedProperty ? (
+            <form method="post" action={connectionPath} className="space-y-2">
+              <input
+                type="hidden"
+                name="authenticity_token"
+                value={csrfToken()}
+                readOnly
+              />
+              <input type="hidden" name="_method" value="patch" readOnly />
+              <div className="flex items-center gap-3">
+                <Select
+                  value={propertyId}
+                  onValueChange={(v) => setPropertyId(v ?? "")}
+                >
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Choose a property">
+                      {(value) => {
+                        const label = googleSearchConsolePropertyLabel(
+                          typeof value === "string" ? value : null,
+                          gsc.properties
+                        )
+
+                        return (
+                          <span
+                            className={cn(!label && "text-muted-foreground")}
+                          >
+                            {label ?? "Choose a property"}
+                          </span>
+                        )
+                      }}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent align="start" className="max-h-80">
+                    {gsc.properties.map((p) => (
+                      <SelectItem
+                        key={p.identifier}
+                        value={p.identifier}
+                        label={p.label}
+                      >
+                        <span>{p.label}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          {propertyDescription(p)}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button type="submit" disabled={!propertyId}>
+                  Save
+                </Button>
+              </div>
+              {selectedProperty ? (
+                <p className="text-sm text-muted-foreground">
+                  {propertyDescription(selectedProperty)}
+                </p>
+              ) : null}
               <p className="text-sm text-muted-foreground">
-                {propertyDescription(selectedProperty)}
+                Properties cache updated{" "}
+                {googleSearchConsoleDateTimeLabel(gsc.propertiesRefreshedAt)}.
               </p>
-            ) : null}
-            <input
-              type="hidden"
-              name="google_search_console[property_identifier]"
-              value={propertyId}
-              readOnly
-            />
-          </form>
+              <input
+                type="hidden"
+                name="google_search_console[property_identifier]"
+                value={propertyId}
+                readOnly
+              />
+            </form>
+          </div>
         ) : (
-          <p className="text-sm text-muted-foreground">
-            No verified properties found for this account.
-          </p>
+          <div className="space-y-2">
+            {!gsc.reauthRequired ? (
+              <form method="post" action={propertiesRefreshPath}>
+                <input
+                  type="hidden"
+                  name="authenticity_token"
+                  value={csrfToken()}
+                  readOnly
+                />
+                <Button type="submit" variant="outline" size="sm">
+                  <RefreshCw className="size-3.5" />
+                  Refresh properties
+                </Button>
+              </form>
+            ) : null}
+            <p className="text-sm text-muted-foreground">
+              No cached verified properties are available for this account.
+            </p>
+          </div>
         )}
 
         {gsc.configured ? (
@@ -2290,10 +2354,14 @@ function GoogleSearchConsoleTab({
                   type="submit"
                   variant="outline"
                   size="sm"
-                  disabled={gsc.syncInProgress}
+                  disabled={gsc.syncInProgress || gsc.reauthRequired}
                 >
                   <RefreshCw className="size-3.5" />
-                  {gsc.syncInProgress ? "Syncing\u2026" : "Sync now"}
+                  {gsc.syncInProgress
+                    ? "Syncing\u2026"
+                    : gsc.reauthRequired
+                      ? "Reconnect required"
+                      : "Sync now"}
                 </Button>
               </form>
             </div>
@@ -2560,6 +2628,9 @@ function AnalyticsSettingsPageContent({
                   gsc={settings.googleSearchConsole}
                   connectPath={paths.googleSearchConsoleConnect ?? "#"}
                   connectionPath={paths.googleSearchConsole ?? "#"}
+                  propertiesRefreshPath={
+                    paths.googleSearchConsolePropertiesRefresh ?? "#"
+                  }
                   syncPath={paths.googleSearchConsoleSync ?? "#"}
                 />
               ) : null}

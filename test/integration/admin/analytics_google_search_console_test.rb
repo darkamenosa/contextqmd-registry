@@ -59,6 +59,7 @@ class Admin::AnalyticsGoogleSearchConsoleTest < ActionDispatch::IntegrationTest
     assert_equal "http://www.example.com/admin/settings/analytics/google_search_console/callback", gsc.fetch("callbackUrl")
     assert_equal "/admin/settings/analytics", payload.fetch("paths").fetch("settings")
     assert_equal "/admin/analytics/sites/#{site.public_id}/google_search_console/connect", payload.fetch("paths").fetch("googleSearchConsoleConnect")
+    assert_equal "/admin/analytics/sites/#{site.public_id}/google_search_console/properties_refresh", payload.fetch("paths").fetch("googleSearchConsolePropertiesRefresh")
     assert_equal "/admin/analytics/sites/#{site.public_id}/google_search_console/sync", payload.fetch("paths").fetch("googleSearchConsoleSync")
   ensure
     Current.reset
@@ -127,6 +128,8 @@ class Admin::AnalyticsGoogleSearchConsoleTest < ActionDispatch::IntegrationTest
     assert_equal "google-user-123", connection.google_uid
     assert_equal "https://docs.example.test/", connection.property_identifier
     assert_equal "url_prefix", connection.property_type
+    assert_equal 1, connection.cached_properties.length
+    assert_not_nil connection.properties_refreshed_at
   ensure
     Current.reset
   end
@@ -151,35 +154,31 @@ class Admin::AnalyticsGoogleSearchConsoleTest < ActionDispatch::IntegrationTest
         metadata: {}
       }
     )
-    fake_client = FakeGoogleSearchConsoleClient.new(
-      properties: [
-        {
-          identifier: "sc-domain:example.com",
-          type: "domain",
-          permission_level: "siteOwner",
-          label: "example.com"
-        },
-        {
-          identifier: "https://docs.example.test/",
-          type: "url_prefix",
-          permission_level: "siteFullUser",
-          label: "docs.example.test"
-        }
-      ]
-    )
+    connection.cache_verified_properties!([
+      {
+        identifier: "sc-domain:example.com",
+        type: "domain",
+        permission_level: "siteOwner",
+        label: "example.com"
+      },
+      {
+        identifier: "https://docs.example.test/",
+        type: "url_prefix",
+        permission_level: "siteFullUser",
+        label: "docs.example.test"
+      }
+    ])
 
     sign_in(staff_identity)
 
     with_google_search_console_configured do
-      with_google_search_console_client(fake_client) do
-        assert_enqueued_jobs 1, only: Analytics::GoogleSearchConsoleSyncJob do
-          patch "/admin/analytics/sites/#{site.public_id}/google_search_console",
-            params: {
-              google_search_console: {
-                property_identifier: "sc-domain:example.com"
-              }
+      assert_enqueued_jobs 1, only: Analytics::GoogleSearchConsoleSyncJob do
+        patch "/admin/analytics/sites/#{site.public_id}/google_search_console",
+          params: {
+            google_search_console: {
+              property_identifier: "sc-domain:example.com"
             }
-        end
+          }
       end
     end
 
@@ -198,6 +197,40 @@ class Admin::AnalyticsGoogleSearchConsoleTest < ActionDispatch::IntegrationTest
     assert_equal false, connection.active
     assert_equal Analytics::GoogleSearchConsoleConnection::STATUS_DISCONNECTED, connection.status
     assert_nil Analytics::GoogleSearchConsoleConnection.current_for(site)
+  ensure
+    Current.reset
+  end
+
+  test "refresh properties queues a background refresh" do
+    staff_identity, = create_tenant(
+      email: "staff-analytics-gsc-properties-refresh-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Analytics GSC Properties Refresh"
+    )
+    staff_identity.update!(staff: true)
+
+    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    Analytics::GoogleSearchConsoleConnection.rotate_for_site!(
+      site: site,
+      attributes: {
+        google_uid: "google-user-refresh",
+        google_email: "owner@example.com",
+        access_token: "access-token",
+        refresh_token: "refresh-token",
+        expires_at: 1.hour.from_now,
+        scopes: Analytics::GoogleSearchConsole::Client::SCOPES,
+        metadata: {}
+      }
+    )
+
+    sign_in(staff_identity)
+
+    with_google_search_console_configured do
+      assert_enqueued_jobs 1, only: Analytics::GoogleSearchConsolePropertiesRefreshJob do
+        post "/admin/analytics/sites/#{site.public_id}/google_search_console/properties_refresh"
+      end
+    end
+
+    assert_redirected_to "/admin/settings/analytics?tab=integrations"
   ensure
     Current.reset
   end
@@ -236,14 +269,11 @@ class Admin::AnalyticsGoogleSearchConsoleTest < ActionDispatch::IntegrationTest
       status: Analytics::GoogleSearchConsole::Sync::STATUS_FAILED,
       error_message: "quota exceeded"
     )
-    fake_client = FakeGoogleSearchConsoleClient.new(properties: [])
 
     sign_in(staff_identity)
 
     with_google_search_console_configured do
-      with_google_search_console_client(fake_client) do
-        get "/admin/settings/analytics", headers: INERTIA_HEADERS
-      end
+      get "/admin/settings/analytics", headers: INERTIA_HEADERS
     end
 
     assert_response :success
@@ -264,12 +294,116 @@ class Admin::AnalyticsGoogleSearchConsoleTest < ActionDispatch::IntegrationTest
     Current.reset
   end
 
+  test "settings shell uses cached properties without live google requests" do
+    staff_identity, = create_tenant(
+      email: "staff-analytics-gsc-cached-properties-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Analytics GSC Cached Properties"
+    )
+    staff_identity.update!(staff: true)
+
+    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    connection = Analytics::GoogleSearchConsoleConnection.rotate_for_site!(
+      site: site,
+      attributes: {
+        google_uid: "google-user-cached-properties",
+        google_email: "owner@example.com",
+        access_token: "expired-access-token",
+        refresh_token: "unused-refresh-token",
+        expires_at: 1.hour.ago,
+        scopes: Analytics::GoogleSearchConsole::Client::SCOPES,
+        metadata: {},
+        property_identifier: "sc-domain:docs.example.test",
+        property_type: "domain",
+        permission_level: "siteOwner",
+        last_verified_at: Time.current
+      }
+    )
+    connection.cache_verified_properties!([
+      {
+        identifier: "sc-domain:docs.example.test",
+        type: "domain",
+        permission_level: "siteOwner",
+        label: "docs.example.test"
+      }
+    ])
+
+    sign_in(staff_identity)
+
+    with_google_search_console_configured do
+      with_google_search_console_client(
+        FakeGoogleSearchConsoleClient.new(
+          properties: [],
+          refresh_error: TypeError.new("settings should not fetch live properties")
+        )
+      ) do
+        get "/admin/settings/analytics", headers: INERTIA_HEADERS
+      end
+    end
+
+    assert_response :success
+
+    payload = JSON.parse(response.body).fetch("props")
+    gsc = payload.fetch("settings").fetch("googleSearchConsole")
+    assert_nil gsc["propertiesError"]
+    assert_equal "docs.example.test", gsc.fetch("properties").first.fetch("label")
+  ensure
+    Current.reset
+  end
+
+  test "settings shell exposes reconnect state from cached connection metadata" do
+    staff_identity, = create_tenant(
+      email: "staff-analytics-gsc-reconnect-state-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Analytics GSC Reconnect State"
+    )
+    staff_identity.update!(staff: true)
+
+    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    connection = Analytics::GoogleSearchConsoleConnection.rotate_for_site!(
+      site: site,
+      attributes: {
+        google_uid: "google-user-reconnect-state",
+        google_email: "owner@example.com",
+        access_token: "access-token",
+        refresh_token: "refresh-token",
+        expires_at: 1.hour.from_now,
+        scopes: Analytics::GoogleSearchConsole::Client::SCOPES,
+        metadata: {},
+        property_identifier: "sc-domain:docs.example.test",
+        property_type: "domain",
+        permission_level: "siteOwner",
+        last_verified_at: Time.current
+      }
+    )
+    connection.update!(
+      status: Analytics::GoogleSearchConsoleConnection::STATUS_REVOKED,
+      metadata: connection.metadata.merge(
+        "connection_error" => "Token has been expired or revoked."
+      )
+    )
+
+    sign_in(staff_identity)
+
+    with_google_search_console_configured do
+      get "/admin/settings/analytics", headers: INERTIA_HEADERS
+    end
+
+    assert_response :success
+
+    payload = JSON.parse(response.body).fetch("props")
+    gsc = payload.fetch("settings").fetch("googleSearchConsole")
+    assert_equal true, gsc.fetch("reauthRequired")
+    assert_equal "Token has been expired or revoked.", gsc.fetch("connectionError")
+  ensure
+    Current.reset
+  end
+
   class FakeGoogleSearchConsoleClient
     attr_reader :last_state
 
-    def initialize(properties:)
+    def initialize(properties:, refresh_error: nil)
       @properties = properties
       @last_state = nil
+      @refresh_error = refresh_error
     end
 
     def authorization_url(state:)
@@ -300,6 +434,8 @@ class Admin::AnalyticsGoogleSearchConsoleTest < ActionDispatch::IntegrationTest
     end
 
     def refresh_access_token!(_refresh_token)
+      raise @refresh_error if @refresh_error.present?
+
       {
         "access_token" => "google-access-token-refreshed",
         "expires_in" => 3600,

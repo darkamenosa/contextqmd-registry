@@ -39,6 +39,13 @@ class Admin::DashboardRecentCrawlsTest < ActionDispatch::IntegrationTest
     )
     staff_identity.update!(staff: true)
 
+    sign_in(staff_identity)
+
+    get admin_dashboard_path
+
+    assert_response :success
+    baseline_stats = page_props.fetch("props").fetch("stats")
+
     hex = SecureRandom.hex(4)
     library = Library.create!(
       account: Account.system,
@@ -55,10 +62,10 @@ class Admin::DashboardRecentCrawlsTest < ActionDispatch::IntegrationTest
     get admin_dashboard_path
 
     assert_response :success
-    stats = page_props.fetch("props").fetch("stats")
-    assert_equal Library.count, stats["libraryCount"]
-    assert_equal Version.count + 7, stats["versionCount"]
-    assert_equal Page.count + 42, stats["pageCount"]
+    updated_stats = page_props.fetch("props").fetch("stats")
+    assert_equal baseline_stats["libraryCount"] + 1, updated_stats["libraryCount"]
+    assert_equal baseline_stats["versionCount"] + 7, updated_stats["versionCount"]
+    assert_equal baseline_stats["pageCount"] + 42, updated_stats["pageCount"]
   ensure
     Current.reset
   end

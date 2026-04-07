@@ -24,6 +24,7 @@ class Analytics::Paths
       settings_data: settings_data,
       google_search_console_connect: google_search_console_connect,
       google_search_console: google_search_console,
+      google_search_console_properties_refresh: google_search_console_properties_refresh,
       google_search_console_sync: google_search_console_sync
     )
   end
@@ -65,6 +66,10 @@ class Analytics::Paths
 
   def google_search_console_sync
     helpers.google_search_console_sync_admin_analytics_site_path(site: site.public_id)
+  end
+
+  def google_search_console_properties_refresh
+    helpers.google_search_console_properties_refresh_admin_analytics_site_path(site: site.public_id)
   end
 
   def google_search_console_callback

@@ -457,12 +457,144 @@ class Admin::AnalyticsSearchTermsTest < ActionDispatch::IntegrationTest
     Current.reset
   end
 
+  test "search terms return request_failed when refresh token is revoked" do
+    staff_identity, = create_tenant(
+      email: "staff-analytics-search-terms-refresh-failure-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Analytics Search Terms Refresh Failure"
+    )
+    staff_identity.update!(staff: true)
+
+    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    Analytics::GoogleSearchConsoleConnection.rotate_for_site!(
+      site: site,
+      attributes: {
+        google_uid: "google-user-refresh-failure",
+        google_email: "owner@example.com",
+        access_token: "expired-access-token",
+        refresh_token: "revoked-refresh-token",
+        expires_at: 1.hour.ago,
+        scopes: Analytics::GoogleSearchConsole::Client::SCOPES,
+        metadata: {},
+        property_identifier: "sc-domain:example.test",
+        property_type: "domain",
+        permission_level: "siteOwner",
+        last_verified_at: Time.current
+      }
+    )
+
+    sign_in(staff_identity)
+
+    with_google_search_console_client(
+      FakeGoogleSearchConsoleClient.new(
+        rows_by_date: {},
+        refresh_error: Analytics::GoogleSearchConsole::Client::Error.new(
+          "Token has been expired or revoked.",
+          reason: :reauth_required
+        )
+      )
+    ) do
+      get "/admin/analytics/sites/#{site.public_id}/search_terms",
+        params: {
+          period: "custom",
+          from: 7.days.ago.to_date.iso8601,
+          to: 7.days.ago.to_date.iso8601,
+          f: [ "is,source,Google" ]
+        },
+        headers: { "ACCEPT" => "application/json" }
+    end
+
+    assert_response :unprocessable_entity
+    assert_equal(
+      {
+        "errorCode" => "request_failed",
+        "message" => "Token has been expired or revoked."
+      },
+      JSON.parse(response.body)
+    )
+    assert_equal Analytics::GoogleSearchConsoleConnection::STATUS_REVOKED, Analytics::GoogleSearchConsoleConnection.current_for(site)&.status
+  ensure
+    Current.reset
+  end
+
+  test "search terms stay readable from cached rows when google auth is revoked but coverage exists" do
+    staff_identity, = create_tenant(
+      email: "staff-analytics-search-terms-revoked-cache-#{SecureRandom.hex(4)}@example.com",
+      name: "Staff Analytics Search Terms Revoked Cache"
+    )
+    staff_identity.update!(staff: true)
+
+    site = Analytics::Site.create!(name: "Docs", canonical_hostname: "docs.example.test")
+    connection = Analytics::GoogleSearchConsoleConnection.rotate_for_site!(
+      site: site,
+      attributes: {
+        google_uid: "google-user-revoked-cache",
+        google_email: "owner@example.com",
+        access_token: "expired-access-token",
+        refresh_token: "revoked-refresh-token",
+        expires_at: 1.hour.ago,
+        scopes: Analytics::GoogleSearchConsole::Client::SCOPES,
+        metadata: {
+          "connection_error" => "Token has been expired or revoked."
+        },
+        status: Analytics::GoogleSearchConsoleConnection::STATUS_REVOKED,
+        property_identifier: "sc-domain:example.test",
+        property_type: "domain",
+        permission_level: "siteOwner",
+        last_verified_at: Time.current
+      }
+    )
+    cached_date = 7.days.ago.to_date
+    sync = connection.syncs.create!(
+      property_identifier: connection.property_identifier,
+      search_type: "web",
+      from_date: cached_date,
+      to_date: cached_date,
+      started_at: 10.minutes.ago,
+      finished_at: 5.minutes.ago,
+      status: Analytics::GoogleSearchConsole::Sync::STATUS_SUCCEEDED
+    )
+    Analytics::GoogleSearchConsole::QueryRow.create!(
+      analytics_site: site,
+      sync: sync,
+      date: cached_date,
+      search_type: "web",
+      query: "contextqmd analytics",
+      page: "/docs/install",
+      country: "USA",
+      device: "desktop",
+      clicks: 12,
+      impressions: 34,
+      position_impressions_sum: 68
+    )
+
+    sign_in(staff_identity)
+
+    get "/admin/analytics/sites/#{site.public_id}/search_terms",
+      params: {
+        period: "custom",
+        from: cached_date.iso8601,
+        to: cached_date.iso8601,
+        f: [ "is,source,Google" ]
+      },
+      headers: { "ACCEPT" => "application/json" }
+
+    assert_response :success
+
+    payload = JSON.parse(response.body)
+    assert_equal 1, payload.fetch("results").length
+    assert_equal true, payload.fetch("meta").fetch("searchConsole").fetch("reauthRequired")
+    assert_equal "Token has been expired or revoked.", payload.fetch("meta").fetch("searchConsole").fetch("connectionError")
+  ensure
+    Current.reset
+  end
+
   class FakeGoogleSearchConsoleClient
     attr_reader :last_query_request
 
-    def initialize(rows_by_date:)
+    def initialize(rows_by_date:, refresh_error: nil)
       @rows_by_date = rows_by_date
       @last_query_request = nil
+      @refresh_error = refresh_error
     end
 
     def query_search_analytics(access_token, start_date:, **kwargs)
@@ -471,6 +603,8 @@ class Admin::AnalyticsSearchTermsTest < ActionDispatch::IntegrationTest
     end
 
     def refresh_access_token!(_refresh_token)
+      raise @refresh_error if @refresh_error.present?
+
       {
         "access_token" => "refreshed-access-token",
         "expires_in" => 3600,

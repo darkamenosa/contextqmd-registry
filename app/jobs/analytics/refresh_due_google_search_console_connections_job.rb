@@ -11,7 +11,11 @@ module Analytics
       from_date, to_date = Analytics::GoogleSearchConsole::Syncer.refresh_sync_window(now: now)
       return if to_date < from_date
 
-      scope = Analytics::GoogleSearchConsoleConnection.active.where.not(property_identifier: [ nil, "" ]).order(:id)
+      scope = Analytics::GoogleSearchConsoleConnection
+        .active
+        .where(status: Analytics::GoogleSearchConsoleConnection::STATUS_ACTIVE)
+        .where.not(property_identifier: [ nil, "" ])
+        .order(:id)
 
       MAX_BATCHES.times do |batch_index|
         batch = scope.limit(BATCH_SIZE).offset(batch_index * BATCH_SIZE).to_a
