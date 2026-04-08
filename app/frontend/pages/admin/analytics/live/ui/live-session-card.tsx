@@ -19,10 +19,7 @@ import {
 import type { LiveSession } from "../types"
 
 function useLiveDuration(session: LiveSession) {
-  const [nowMs, setNowMs] = useState(() => {
-    const startedAtMs = Date.parse(session.startedAt ?? "")
-    return Number.isFinite(startedAtMs) ? startedAtMs : 0
-  })
+  const [nowMs, setNowMs] = useState(() => Date.now())
 
   useEffect(() => {
     if (!session.active) return
