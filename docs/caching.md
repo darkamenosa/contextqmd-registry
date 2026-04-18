@@ -1,10 +1,11 @@
 # Caching
 
-This app uses three separate caching layers:
+This app uses four separate caching layers:
 
 1. Inertia client prefetch cache
 2. HTTP conditional caching (`ETag` / `Last-Modified` -> `304 Not Modified`)
 3. Server-side `Rails.cache`
+4. Inertia SSR response cache
 
 They solve different problems. Do not treat them as interchangeable.
 
@@ -59,6 +60,16 @@ This avoids recomputing expensive props on the server.
 - Helps even when the browser has no prior cached response
 - Usually paired with `fresh_when`, not used instead of it
 - Best for expensive dashboards or public list payloads
+- Cache keys must include the same content signature that invalidates the HTTP ETag
+
+### SSR Response Cache
+
+This avoids repeating Node SSR work for identical Inertia page JSON.
+
+- Enabled in [config/initializers/inertia_rails.rb](/Users/tuyenhx/Workspace/experiments/contextqmd_2/contextqmd-registry/config/initializers/inertia_rails.rb)
+- Uses `Rails.cache` through the Inertia Rails cache store
+- Disabled automatically when the Vite dev server is serving SSR
+- Keep per-request-only values out of shared Inertia props or the SSR cache will miss every request
 
 ## Important Browser Reality
 
@@ -82,13 +93,13 @@ The same URL can return:
 
 These must never share one validator.
 
-Current rule everywhere we use conditional caching:
+The HTML/Inertia ETag split is handled globally in [application_controller.rb](/Users/tuyenhx/Workspace/experiments/contextqmd_2/contextqmd-registry/app/controllers/application_controller.rb):
 
 ```ruby
-etag: [request.inertia? ? "inertia" : "html", ...]
+etag { request.inertia? }
 ```
 
-And always:
+Individual route ETags should only include route-specific freshness state. Still always set:
 
 ```ruby
 merge_vary_header!("X-Inertia")
@@ -237,7 +248,7 @@ else
   request.session_options[:skip] = true if request.get? || request.head?
 
   fresh_when(
-    etag: [request.inertia? ? "inertia" : "html", ...route_specific_state...],
+    etag: [ "route-name", route_specific_state ],
     last_modified: route_specific_timestamp,
     public: false,
     template: false

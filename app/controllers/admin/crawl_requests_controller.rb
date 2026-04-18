@@ -35,7 +35,6 @@ module Admin
 
         fresh_when(
           etag: [
-            request.inertia? ? "inertia" : "html",
             "admin-crawl-requests-index",
             params[:query].to_s,
             params[:tab] || "all",

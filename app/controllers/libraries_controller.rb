@@ -33,7 +33,6 @@ class LibrariesController < InertiaController
     else
       fresh_when(
         etag: [
-          request.inertia? ? "inertia" : "html",
           "libraries-index",
           query,
           page,
@@ -50,7 +49,7 @@ class LibrariesController < InertiaController
     end
 
     cached = Rails.cache.fetch(
-      [ "public", "libraries", "index", query, page, library_count, last_modified&.to_fs(:usec) ],
+      [ "public", "libraries", "index", query, page, library_count, page_signature, last_modified&.to_fs(:usec) ],
       expires_in: LIST_CACHE_TTL
     ) do
       libraries = if query.present?
@@ -257,7 +256,7 @@ class LibrariesController < InertiaController
           version.updated_at&.utc&.to_i
         ]
       end
-      pages_signature = pages.map { |page| [ page.id, page.checksum ] }
+      pages_signature = pages.map { |page| [ page.cache_key_with_version, page.checksum ] }
       sources_signature = library.library_sources.map { |source| [ source.id, source.updated_at&.utc&.to_i ] }
 
       [

@@ -8,7 +8,6 @@ class InertiaController < ApplicationController
   # Share data with all Inertia responses
   inertia_share current_user: -> { current_user_props }
   inertia_share current_identity: -> { current_identity_props }
-  inertia_share request_context: -> { request_context_props }
 
   private
 
@@ -58,13 +57,5 @@ class InertiaController < ApplicationController
         .by_role_priority
         .order(created_at: :asc)
         .first
-    end
-
-    def request_context_props
-      {
-        request_id: Current.request_id,
-        timezone: Time.zone.tzinfo.name,
-        platform: platform.type
-      }
     end
 end

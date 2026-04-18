@@ -18,7 +18,6 @@ module App
 
         fresh_when(
           etag: [
-            request.inertia? ? "inertia" : "html",
             "app-settings",
             Current.account.cache_key_with_version,
             Current.identity.cache_key_with_version,

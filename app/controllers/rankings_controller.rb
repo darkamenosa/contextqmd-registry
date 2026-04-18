@@ -21,7 +21,6 @@ class RankingsController < InertiaController
     else
       fresh_when(
         etag: [
-          request.inertia? ? "inertia" : "html",
           "rankings",
           page,
           *shared_identity_cache_key_parts,
@@ -36,7 +35,7 @@ class RankingsController < InertiaController
       return if performed?
     end
 
-    cached = Rails.cache.fetch([ "public", "rankings", page, total_libraries, last_modified&.to_fs(:usec) ], expires_in: CACHE_TTL) do
+    cached = Rails.cache.fetch([ "public", "rankings", page, total_libraries, page_signature, last_modified&.to_fs(:usec) ], expires_in: CACHE_TTL) do
       pagy, paginated = pagy(:offset, Library.ranked, limit: 10)
 
       {

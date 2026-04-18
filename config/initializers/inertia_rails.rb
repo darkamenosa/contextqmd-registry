@@ -7,6 +7,7 @@ InertiaRails.configure do |config|
   config.ssr_enabled = lambda {
     ViteRuby.config.ssr_build_enabled || ViteRuby.instance.dev_server_running?
   }
+  config.ssr_cache = { expires_in: 10.minutes, race_condition_ttl: 10.seconds }
   config.use_script_element_for_initial_page = true
   config.use_data_inertia_head_attribute = true
 

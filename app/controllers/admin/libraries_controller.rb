@@ -29,7 +29,6 @@ module Admin
 
         fresh_when(
           etag: [
-            request.inertia? ? "inertia" : "html",
             "admin-libraries-index",
             params[:query].to_s,
             params[:sort] || "updated_at",

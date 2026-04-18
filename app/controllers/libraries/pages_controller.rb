@@ -23,10 +23,10 @@ class Libraries::PagesController < InertiaController
       [
         "public",
         "library-page",
-        library.id,
-        library.display_name,
+        library.cache_key_with_version,
+        version.cache_key_with_version,
         params[:version],
-        page.id,
+        page.cache_key_with_version,
         page.checksum
       ],
       expires_in: CACHE_TTL
@@ -61,6 +61,8 @@ class Libraries::PagesController < InertiaController
   private
 
     def apply_public_cache_headers(library:, version:, page:)
+      merge_vary_header!("X-Inertia")
+
       if request.inertia?
         mark_non_cacheable!(private_cache: false)
         return true

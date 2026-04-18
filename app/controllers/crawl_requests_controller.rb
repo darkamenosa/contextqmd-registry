@@ -31,7 +31,6 @@ class CrawlRequestsController < InertiaController
     else
       fresh_when(
         etag: [
-          request.inertia? ? "inertia" : "html",
           "crawl-requests",
           active_tab,
           params[:page].presence || "1",

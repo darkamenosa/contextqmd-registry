@@ -23,7 +23,6 @@ class PagesController < InertiaController
     else
       fresh_when(
         etag: [
-          request.inertia? ? "inertia" : "html",
           "public-page",
           slug,
           *shared_identity_cache_key_parts

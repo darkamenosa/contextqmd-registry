@@ -14,7 +14,7 @@ class PublicPageCachingTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_includes response.headers["Cache-Control"], "private"
-    assert_includes response.headers["Vary"], "X-Inertia"
+    assert_vary_header_once "X-Inertia"
 
     html_etag = response.headers["ETag"]
     assert html_etag.present?
@@ -77,7 +77,7 @@ class PublicPageCachingTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_includes response.headers["Cache-Control"], "private"
-    assert_includes response.headers["Vary"], "X-Inertia"
+    assert_vary_header_once "X-Inertia"
 
     html_etag = response.headers["ETag"]
     assert html_etag.present?
@@ -136,6 +136,38 @@ class PublicPageCachingTest < ActionDispatch::IntegrationTest
     Current.reset
   end
 
+  test "libraries index payload cache follows page signature changes" do
+    hex = SecureRandom.hex(4)
+    library = Library.create!(
+      account: Account.system,
+      namespace: "signature-cache-#{hex}",
+      name: "docs-#{hex}",
+      slug: "signature-cache-#{hex}",
+      display_name: "Signature Cache Docs #{hex}",
+      source_type: "github"
+    )
+    cache_store = ActiveSupport::Cache.lookup_store(:memory_store)
+
+    with_stubbed_singleton_method(Rails, :cache, cache_store) do
+      get libraries_path(query: hex), headers: INERTIA_HEADERS
+
+      assert_response :success
+      assert_equal 0, library_row(library.slug).fetch("pageCount")
+
+      stale_etag = response.headers["ETag"]
+      assert stale_etag.present?
+
+      library.update_columns(total_pages_count: 7)
+
+      get libraries_path(query: hex), headers: INERTIA_HEADERS.merge("If-None-Match" => stale_etag)
+
+      assert_response :success
+      assert_equal 7, library_row(library.slug).fetch("pageCount")
+    end
+  ensure
+    Current.reset
+  end
+
   test "homepage supports html revalidation" do
     get root_path
 
@@ -165,5 +197,18 @@ class PublicPageCachingTest < ActionDispatch::IntegrationTest
     def consume_post_login_public_flash
       get about_path
       assert_response :success
+    end
+
+    def library_row(slug)
+      response.parsed_body
+        .dig("props", "libraries")
+        .find { |row| row.fetch("slug") == slug }
+    end
+
+    def assert_vary_header_once(header)
+      values = response.headers["Vary"].to_s.split(",").map(&:strip)
+
+      assert_includes values, header
+      assert_equal 1, values.count { |value| value.casecmp?(header) }
     end
 end

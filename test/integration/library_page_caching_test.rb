@@ -45,6 +45,7 @@ class LibraryPageCachingTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_includes response.headers["Cache-Control"], "public"
     assert_includes response.headers["Cache-Control"], "max-age=3600"
+    assert_vary_header_once "X-Inertia"
     assert_equal "public, max-age=3600, stale-while-revalidate=60", response.headers["Cloudflare-CDN-Cache-Control"]
 
     etag = response.headers["ETag"]
@@ -59,11 +60,18 @@ class LibraryPageCachingTest < ActionDispatch::IntegrationTest
   end
 
   test "inertia navigation request still returns an inertia response instead of conditional html caching" do
+    get "/libraries/#{@library.slug}/versions/#{@version.version}/pages/#{@page.page_uid}"
+
+    assert_response :success
+    html_etag = response.headers["ETag"]
+    assert html_etag.present?
+
     get(
       "/libraries/#{@library.slug}/versions/#{@version.version}/pages/#{@page.page_uid}",
       headers: {
         "X-Inertia" => "true",
-        "X-Inertia-Version" => ViteRuby.digest
+        "X-Inertia-Version" => ViteRuby.digest,
+        "If-None-Match" => html_etag
       }
     )
 
@@ -95,4 +103,43 @@ class LibraryPageCachingTest < ActionDispatch::IntegrationTest
     assert_equal "private, no-store", response.headers["Cache-Control"]
     assert_nil response.headers["Cloudflare-CDN-Cache-Control"]
   end
+
+  test "library page payload cache follows record version changes" do
+    cache_store = ActiveSupport::Cache.lookup_store(:memory_store)
+
+    with_stubbed_singleton_method(Rails, :cache, cache_store) do
+      get(
+        "/libraries/#{@library.slug}/versions/#{@version.version}/pages/#{@page.page_uid}",
+        headers: {
+          "X-Inertia" => "true",
+          "X-Inertia-Version" => ViteRuby.digest
+        }
+      )
+
+      assert_response :success
+      assert_equal "Overview", response.parsed_body.dig("props", "page", "title")
+
+      @page.update!(title: "Updated Overview")
+
+      get(
+        "/libraries/#{@library.slug}/versions/#{@version.version}/pages/#{@page.page_uid}",
+        headers: {
+          "X-Inertia" => "true",
+          "X-Inertia-Version" => ViteRuby.digest
+        }
+      )
+
+      assert_response :success
+      assert_equal "Updated Overview", response.parsed_body.dig("props", "page", "title")
+    end
+  end
+
+  private
+
+    def assert_vary_header_once(header)
+      values = response.headers["Vary"].to_s.split(",").map(&:strip)
+
+      assert_includes values, header
+      assert_equal 1, values.count { |value| value.casecmp?(header) }
+    end
 end

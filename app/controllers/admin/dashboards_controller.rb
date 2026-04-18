@@ -12,7 +12,7 @@ module Admin
         request.session_options[:skip] = true if request.get? || request.head?
 
         fresh_when(
-          etag: [ request.inertia? ? "inertia" : "html", *state[:etag] ],
+          etag: state[:etag],
           last_modified: state[:last_modified],
           public: false,
           template: false

@@ -356,16 +356,6 @@ Present anywhere an identity is authenticated.
 
 `default_account_id`, `default_account_name`, and `default_account_role` come from the first accessible (non-cancelled) membership, selected by role priority (`owner > admin > member`) then `created_at` ascending.
 
-### `request_context`
-
-Shared on all Inertia responses:
-
-- `request_id`
-- `timezone`
-- `platform`
-
-`CurrentRequest` also records `http_method`, `user_agent`, `ip_address`, and `referrer` for downstream use.
-
 ## Auth Entry Points
 
 ### Email/password sign-in

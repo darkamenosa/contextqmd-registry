@@ -20,7 +20,6 @@ class HomepagesController < InertiaController
     else
       fresh_when(
         etag: [
-          request.inertia? ? "inertia" : "html",
           "homepage",
           tab,
           *shared_identity_cache_key_parts,
@@ -35,7 +34,7 @@ class HomepagesController < InertiaController
       return if performed?
     end
 
-    cached = Rails.cache.fetch([ "public", "homepage", tab, library_count, last_modified&.to_fs(:usec) ], expires_in: CACHE_TTL) do
+    cached = Rails.cache.fetch([ "public", "homepage", tab, library_count, visible_signature, last_modified&.to_fs(:usec) ], expires_in: CACHE_TTL) do
       {
         library_count: library_count,
         libraries: Library.public_send(tab).limit(10).map { |lib| home_library_props(lib) },
