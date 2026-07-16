@@ -93,7 +93,6 @@ export default function DevicesPanel({
     () => JSON.stringify([baseQuery, mode]),
     [baseQuery, mode]
   )
-  const closeDetailsDialog = host.closeDialogRoute
   const panelState = usePanelData({
     initialData,
     initialRequestKey,
@@ -135,23 +134,26 @@ export default function DevicesPanel({
   )
 
   const handleSelect = useCallback(
-    (itemName: string) => {
-      updateQuery((current) => {
-        const filters = { ...current.filters }
-        const next = { ...current, filters }
-        if (mode === "browser-versions") {
-          filters.browser_version = itemName
-        } else if (mode === "operating-system-versions") {
-          filters.os_version = itemName
-        } else if (mode === "operating-systems") {
-          filters.os = itemName
-        } else if (mode === "screen-sizes") {
-          filters.size = itemName
-        } else {
-          filters.browser = itemName
-        }
-        return next
-      })
+    (itemName: string, closeDialog = false) => {
+      updateQuery(
+        (current) => {
+          const filters = { ...current.filters }
+          const next = { ...current, filters }
+          if (mode === "browser-versions") {
+            filters.browser_version = itemName
+          } else if (mode === "operating-system-versions") {
+            filters.os_version = itemName
+          } else if (mode === "operating-systems") {
+            filters.os = itemName
+          } else if (mode === "screen-sizes") {
+            filters.size = itemName
+          } else {
+            filters.browser = itemName
+          }
+          return next
+        },
+        { closeDialog }
+      )
     },
     [mode, updateQuery]
   )
@@ -253,10 +255,7 @@ export default function DevicesPanel({
         extras={{ mode }}
         firstColumnLabel={firstColumnLabel}
         defaultSortKey={"visitors"}
-        onRowClick={(item) => {
-          handleSelect(String(item.name))
-          closeDetailsDialog()
-        }}
+        onRowClick={(item) => handleSelect(String(item.name), true)}
         renderLeading={(item) => renderDeviceLeading(mode, item)}
       />
     </section>

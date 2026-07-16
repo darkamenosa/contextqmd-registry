@@ -34,7 +34,6 @@ export default function SourcesPanel({
     campaignActive,
     campaignLabel,
     cardTitle,
-    closeDialog,
     data,
     debugOpen,
     detailsOpen,
@@ -138,10 +137,7 @@ export default function SourcesPanel({
         onRowClick={
           isGoogleActive
             ? undefined
-            : (item) => {
-                handlePrimaryRowClick(item)
-                closeDialog()
-              }
+            : (item) => handlePrimaryRowClick(item, true)
         }
         renderLeading={
           isGoogleActive || !showSourceIcon ? undefined : renderSourceIcon
@@ -158,10 +154,7 @@ export default function SourcesPanel({
           extras={{ source: activeSource }}
           firstColumnLabel="Referrer"
           defaultSortKey={"visitors"}
-          onRowClick={(item) => {
-            handleReferrerRowClick(item)
-            closeDialog()
-          }}
+          onRowClick={(item) => handleReferrerRowClick(item, true)}
           renderLeading={renderSourceIcon}
           getExternalLinkUrl={(item) =>
             buildSourceExternalLink(String(item.name))

@@ -12,6 +12,7 @@ import {
   locationsSegmentForMode,
   parseDialogFromPath,
 } from "../lib/dialog-path"
+import { buildLocationDrilldownPath } from "../lib/location-drilldown"
 import { getLocationsModeAfterFilterChange } from "../lib/panel-mode"
 import {
   analyticsPreferenceKey,
@@ -20,12 +21,7 @@ import {
 import { useScopedQuery } from "../lib/query-scope"
 import { useQueryContext } from "../query-context"
 import { useSiteContext } from "../site-context"
-import type {
-  AnalyticsQuery,
-  ListItem,
-  ListPayload,
-  MapPayload,
-} from "../types"
+import type { ListItem, ListPayload, MapPayload } from "../types"
 import DetailsButton from "./details-button"
 import { MetricTable, PanelEmptyState, PanelListSkeleton } from "./list-table"
 import { PanelTab, PanelTabs } from "./panel-tabs"
@@ -64,7 +60,7 @@ export default function LocationsPanel({
 }: LocationsPanelProps) {
   const { fetchLocations } = useAnalyticsApi()
   const host = useAnalyticsHost()
-  const { query, updateQuery } = useQueryContext()
+  const { query } = useQueryContext()
   const site = useSiteContext()
 
   const [preferredMode, setPreferredMode] = useState(() => initialMode)
@@ -95,7 +91,6 @@ export default function LocationsPanel({
   )
   const previousFiltersRef = useRef(query.filters)
   const countriesRestoreModeRef = useRef<"map" | "countries">("countries")
-  const closeDetailsDialog = host.closeDialogRoute
   const panelState = usePanelData<PanelData>({
     initialData:
       "map" in initialData
@@ -198,43 +193,43 @@ export default function LocationsPanel({
     })
   }, [data])
 
+  const applyLocationFilter = useCallback(
+    (
+      dimension: "country" | "region" | "city",
+      value: string,
+      label?: string
+    ) => {
+      host.navigate(
+        buildLocationDrilldownPath({
+          query,
+          search: host.search,
+          reportsPath: host.reportsPath,
+          dimension,
+          value,
+          label,
+        })
+      )
+    },
+    [host, query]
+  )
+
   const handleCountrySelect = useCallback(
     (countryCode: string, countryLabel?: string) => {
       countriesRestoreModeRef.current = mode === "map" ? "map" : "countries"
-      updateQuery((current) => {
-        const next: AnalyticsQuery = {
-          ...current,
-          filters: { ...current.filters, country: countryCode },
-        }
-        if (countryLabel && countryLabel !== countryCode) {
-          next.labels = { ...(current.labels || {}), country: countryLabel }
-        }
-        return next
-      })
+      applyLocationFilter("country", countryCode, countryLabel)
       setPreferredMode("regions")
-      closeDetailsDialog()
       writeAnalyticsPreference(storageKey, "regions")
     },
-    [closeDetailsDialog, mode, storageKey, updateQuery]
+    [applyLocationFilter, mode, storageKey]
   )
 
   const handleRegionSelect = useCallback(
     (regionCode: string, regionLabel?: string) => {
-      updateQuery((current) => {
-        const next: AnalyticsQuery = {
-          ...current,
-          filters: { ...current.filters, region: regionCode },
-        }
-        if (regionLabel && regionLabel !== regionCode) {
-          next.labels = { ...(current.labels || {}), region: regionLabel }
-        }
-        return next
-      })
+      applyLocationFilter("region", regionCode, regionLabel)
       setPreferredMode("cities")
-      closeDetailsDialog()
       writeAnalyticsPreference(storageKey, "cities")
     },
-    [closeDetailsDialog, storageKey, updateQuery]
+    [applyLocationFilter, storageKey]
   )
 
   const onDetailsRowClick = useCallback(
@@ -325,14 +320,11 @@ export default function LocationsPanel({
                     String(item.name)
                   )
                 } else if (mode === "cities") {
-                  updateQuery((current) => ({
-                    ...current,
-                    filters: { ...current.filters, city: String(item.name) },
-                    labels: {
-                      ...(current.labels || {}),
-                      city: String(item.name),
-                    },
-                  }))
+                  applyLocationFilter(
+                    "city",
+                    String(item.name),
+                    String(item.name)
+                  )
                 }
               }}
               renderLeading={
@@ -396,18 +388,7 @@ export default function LocationsPanel({
           defaultSortKey={"visitors"}
           onRowClick={(item) => {
             if (mode === "cities") {
-              updateQuery((current) => {
-                const cityName = String(item.name)
-                const next: AnalyticsQuery = {
-                  ...current,
-                  filters: { ...current.filters, city: cityName },
-                }
-                if (current.labels?.city !== cityName) {
-                  next.labels = { ...(current.labels || {}), city: cityName }
-                }
-                return next
-              })
-              closeDetailsDialog()
+              applyLocationFilter("city", String(item.name), String(item.name))
             } else {
               onDetailsRowClick(item)
             }

@@ -115,7 +115,6 @@ export default function PagesPanel({
     () => JSON.stringify([baseQuery, mode]),
     [baseQuery, mode]
   )
-  const closeDetailsDialog = host.closeDialogRoute
   const panelState = usePanelData({
     initialData,
     initialRequestKey,
@@ -134,12 +133,15 @@ export default function PagesPanel({
   const firstColumnLabel = firstColumnLabelForMode(mode)
 
   const drillInto = useCallback(
-    (value: string, modeValue: PagesMode = mode) => {
+    (value: string, modeValue: PagesMode = mode, closeDialog = false) => {
       const drillKey = drillKeyForMode(modeValue)
-      updateQuery((current) => ({
-        ...current,
-        filters: { ...current.filters, [drillKey]: value },
-      }))
+      updateQuery(
+        (current) => ({
+          ...current,
+          filters: { ...current.filters, [drillKey]: value },
+        }),
+        { closeDialog }
+      )
     },
     [mode, updateQuery]
   )
@@ -245,10 +247,7 @@ export default function PagesPanel({
         extras={{ mode: detailsMode }}
         defaultSortKey={detailsMode === "seo" ? "clicks" : "visitors"}
         firstColumnLabel={firstColumnLabelForMode(detailsMode)}
-        onRowClick={(item) => {
-          drillInto(String(item.name), detailsMode)
-          closeDetailsDialog()
-        }}
+        onRowClick={(item) => drillInto(String(item.name), detailsMode, true)}
       />
     </section>
   )

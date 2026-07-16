@@ -280,21 +280,29 @@ export function useBehaviorsPanelController({
   )
 
   const handleRowClick = useCallback(
-    (item: ListItem) => {
+    (item: ListItem, closeDialog = false) => {
       if (mode === "props") {
         const propertyKey = activeProperty
-        if (!propertyKey) return
-        updateQuery((current) => ({
-          ...current,
-          filters: {
-            ...Object.fromEntries(
-              Object.entries(current.filters).filter(
-                ([key]) => !key.startsWith("prop:")
-              )
-            ),
-            [`prop:${propertyKey}`]: String(item.name),
-          },
-        }))
+        if (!propertyKey) {
+          if (closeDialog) {
+            updateQuery((current) => current, { closeDialog: true })
+          }
+          return
+        }
+        updateQuery(
+          (current) => ({
+            ...current,
+            filters: {
+              ...Object.fromEntries(
+                Object.entries(current.filters).filter(
+                  ([key]) => !key.startsWith("prop:")
+                )
+              ),
+              [`prop:${propertyKey}`]: String(item.name),
+            },
+          }),
+          { closeDialog }
+        )
         return
       }
 
@@ -319,7 +327,11 @@ export function useBehaviorsPanelController({
         writeAnalyticsPreference(storageKey, "props")
       }
 
-      host.navigate(host.buildReportUrl(nextParams))
+      host.navigate(
+        closeDialog
+          ? host.basePath(nextParams.toString())
+          : host.buildReportUrl(nextParams)
+      )
     },
     [
       activeProperty,
@@ -470,14 +482,6 @@ export function useBehaviorsPanelController({
     [activeProperty, mode, search, selectedFunnel]
   )
 
-  const closeDetailsDialog = useCallback(() => {
-    try {
-      host.navigate(host.basePath(buildCurrentRouteSearch()))
-    } catch {
-      // Ignore history errors; the modal can still close locally.
-    }
-  }, [buildCurrentRouteSearch, host])
-
   const openDetailsDialog = useCallback(() => {
     try {
       host.navigate(
@@ -552,7 +556,6 @@ export function useBehaviorsPanelController({
     activeTitle,
     availableFunnels,
     behaviourTabs,
-    closeDetailsDialog,
     detailsOpen,
     firstColumnLabel,
     funnelData,

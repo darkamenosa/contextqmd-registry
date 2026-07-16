@@ -31,7 +31,6 @@ export default function BehaviorsPanel({
     activeTitle,
     availableFunnels,
     behaviourTabs,
-    closeDetailsDialog,
     detailsOpen,
     firstColumnLabel,
     funnelData,
@@ -298,10 +297,7 @@ export default function BehaviorsPanel({
               ? ("conversionRate" as ListMetricKey)
               : (tablePayload.metrics[0] as ListMetricKey)
           }
-          onRowClick={(item) => {
-            handleRowClick(item)
-            closeDetailsDialog()
-          }}
+          onRowClick={(item) => handleRowClick(item, true)}
         />
       ) : null}
     </section>

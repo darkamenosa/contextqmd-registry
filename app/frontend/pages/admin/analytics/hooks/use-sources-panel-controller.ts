@@ -88,7 +88,6 @@ export function useSourcesPanelController({
   )
 
   const storageKey = analyticsPreferenceKey(STORAGE_PREFIX, site.domain)
-  const closeDialog = host.closeDialogRoute
   const initialRequestKey = JSON.stringify([
     baseQuery,
     normalizeSourcesMode(initialMode),
@@ -222,38 +221,49 @@ export function useSourcesPanelController({
   )
 
   const applyFilter = useCallback(
-    (key: string, value: string) => {
-      updateQuery((current) => ({
-        ...current,
-        filters: { ...current.filters, [key]: value },
-      }))
+    (key: string, value: string, closeDialog = false) => {
+      updateQuery(
+        (current) => ({
+          ...current,
+          filters: { ...current.filters, [key]: value },
+        }),
+        { closeDialog }
+      )
     },
     [updateQuery]
   )
 
   const handlePrimaryRowClick = useCallback(
-    (item: ListItem) => {
+    (item: ListItem, closeDialog = false) => {
       const name = String(item.name)
       if (mode === "channels") {
         setAndStoreMode("all")
-        updateQuery((current) => ({
-          ...current,
-          filters: { ...current.filters, channel: name },
-        }))
+        updateQuery(
+          (current) => ({
+            ...current,
+            filters: { ...current.filters, channel: name },
+          }),
+          { closeDialog }
+        )
         return
       }
 
-      applyFilter(getSourcesFilterKey(mode), name)
+      applyFilter(getSourcesFilterKey(mode), name, closeDialog)
     },
     [applyFilter, mode, setAndStoreMode, updateQuery]
   )
 
   const handleReferrerRowClick = useCallback(
-    (item: ListItem) => {
-      if (String(item.name) === "Direct / None") return
-      applyFilter("referrer", String(item.name))
+    (item: ListItem, closeDialog = false) => {
+      if (String(item.name) === "Direct / None") {
+        if (closeDialog) {
+          updateQuery((current) => current, { closeDialog: true })
+        }
+        return
+      }
+      applyFilter("referrer", String(item.name), closeDialog)
     },
-    [applyFilter]
+    [applyFilter, updateQuery]
   )
 
   const openDetailsDialog = useCallback(() => {
@@ -344,7 +354,6 @@ export function useSourcesPanelController({
     campaignActive,
     campaignLabel,
     cardTitle,
-    closeDialog,
     data,
     debugOpen,
     detailsOpen,

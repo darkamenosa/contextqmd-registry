@@ -8,10 +8,8 @@ import {
 } from "react"
 
 import { useAnalyticsHost } from "./host-context"
-import {
-  mergeReportQueryParams,
-  resolveInitialReportQuery,
-} from "./lib/query-codec"
+import { resolveInitialReportQuery } from "./lib/query-codec"
+import { buildQueryNavigationPath } from "./lib/query-navigation"
 import { canonicalReportSearch } from "./lib/report-url"
 import type { AnalyticsQuery } from "./types"
 
@@ -21,7 +19,7 @@ export type QueryContextValue = {
   search: string
   updateQuery: (
     updater: (current: AnalyticsQuery) => AnalyticsQuery,
-    options?: { history?: "push" | "replace" }
+    options?: { history?: "push" | "replace"; closeDialog?: boolean }
   ) => void
 }
 
@@ -36,7 +34,8 @@ export function QueryProvider({
   defaultQuery: AnalyticsQuery
   children: ReactNode
 }) {
-  const { pathname, search, buildReportUrl, navigate } = useAnalyticsHost()
+  const { pathname, search, reportsPath, buildReportUrl, navigate } =
+    useAnalyticsHost()
 
   const query = useMemo(
     () => resolveInitialReportQuery(search, initialQuery, defaultQuery),
@@ -46,10 +45,16 @@ export function QueryProvider({
   const updateQuery = useCallback(
     (
       updater: (current: AnalyticsQuery) => AnalyticsQuery,
-      options?: { history?: "push" | "replace" }
+      options?: { history?: "push" | "replace"; closeDialog?: boolean }
     ) => {
       const next = updater(query)
-      const nextUrl = buildReportUrl(mergeReportQueryParams(search, next))
+      const nextUrl = buildQueryNavigationPath({
+        query: next,
+        search,
+        pathname,
+        reportsPath,
+        closeDialog: options?.closeDialog,
+      })
       const currentUrl = buildReportUrl(search)
 
       if (nextUrl === currentUrl) return
@@ -58,7 +63,7 @@ export function QueryProvider({
         history: options?.history ?? "push",
       })
     },
-    [buildReportUrl, navigate, query, search]
+    [buildReportUrl, navigate, pathname, query, reportsPath, search]
   )
 
   useEffect(() => {

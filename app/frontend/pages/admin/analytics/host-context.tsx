@@ -44,7 +44,6 @@ export type AnalyticsHostContextValue = {
   getDialogSearch: () => string
   openDialogRoute: (pathBuilder: (qs: string) => string) => void
   syncDialogRoute: (open: boolean, pathBuilder: (qs: string) => string) => void
-  closeDialogRoute: () => void
 }
 
 const AnalyticsHostContext = createContext<AnalyticsHostContextValue | null>(
@@ -139,10 +138,6 @@ function AnalyticsHostBoundary({
     [basePath, getDialogSearch, navigate]
   )
 
-  const closeDialogRoute = useCallback(() => {
-    navigate(basePath(getDialogSearch()))
-  }, [basePath, getDialogSearch, navigate])
-
   const value = useMemo<AnalyticsHostContextValue>(
     () => ({
       pathname: effectivePathname,
@@ -158,14 +153,12 @@ function AnalyticsHostBoundary({
       getDialogSearch,
       openDialogRoute,
       syncDialogRoute,
-      closeDialogRoute,
     }),
     [
       basePath,
       buildDialogPath,
       buildReferrersPath,
       buildReportUrl,
-      closeDialogRoute,
       getDialogSearch,
       navigate,
       openDialogRoute,
