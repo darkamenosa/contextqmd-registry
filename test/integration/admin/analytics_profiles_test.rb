@@ -119,6 +119,7 @@ class Admin::AnalyticsProfilesTest < ActionDispatch::IntegrationTest
   end
 
   test "profiles index uses latest activity time for last seen within an existing visit" do
+    travel_to Time.zone.local(2026, 7, 29, 12)
     staff_identity, = create_tenant(
       email: "staff-profiles-last-seen-#{SecureRandom.hex(4)}@example.com",
       name: "Staff Profiles Last Seen"
