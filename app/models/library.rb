@@ -107,11 +107,12 @@ class Library < ApplicationRecord
 
   private
 
-    def self.search_by_query(query)
+    # resolve depends on the strict default to 404 rather than return a near-miss.
+    def self.search_by_query(query, match: :all)
       normalized = query.to_s.strip.downcase
       return none if normalized.blank?
 
-      quoted_query = connection.quote(search_tsquery(normalized))
+      quoted_query = connection.quote(search_tsquery(normalized, match: match))
       quoted_alias_json = connection.quote([ normalized ].to_json)
       vector_sql = SEARCH_VECTOR_SQL
       alias_match_sql = <<~SQL.squish
@@ -136,10 +137,10 @@ class Library < ApplicationRecord
       self.slug = candidate.to_s.tr("_", "-").parameterize(separator: "-") if candidate.present?
     end
 
-    def self.search_tsquery(query)
+    def self.search_tsquery(query, match: :all)
       terms = query.scan(/[[:alnum:]]+/)
       return query if terms.empty?
 
-      terms.map { |term| "#{term}:*" }.join(" & ")
+      terms.map { |term| "#{term}:*" }.join(match == :any ? " | " : " & ")
     end
 end

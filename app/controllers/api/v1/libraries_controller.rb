@@ -31,7 +31,7 @@ module Api
 
         def search_libraries(query)
           normalized = query.to_s.strip
-          Library.search_by_query(normalized)
+          Library.search_by_query(normalized, match: :any)
         end
 
         def search_results(query)
