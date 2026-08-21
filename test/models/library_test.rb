@@ -83,6 +83,25 @@ class LibraryTest < ActiveSupport::TestCase
     assert_includes results.map(&:name), "nextjs"
   end
 
+  test "match: :any finds the library when only some words match" do
+    # Requiring every term made a phrase strictly worse than the bare name inside it.
+    results = Library.search_by_query("next routing and data fetching", match: :any)
+    assert_includes results.map(&:name), "nextjs"
+  end
+
+  test "match: :any ranks the named library first" do
+    results = Library.search_by_query("how do I configure next", match: :any)
+    assert_equal "nextjs", results.first.name
+  end
+
+  test "match: :any still requires at least one term to match" do
+    assert_empty Library.search_by_query("zzzznonexistentlibrary", match: :any).to_a
+  end
+
+  test "the default stays strict so resolve can 404 on an unknown query" do
+    assert_empty Library.search_by_query("nonexistent library next").to_a
+  end
+
   # -- Library.resolve --------------------------------------------------------
 
   test "resolve finds library by alias" do
